@@ -402,12 +402,9 @@ func (r *RedditExtractor) extractComments() string {
 //		return html;
 //	}
 func (r *RedditExtractor) processComments(comments []*goquery.Selection) string {
-	var html strings.Builder
-	currentDepth := -1
-	var blockquoteStack []int // Keep track of open blockquotes at each depth
-
 	slog.Debug("Reddit extractor: processing comments", "totalComments", len(comments))
 
+	data := make([]CommentData, 0, len(comments))
 	for _, comment := range comments {
 		depthStr, _ := comment.Attr("depth")
 		depth, _ := strconv.Atoi(depthStr)
@@ -419,13 +416,13 @@ func (r *RedditExtractor) processComments(comments []*goquery.Selection) string 
 		contentElement := comment.Find(`[slot="comment"]`).First()
 		content, _ := contentElement.Html()
 
-		// Get timestamp from faceplate-timeago element
+		// Get timestamp from faceplate-timeago element.
 		timeElement := comment.Find("faceplate-timeago").First()
 		timestamp, _ := timeElement.Attr("ts")
 
 		var date string
 		if timestamp != "" {
-			// Try Unix timestamp (integer milliseconds or seconds)
+			// Try Unix timestamp (integer milliseconds or seconds).
 			if ts, err := strconv.ParseInt(timestamp, 10, 64); err == nil {
 				if ts > 1e12 {
 					// Milliseconds
@@ -442,52 +439,19 @@ func (r *RedditExtractor) processComments(comments []*goquery.Selection) string 
 			}
 		}
 
-		// For top-level comments, close all previous blockquotes and start fresh
-		if depth == 0 {
-			// Close all open blockquotes
-			for len(blockquoteStack) > 0 {
-				html.WriteString("</blockquote>")
-				blockquoteStack = blockquoteStack[:len(blockquoteStack)-1]
-			}
-			html.WriteString("<blockquote>")
-			blockquoteStack = []int{0}
-		} else {
-			// For nested comments
-			// If we're moving back up the tree
-			if depth < currentDepth {
-				// Close blockquotes until we reach the current depth
-				for len(blockquoteStack) > 0 && blockquoteStack[len(blockquoteStack)-1] >= depth {
-					html.WriteString("</blockquote>")
-					blockquoteStack = blockquoteStack[:len(blockquoteStack)-1]
-				}
-			} else if depth > currentDepth {
-				// If we're going deeper
-				html.WriteString("<blockquote>")
-				blockquoteStack = append(blockquoteStack, depth)
-			}
-			// If we're at the same depth, no need to close or open blockquotes
-		}
-
-		html.WriteString(`<div class="comment">`)
-		html.WriteString(`<div class="comment-metadata">`)
-		fmt.Fprintf(&html, `<span class="comment-author"><strong>%s</strong></span> •`, author)
-		fmt.Fprintf(&html, ` <a href="https://reddit.com%s" class="comment-link">%s points</a> •`, permalink, score)
-		fmt.Fprintf(&html, ` <span class="comment-date">%s</span>`, date)
-		html.WriteString(`</div>`)
-		fmt.Fprintf(&html, `<div class="comment-content">%s</div>`, content)
-		html.WriteString(`</div>`)
-
-		currentDepth = depth
-	}
-
-	// Close any remaining blockquotes
-	for len(blockquoteStack) > 0 {
-		html.WriteString("</blockquote>")
-		blockquoteStack = blockquoteStack[:len(blockquoteStack)-1]
+		data = append(data, CommentData{
+			Depth:          depth,
+			Author:         author,
+			URL:            "https://reddit.com" + permalink,
+			LinkText:       score + " points",
+			Date:           date,
+			RenderDateSpan: true,
+			Content:        content,
+		})
 	}
 
 	slog.Debug("Reddit extractor: comments processed", "processedCount", len(comments))
-	return html.String()
+	return renderCommentThread(data)
 }
 
 // getPostID extracts the post ID from URL

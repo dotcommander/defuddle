@@ -444,13 +444,11 @@ func (h *HackerNewsExtractor) extractComments() string {
 //		return html;
 //	}
 func (h *HackerNewsExtractor) processComments(comments []*goquery.Selection) string {
-	var html strings.Builder
 	processedIDs := make(map[string]bool)
-	currentDepth := -1
-	var blockquoteStack []int
 
 	slog.Debug("HackerNews extractor: processing comments", "totalComments", len(comments))
 
+	var data []CommentData
 	for _, comment := range comments {
 		id, exists := comment.Attr("id")
 		if !exists || id == "" || processedIDs[id] {
@@ -476,10 +474,9 @@ func (h *HackerNewsExtractor) processComments(comments []*goquery.Selection) str
 		timeElement := comment.Find(".age")
 		points := strings.TrimSpace(comment.Find(".score").Text())
 
-		// Get the comment URL
 		commentURL := fmt.Sprintf("https://news.ycombinator.com/item?id=%s", id)
 
-		// Get the timestamp from the title attribute and extract the date portion
+		// Get the timestamp from the title attribute and extract the date portion.
 		timestamp, _ := timeElement.Attr("title")
 		date := ""
 		if timestamp != "" {
@@ -489,58 +486,25 @@ func (h *HackerNewsExtractor) processComments(comments []*goquery.Selection) str
 			}
 		}
 
-		// For top-level comments (indent = 0), start fresh
-		if depth == 0 {
-			// Close all open blockquotes
-			for len(blockquoteStack) > 0 {
-				html.WriteString("</blockquote>")
-				blockquoteStack = blockquoteStack[:len(blockquoteStack)-1]
-			}
-			html.WriteString("<blockquote>")
-			blockquoteStack = []int{0}
-		} else {
-			// For nested comments
-			// If we're moving back up the tree
-			if depth < currentDepth {
-				// Close blockquotes until we reach the current depth
-				for len(blockquoteStack) > 0 && blockquoteStack[len(blockquoteStack)-1] >= depth {
-					html.WriteString("</blockquote>")
-					blockquoteStack = blockquoteStack[:len(blockquoteStack)-1]
-				}
-			} else if depth > currentDepth {
-				// If we're going deeper
-				html.WriteString("<blockquote>")
-				blockquoteStack = append(blockquoteStack, depth)
-			}
-			// If we're at the same depth, no need to close or open blockquotes
+		extra := ""
+		if points != "" {
+			extra = fmt.Sprintf(` • <span class="comment-points">%s</span>`, points)
 		}
 
 		commentContent, _ := commentText.Html()
 
-		html.WriteString(`<div class="comment">`)
-		html.WriteString(`<div class="comment-metadata">`)
-		fmt.Fprintf(&html, `<span class="comment-author"><strong>%s</strong></span> •`, author)
-		fmt.Fprintf(&html, ` <a href="%s" class="comment-link">%s</a> •`, commentURL, date)
-
-		if points != "" {
-			fmt.Fprintf(&html, ` • <span class="comment-points">%s</span>`, points)
-		}
-
-		html.WriteString(`</div>`)
-		fmt.Fprintf(&html, `<div class="comment-content">%s</div>`, commentContent)
-		html.WriteString(`</div>`)
-
-		currentDepth = depth
-	}
-
-	// Close any remaining blockquotes
-	for len(blockquoteStack) > 0 {
-		html.WriteString("</blockquote>")
-		blockquoteStack = blockquoteStack[:len(blockquoteStack)-1]
+		data = append(data, CommentData{
+			Depth:    depth,
+			Author:   author,
+			URL:      commentURL,
+			LinkText: date,
+			Content:  commentContent,
+			Extra:    extra,
+		})
 	}
 
 	slog.Debug("HackerNews extractor: comments processed", "processedCount", len(processedIDs))
-	return html.String()
+	return renderCommentThread(data)
 }
 
 // getPostID extracts the post ID from the URL
