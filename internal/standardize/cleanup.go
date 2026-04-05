@@ -393,25 +393,49 @@ func removeTrailingHeadings(element *goquery.Selection) {
 //		processBrs();
 //	}
 func stripExtraBrElements(element *goquery.Selection) {
-	// Remove more than 2 consecutive br elements
-	var toRemove []*goquery.Selection
-	consecutiveCount := 0
-
+	// Collect all <br> nodes
+	var brNodes []*html.Node
 	element.Find("br").Each(func(_ int, br *goquery.Selection) {
-		next := br.Next()
-		if next.Length() > 0 && goquery.NodeName(next) == "br" {
-			consecutiveCount++
-			if consecutiveCount >= 2 {
-				toRemove = append(toRemove, br)
-			}
-		} else {
-			consecutiveCount = 0
-		}
+		brNodes = append(brNodes, br.Get(0))
 	})
 
-	for _, br := range toRemove {
-		br.Remove()
+	// Group consecutive <br>s (only whitespace text nodes allowed between them, matching TS)
+	var consecutiveBrs []*html.Node
+
+	processBrs := func() {
+		if len(consecutiveBrs) > 2 {
+			// Keep only the first two, remove the rest
+			for i := 2; i < len(consecutiveBrs); i++ {
+				if consecutiveBrs[i].Parent != nil {
+					consecutiveBrs[i].Parent.RemoveChild(consecutiveBrs[i])
+				}
+			}
+		}
+		consecutiveBrs = nil
 	}
+
+	for _, br := range brNodes {
+		isConsecutive := false
+		if len(consecutiveBrs) > 0 {
+			lastBr := consecutiveBrs[len(consecutiveBrs)-1]
+			// Walk backwards from current br, skipping whitespace-only text nodes
+			node := br.PrevSibling
+			for node != nil && node.Type == html.TextNode && strings.TrimSpace(node.Data) == "" {
+				node = node.PrevSibling
+			}
+			if node == lastBr {
+				isConsecutive = true
+			}
+		}
+
+		if isConsecutive {
+			consecutiveBrs = append(consecutiveBrs, br)
+		} else {
+			processBrs()
+			consecutiveBrs = []*html.Node{br}
+		}
+	}
+	processBrs()
 }
 
 // hasCalloutClass checks if a class attribute value contains a callout class (callout or callout-*).
