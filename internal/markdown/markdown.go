@@ -103,8 +103,8 @@ func (p *defuddlePlugin) Init(conv *converter.Converter) error {
 	// Footnote references (sup#fnref:X)
 	conv.Register.RendererFor("sup", converter.TagTypeInline, renderFootnoteRef, converter.PriorityEarly)
 
-	// Footnote definition list (ol inside #footnotes → [^id]: content)
-	conv.Register.RendererFor("ol", converter.TagTypeBlock, renderFootnotesList, converter.PriorityEarly)
+	// ArXiv enumerate lists (ol.ltx_enumerate) + Footnote definitions (ol inside #footnotes)
+	conv.Register.RendererFor("ol", converter.TagTypeBlock, renderOrderedList, converter.PriorityEarly)
 
 	// Footnote backlink removal
 	conv.Register.RendererFor("a", converter.TagTypeInline, renderLink, converter.PriorityEarly)
@@ -131,6 +131,12 @@ func (p *defuddlePlugin) Init(conv *converter.Converter) error {
 
 	// KaTeX/MathJax spans → LaTeX
 	conv.Register.RendererFor("span", converter.TagTypeInline, renderKaTeX, converter.PriorityEarly)
+
+	// List items with task-list checkbox and OL start attribute support
+	conv.Register.RendererFor("li", converter.TagTypeBlock, renderListItem, converter.PriorityEarly)
+
+	// ArXiv equation tables (table.ltx_equation, table.ltx_eqn_table)
+	conv.Register.RendererFor("table", converter.TagTypeBlock, renderArXivEquationTable, converter.PriorityEarly)
 
 	// Keep HTML elements that have no markdown equivalent
 	conv.Register.RendererFor("video", converter.TagTypeBlock, renderKeepHTML, converter.PriorityEarly)
@@ -226,7 +232,9 @@ func renderFigure(ctx converter.Context, w converter.Writer, n *html.Node) conve
 
 	var caption string
 	if captionNode != nil {
-		caption = strings.TrimSpace(extractText(captionNode))
+		var capBuf bytes.Buffer
+		ctx.RenderChildNodes(ctx, &capBuf, captionNode)
+		caption = strings.TrimSpace(capBuf.String())
 	}
 
 	w.WriteString(fmt.Sprintf("\n![%s](%s)\n", alt, src))
@@ -241,7 +249,9 @@ func renderHighlight(ctx converter.Context, w converter.Writer, n *html.Node) co
 	if n.Type != html.ElementNode || n.Data != "mark" {
 		return converter.RenderTryNext
 	}
-	content := strings.TrimSpace(extractText(n))
+	var buf bytes.Buffer
+	ctx.RenderChildNodes(ctx, &buf, n)
+	content := strings.TrimSpace(buf.String())
 	w.WriteString("==" + content + "==")
 	return converter.RenderSuccess
 }
@@ -529,6 +539,145 @@ func renderComplexLink(ctx converter.Context, w converter.Writer, n *html.Node) 
 	return converter.RenderSuccess
 }
 
+// ltxTagItemRe matches ArXiv tag spans like <span class="ltx_tag ltx_tag_item">1.</span>
+var ltxTagItemRe = regexp.MustCompile(`(?i)^<span [^>]*class="[^"]*ltx_tag[^"]*"[^>]*>.*?</span>\s*`)
+
+// renderListItem handles task-list checkboxes and OL start attribute.
+// Only intercepts special cases; returns RenderTryNext for normal list items.
+func renderListItem(ctx converter.Context, w converter.Writer, n *html.Node) converter.RenderStatus {
+	if n.Type != html.ElementNode || n.Data != "li" {
+		return converter.RenderTryNext
+	}
+
+	// Check for task-list checkbox
+	isTaskItem := hasExactClass(getAttr(n, "class"), "task-list-item")
+	var checkboxMarker string
+	if isTaskItem {
+		// Find and remove input[type="checkbox"]
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			if c.Type == html.ElementNode && c.Data == "input" && getAttr(c, "type") == "checkbox" {
+				if getAttr(c, "checked") != "" {
+					checkboxMarker = "[x] "
+				} else {
+					checkboxMarker = "[ ] "
+				}
+				n.RemoveChild(c)
+				break
+			}
+		}
+	}
+
+	// Check OL start attribute
+	hasCustomStart := false
+	customNumber := 0
+	if n.Parent != nil && n.Parent.Type == html.ElementNode && n.Parent.Data == "ol" {
+		if start := getAttr(n.Parent, "start"); start != "" {
+			startNum := 0
+			if _, err := fmt.Sscanf(start, "%d", &startNum); err == nil {
+				// Find this li's index among siblings
+				idx := 0
+				for c := n.Parent.FirstChild; c != nil; c = c.NextSibling {
+					if c.Type == html.ElementNode && c.Data == "li" {
+						idx++
+						if c == n {
+							break
+						}
+					}
+				}
+				customNumber = startNum + idx - 1
+				hasCustomStart = true
+			}
+		}
+	}
+
+	// If neither special case applies, let default handler take over
+	if checkboxMarker == "" && !hasCustomStart {
+		return converter.RenderTryNext
+	}
+
+	// Render content
+	var buf bytes.Buffer
+	ctx.RenderChildNodes(ctx, &buf, n)
+	content := strings.TrimSpace(buf.String())
+
+	// Determine prefix
+	var prefix string
+	if n.Parent != nil && n.Parent.Data == "ol" {
+		num := customNumber
+		if !hasCustomStart {
+			// Count position for regular OL
+			num = 0
+			for c := n.Parent.FirstChild; c != nil; c = c.NextSibling {
+				if c.Type == html.ElementNode && c.Data == "li" {
+					num++
+					if c == n {
+						break
+					}
+				}
+			}
+		}
+		prefix = fmt.Sprintf("%d. ", num)
+	} else {
+		prefix = "- "
+	}
+
+	w.WriteString(prefix + checkboxMarker + content + "\n")
+	return converter.RenderSuccess
+}
+
+// renderOrderedList dispatches to ArXiv enumerate or footnotes list renderers.
+func renderOrderedList(ctx converter.Context, w converter.Writer, n *html.Node) converter.RenderStatus {
+	if n.Type != html.ElementNode || n.Data != "ol" {
+		return converter.RenderTryNext
+	}
+
+	// ArXiv enumerate: ol.ltx_enumerate
+	if hasExactClass(getAttr(n, "class"), "ltx_enumerate") {
+		return renderArXivEnumerate(ctx, w, n)
+	}
+
+	// Footnote definitions: ol inside #footnotes
+	return renderFootnotesList(ctx, w, n)
+}
+
+// renderArXivEnumerate converts ArXiv ol.ltx_enumerate to standard numbered markdown.
+// Strips <span class="ltx_tag ltx_tag_item">N.</span> prefix from each item.
+func renderArXivEnumerate(ctx converter.Context, w converter.Writer, n *html.Node) converter.RenderStatus {
+	var items []string
+	idx := 0
+	for li := n.FirstChild; li != nil; li = li.NextSibling {
+		if li.Type != html.ElementNode || li.Data != "li" {
+			continue
+		}
+		idx++
+
+		// Remove ltx_tag span from the li's children before rendering
+		for c := li.FirstChild; c != nil; c = c.NextSibling {
+			if c.Type == html.ElementNode && c.Data == "span" &&
+				strings.Contains(getAttr(c, "class"), "ltx_tag") {
+				li.RemoveChild(c)
+				break
+			}
+		}
+
+		var buf bytes.Buffer
+		ctx.RenderChildNodes(ctx, &buf, li)
+		content := strings.TrimSpace(buf.String())
+		if content != "" {
+			items = append(items, fmt.Sprintf("%d. %s", idx, content))
+		}
+	}
+
+	if len(items) == 0 {
+		return converter.RenderTryNext
+	}
+
+	w.WriteString("\n\n")
+	w.WriteString(strings.Join(items, "\n\n"))
+	w.WriteString("\n\n")
+	return converter.RenderSuccess
+}
+
 // renderFootnotesList converts <ol> inside a #footnotes container to
 // markdown footnote definition syntax: [^id]: content
 func renderFootnotesList(ctx converter.Context, w converter.Writer, n *html.Node) converter.RenderStatus {
@@ -595,6 +744,107 @@ func renderFootnotesList(ctx converter.Context, w converter.Writer, n *html.Node
 	return converter.RenderSuccess
 }
 
+// renderTableSpecial handles ArXiv equation tables and complex tables (colspan/rowspan).
+// ArXiv tables → LaTeX; complex tables → cleaned raw HTML.
+func renderArXivEquationTable(_ converter.Context, w converter.Writer, n *html.Node) converter.RenderStatus {
+	if n.Type != html.ElementNode || n.Data != "table" {
+		return converter.RenderTryNext
+	}
+
+	class := getAttr(n, "class")
+
+	// ArXiv equation tables → LaTeX
+	if hasExactClass(class, "ltx_equation") || hasExactClass(class, "ltx_eqn_table") {
+		var equations []string
+		walkChildren(n, func(child *html.Node) bool {
+			if child.Type == html.ElementNode && child.Data == "math" {
+				if alttext := getAttr(child, "alttext"); alttext != "" {
+					alttext = strings.TrimSpace(alttext)
+					isInline := false
+					for p := child.Parent; p != nil; p = p.Parent {
+						if p.Type == html.ElementNode && hasExactClass(getAttr(p, "class"), "ltx_eqn_inline") {
+							isInline = true
+							break
+						}
+					}
+					if isInline {
+						equations = append(equations, "$"+alttext+"$")
+					} else {
+						equations = append(equations, "\n$$\n"+alttext+"\n$$")
+					}
+				}
+			}
+			return true
+		})
+		if len(equations) > 0 {
+			w.WriteString(strings.Join(equations, "\n\n"))
+			return converter.RenderSuccess
+		}
+		return converter.RenderTryNext
+	}
+
+	// Complex tables (colspan/rowspan) → cleaned raw HTML
+	if hasComplexTableStructure(n) {
+		cleaned := cleanupTableHTML(n)
+		w.WriteString("\n\n")
+		w.WriteString(cleaned)
+		w.WriteString("\n\n")
+		return converter.RenderSuccess
+	}
+
+	return converter.RenderTryNext
+}
+
+// hasComplexTableStructure checks if any td/th has colspan or rowspan.
+func hasComplexTableStructure(n *html.Node) bool {
+	found := false
+	walkChildren(n, func(child *html.Node) bool {
+		if found {
+			return false
+		}
+		if child.Type == html.ElementNode && (child.Data == "td" || child.Data == "th") {
+			if getAttr(child, "colspan") != "" || getAttr(child, "rowspan") != "" {
+				found = true
+				return false
+			}
+		}
+		return true
+	})
+	return found
+}
+
+// cleanupTableHTML strips non-essential attributes from a table, preserving layout attrs.
+func cleanupTableHTML(n *html.Node) string {
+	allowed := map[string]bool{
+		"src": true, "href": true, "style": true, "align": true,
+		"width": true, "height": true, "rowspan": true, "colspan": true,
+		"bgcolor": true, "scope": true, "valign": true, "headers": true,
+	}
+
+	// Clean attributes recursively (modifies in place — table is already
+	// a working copy from the goquery clone in standardize pipeline)
+	var clean func(*html.Node)
+	clean = func(node *html.Node) {
+		if node.Type == html.ElementNode {
+			var kept []html.Attribute
+			for _, a := range node.Attr {
+				if allowed[a.Key] {
+					kept = append(kept, a)
+				}
+			}
+			node.Attr = kept
+		}
+		for c := node.FirstChild; c != nil; c = c.NextSibling {
+			clean(c)
+		}
+	}
+	clean(n)
+
+	var sb strings.Builder
+	html.Render(&sb, n)
+	return sb.String()
+}
+
 func renderCallout(ctx converter.Context, w converter.Writer, n *html.Node) converter.RenderStatus {
 	if n.Type != html.ElementNode || n.Data != "div" {
 		return converter.RenderTryNext
@@ -613,7 +863,9 @@ func renderCallout(ctx converter.Context, w converter.Writer, n *html.Node) conv
 		}
 	}
 
-	content := strings.TrimSpace(extractText(n))
+	var buf bytes.Buffer
+	ctx.RenderChildNodes(ctx, &buf, n)
+	content := strings.TrimSpace(buf.String())
 	// Remove the alert title label (GitHub renders it as ".markdown-alert-title")
 	// which appears as the first word in the extracted text. Strip case-insensitively
 	// since the DOM may contain "Note", "NOTE", etc.
@@ -625,7 +877,7 @@ func renderCallout(ctx converter.Context, w converter.Writer, n *html.Node) conv
 	lines := strings.Split(content, "\n")
 	w.WriteString("\n> [!" + alertType + "]\n")
 	for _, line := range lines {
-		w.WriteString("> " + strings.TrimSpace(line) + "\n")
+		w.WriteString("> " + line + "\n")
 	}
 	w.WriteString("\n")
 	return converter.RenderSuccess
@@ -641,12 +893,14 @@ func renderCalloutBlockquote(ctx converter.Context, w converter.Writer, n *html.
 	}
 
 	title := strings.ToUpper(calloutType[:1]) + calloutType[1:]
-	content := strings.TrimSpace(extractText(n))
+	var buf bytes.Buffer
+	ctx.RenderChildNodes(ctx, &buf, n)
+	content := strings.TrimSpace(buf.String())
 	lines := strings.Split(content, "\n")
 
 	w.WriteString("\n> [!" + calloutType + "] " + title + "\n")
 	for _, line := range lines {
-		w.WriteString("> " + strings.TrimSpace(line) + "\n")
+		w.WriteString("> " + line + "\n")
 	}
 	w.WriteString("\n")
 	return converter.RenderSuccess
