@@ -2,6 +2,8 @@ package defuddle
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -214,7 +216,116 @@ func BenchmarkRemoveBySelector(b *testing.B) {
 		if err != nil {
 			b.Fatalf("Failed to create Defuddle instance: %v", err)
 		}
-		defuddle.removeBySelector(defuddle.doc, true, true)
+		defuddle.removeBySelector(defuddle.doc, true, true, nil)
+	}
+}
+
+// loadFixture reads a real-world HTML fixture from the reference test directory.
+// Returns empty string if fixture is not available (skips benchmark).
+func loadFixture(b *testing.B, name string) string {
+	b.Helper()
+	path := filepath.Join(".reference", "defuddle", "tests", "fixtures", name)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		b.Skipf("fixture %s not available: %v", name, err)
+	}
+	return string(data)
+}
+
+// BenchmarkRealWorld_Blog benchmarks a real blog post (~19KB)
+func BenchmarkRealWorld_Blog(b *testing.B) {
+	html := loadFixture(b, "stephango.com-buy-wisely.html")
+	ctx := context.Background()
+	b.SetBytes(int64(len(html)))
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for b.Loop() {
+		_, err := ParseFromString(ctx, html, nil)
+		if err != nil {
+			b.Fatalf("parse failed: %v", err)
+		}
+	}
+}
+
+// BenchmarkRealWorld_BlogMarkdown benchmarks a real blog post with markdown conversion
+func BenchmarkRealWorld_BlogMarkdown(b *testing.B) {
+	html := loadFixture(b, "stephango.com-buy-wisely.html")
+	ctx := context.Background()
+	opts := &Options{Markdown: true}
+	b.SetBytes(int64(len(html)))
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for b.Loop() {
+		_, err := ParseFromString(ctx, html, opts)
+		if err != nil {
+			b.Fatalf("parse failed: %v", err)
+		}
+	}
+}
+
+// BenchmarkRealWorld_GitHubIssue benchmarks a GitHub issue page (~295KB)
+func BenchmarkRealWorld_GitHubIssue(b *testing.B) {
+	html := loadFixture(b, "github.com-issue-56.html")
+	ctx := context.Background()
+	b.SetBytes(int64(len(html)))
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for b.Loop() {
+		_, err := ParseFromString(ctx, html, nil)
+		if err != nil {
+			b.Fatalf("parse failed: %v", err)
+		}
+	}
+}
+
+// BenchmarkRealWorld_LargeArticle benchmarks a large article page (~664KB)
+func BenchmarkRealWorld_LargeArticle(b *testing.B) {
+	html := loadFixture(b, "x.com-article-2026-02-13.html")
+	ctx := context.Background()
+	b.SetBytes(int64(len(html)))
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for b.Loop() {
+		_, err := ParseFromString(ctx, html, nil)
+		if err != nil {
+			b.Fatalf("parse failed: %v", err)
+		}
+	}
+}
+
+// BenchmarkRealWorld_TechBlog benchmarks a technical blog with code blocks (~5KB)
+func BenchmarkRealWorld_TechBlog(b *testing.B) {
+	html := loadFixture(b, "rockthejvm.com:articles:kotlin-101-type-classes.html")
+	ctx := context.Background()
+	b.SetBytes(int64(len(html)))
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for b.Loop() {
+		_, err := ParseFromString(ctx, html, nil)
+		if err != nil {
+			b.Fatalf("parse failed: %v", err)
+		}
+	}
+}
+
+// BenchmarkRealWorld_LessWrong benchmarks a LessWrong article with footnotes (~247KB)
+func BenchmarkRealWorld_LessWrong(b *testing.B) {
+	html := loadFixture(b, "lesswrong.com:s:N7nDePaNabJdnbXeE:p:vJFdjigzmcXMhNTsx.html")
+	ctx := context.Background()
+	b.SetBytes(int64(len(html)))
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for b.Loop() {
+		_, err := ParseFromString(ctx, html, nil)
+		if err != nil {
+			b.Fatalf("parse failed: %v", err)
+		}
 	}
 }
 
