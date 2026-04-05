@@ -117,23 +117,17 @@ func TestImageProcessing(t *testing.T) {
 
 	processor.ProcessImages(options)
 
-	// Check if images were processed
+	// Should have some remaining images
 	images := doc.Find("img")
 	assert.Greater(t, images.Length(), 0, "Should have some remaining images")
 
-	// Check if small/tracking images were removed
+	// Small images should be removed
 	smallImages := doc.Find("img[width='10']")
 	assert.Equal(t, 0, smallImages.Length(), "Should have removed small images")
 
-	// Check if responsive classes were added
-	images.Each(func(_ int, s *goquery.Selection) {
-		class, _ := s.Attr("class")
-		if !strings.Contains(class, "responsive-image") {
-			// Some images might be removed or modified
-			return
-		}
-		assert.Contains(t, class, "responsive-image", "Should have responsive class")
-	})
+	// Figure should still exist with its content
+	figures := doc.Find("figure")
+	assert.Greater(t, figures.Length(), 0, "Should have figure elements")
 }
 
 func TestFootnoteProcessing(t *testing.T) {
