@@ -2,6 +2,8 @@ package defuddle
 
 import (
 	"log/slog"
+	"sort"
+	"strings"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/kaptinlin/defuddle-go/internal/constants"
@@ -34,38 +36,91 @@ import (
 //
 //	  return null;
 //	}
+//
+// contentCandidate represents a scored entry point match.
+type contentCandidate struct {
+	element       *goquery.Selection
+	score         float64
+	selectorIndex int
+}
+
 func (d *Defuddle) findMainContent(doc *goquery.Document) *goquery.Selection {
-	// Try entry point elements first
 	entryPoints := constants.GetEntryPointElements()
-	for _, selector := range entryPoints {
-		element := doc.Find(selector).First()
-		if element.Length() > 0 {
+	var candidates []contentCandidate
+
+	// Score ALL matches from ALL entry point selectors
+	for i, selector := range entryPoints {
+		doc.Find(selector).Each(func(_ int, element *goquery.Selection) {
+			// Base score from selector priority (earlier = higher)
+			score := float64(len(entryPoints)-i) * 40
+			// Add content-based score
+			score += scoring.ScoreElement(element)
+			candidates = append(candidates, contentCandidate{
+				element:       element,
+				score:         score,
+				selectorIndex: i,
+			})
+		})
+	}
+
+	if len(candidates) == 0 {
+		// Fall back to scoring block elements
+		scoredContent := d.findContentByScoring(doc)
+		if scoredContent != nil {
 			if d.debug {
-				slog.Debug("Found main content using entry point", "selector", selector)
+				slog.Debug("Found main content using scoring")
 			}
-			return element
+			return scoredContent
+		}
+		return nil
+	}
+
+	// Sort by score descending
+	sort.Slice(candidates, func(a, b int) bool {
+		return candidates[a].score > candidates[b].score
+	})
+
+	if d.debug {
+		for _, c := range candidates {
+			tag := goquery.NodeName(c.element)
+			cls := c.element.AttrOr("class", "")
+			id := c.element.AttrOr("id", "")
+			slog.Debug("Content candidate",
+				"tag", tag, "class", cls, "id", id,
+				"score", c.score, "selectorIndex", c.selectorIndex)
 		}
 	}
 
-	// Try table-based content
-	tableContent := d.findTableBasedContent(doc)
-	if tableContent != nil {
-		if d.debug {
-			slog.Debug("Found main content using table-based detection")
+	// If we only matched body, try table-based detection
+	if len(candidates) == 1 && strings.EqualFold(goquery.NodeName(candidates[0].element), "body") {
+		tableContent := d.findTableBasedContent(doc)
+		if tableContent != nil {
+			if d.debug {
+				slog.Debug("Found main content using table-based detection")
+			}
+			return tableContent
 		}
-		return tableContent
 	}
 
-	// Try content scoring
-	scoredContent := d.findContentByScoring(doc)
-	if scoredContent != nil {
-		if d.debug {
-			slog.Debug("Found main content using scoring")
+	// If the top candidate contains a child candidate that matched a
+	// higher-priority selector (lower index), prefer the more specific child.
+	// This prevents e.g. <main> from winning over a contained <article>
+	// just because sibling noise inflates the parent's content score.
+	top := candidates[0]
+	best := top
+	for i := 1; i < len(candidates); i++ {
+		child := candidates[i]
+		if child.selectorIndex < best.selectorIndex && scoring.NodeContains(best.element, child.element) {
+			best = child
 		}
-		return scoredContent
 	}
 
-	return nil
+	if d.debug {
+		tag := goquery.NodeName(best.element)
+		slog.Debug("Selected main content", "tag", tag, "score", best.score)
+	}
+
+	return best.element
 }
 
 // findTableBasedContent finds content in table-based layouts

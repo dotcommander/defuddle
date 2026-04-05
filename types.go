@@ -47,6 +47,21 @@ type Options struct {
 	// Defaults to false.
 	RemoveImages bool `json:"removeImages,omitempty"`
 
+	// Whether to remove hidden elements (display:none, Tailwind hidden classes).
+	// Defaults to true. Disabled during retry cascade when hidden content is needed.
+	RemoveHiddenElements bool `json:"removeHiddenElements,omitempty"`
+
+	// Whether to remove low-scoring non-content blocks.
+	// Defaults to true.
+	RemoveLowScoring bool `json:"removeLowScoring,omitempty"`
+
+	// Whether to remove content patterns (boilerplate, breadcrumbs, etc.).
+	// Defaults to true.
+	RemoveContentPatterns bool `json:"removeContentPatterns,omitempty"`
+
+	// CSS selector to use for content extraction instead of auto-detection.
+	ContentSelector string `json:"contentSelector,omitempty"`
+
 	// Element processing options
 	ProcessCode      bool                                 `json:"processCode,omitempty"`
 	ProcessImages    bool                                 `json:"processImages,omitempty"`
@@ -64,6 +79,10 @@ type Options struct {
 	// Client is a custom HTTP client for fetching URLs.
 	// If nil, a default client with standard User-Agent and 30s timeout is created.
 	Client *requests.Client `json:"-"`
+
+	// MaxConcurrency limits parallel URL fetches in ParseFromURLs.
+	// Defaults to 5 if zero.
+	MaxConcurrency int `json:"maxConcurrency,omitempty"`
 }
 
 // Metadata represents extracted metadata from a document

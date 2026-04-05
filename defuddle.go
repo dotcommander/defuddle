@@ -2,11 +2,16 @@
 package defuddle
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
+
+	"golang.org/x/net/html/charset"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/kaptinlin/defuddle-go/extractors"
@@ -16,6 +21,8 @@ import (
 	"github.com/kaptinlin/defuddle-go/internal/metadata"
 	"github.com/kaptinlin/defuddle-go/internal/scoring"
 	"github.com/kaptinlin/defuddle-go/internal/standardize"
+	"github.com/kaptinlin/defuddle-go/internal/text"
+	"github.com/kaptinlin/defuddle-go/internal/urlutil"
 	"github.com/kaptinlin/requests"
 )
 
@@ -108,6 +115,9 @@ func (d *Defuddle) Parse(ctx context.Context) (*Result, error) {
 // ParseFromURL fetches content from a URL and parses it
 // JavaScript original code:
 // // This corresponds to Node.js usage: Defuddle(htmlOrDom, url?, options?)
+// maxResponseSize is the maximum HTML body size (5 MB).
+const maxResponseSize = 5 * 1024 * 1024
+
 func ParseFromURL(ctx context.Context, url string, options *Options) (*Result, error) {
 	if options == nil {
 		options = &Options{}
@@ -118,16 +128,19 @@ func ParseFromURL(ctx context.Context, url string, options *Options) (*Result, e
 		options.URL = url
 	}
 
-	// Create HTTP client and make request
+	// Create HTTP client with hardened defaults
 	client := options.Client
 	if client == nil {
 		client = requests.New(
 			requests.WithUserAgent("Mozilla/5.0 (compatible; Defuddle/1.0; +https://github.com/kaptinlin/defuddle-go)"),
-			requests.WithTimeout(30*time.Second),
+			requests.WithTimeout(10*time.Second),
 		)
 	}
 	resp, err := client.Get(url).Send(ctx)
 	if err != nil {
+		if ctx.Err() != nil {
+			return nil, fmt.Errorf("fetch %s: %w", url, ErrTimeout)
+		}
 		return nil, fmt.Errorf("failed to fetch URL %s: %w", url, err)
 	}
 	defer func() {
@@ -136,10 +149,26 @@ func ParseFromURL(ctx context.Context, url string, options *Options) (*Result, e
 		}
 	}()
 
-	html := resp.String()
+	// Validate content type — reject non-HTML responses
+	ct := resp.ContentType()
+	if ct != "" && !strings.Contains(ct, "html") && !strings.Contains(ct, "xml") && !strings.Contains(ct, "text/") {
+		return nil, fmt.Errorf("fetch %s: content-type %q: %w", url, ct, ErrNotHTML)
+	}
+
+	// Enforce size limit
+	rawBody := resp.Body()
+	if len(rawBody) > maxResponseSize {
+		return nil, fmt.Errorf("fetch %s: response %d bytes: %w", url, len(rawBody), ErrTooLarge)
+	}
+
+	// Detect and convert charset to UTF-8
+	body, err := toUTF8(rawBody, ct)
+	if err != nil {
+		return nil, fmt.Errorf("fetch %s: charset conversion: %w", url, err)
+	}
 
 	// Create Defuddle instance and parse
-	defuddle, err := NewDefuddle(html, options)
+	defuddle, err := NewDefuddle(body, options)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Defuddle instance: %w", err)
 	}
@@ -161,6 +190,46 @@ func ParseFromString(ctx context.Context, html string, options *Options) (*Resul
 	}
 
 	return defuddle.Parse(ctx)
+}
+
+// URLResult pairs a URL with its extraction result or error.
+type URLResult struct {
+	URL    string
+	Result *Result
+	Err    error
+}
+
+// ParseFromURLs fetches and parses multiple URLs concurrently.
+// MaxConcurrency in options controls parallelism (default 5).
+func ParseFromURLs(ctx context.Context, urls []string, options *Options) []URLResult {
+	if options == nil {
+		options = &Options{}
+	}
+	limit := options.MaxConcurrency
+	if limit <= 0 {
+		limit = 5
+	}
+
+	results := make([]URLResult, len(urls))
+	sem := make(chan struct{}, limit)
+
+	var wg sync.WaitGroup
+	for i, u := range urls {
+		wg.Add(1)
+		go func(idx int, url string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			// Copy options per URL so URL field doesn't collide
+			opts := *options
+			opts.URL = url
+			result, err := ParseFromURL(ctx, url, &opts)
+			results[idx] = URLResult{URL: url, Result: result, Err: err}
+		}(i, u)
+	}
+	wg.Wait()
+	return results
 }
 
 // parseInternal performs the actual parsing work
@@ -283,6 +352,12 @@ func (d *Defuddle) parseInternal(ctx context.Context, overrideOptions *Options) 
 		return nil, fmt.Errorf("failed to re-parse HTML for processing: %w", err)
 	}
 
+	// Flatten declarative Shadow DOM templates into the main document
+	flattenShadowDOM(workingDoc)
+
+	// Resolve React SSR streaming placeholders ($RC boundaries)
+	resolveReactStreaming(workingDoc)
+
 	// Evaluate mobile styles and sizes on fresh document
 	mobileStyles := d.evaluateMediaQueries()
 
@@ -337,20 +412,33 @@ func (d *Defuddle) parseInternal(ctx context.Context, overrideOptions *Options) 
 	}
 
 	// Remove hidden elements using computed styles
-	d.removeHiddenElements(workingDoc)
+	if options.RemoveHiddenElements {
+		d.removeHiddenElements(workingDoc)
+	}
 
 	// Remove non-content blocks by scoring
-	scoring.ScoreAndRemove(workingDoc, d.debug)
+	if options.RemoveLowScoring {
+		scoring.ScoreAndRemove(workingDoc, d.debug, mainContent)
+	}
 
-	// Remove clutter using selectors
+	// Remove clutter using selectors (after scoring — matches TS pipeline order)
 	if options.RemoveExactSelectors || options.RemovePartialSelectors {
-		d.removeBySelector(workingDoc, options.RemoveExactSelectors, options.RemovePartialSelectors)
+		d.removeBySelector(workingDoc, options.RemoveExactSelectors, options.RemovePartialSelectors, mainContent)
 	}
 
 	// Normalize the main content
 	standardize.Content(mainContent, extractedMetadata, workingDoc, d.debug)
 
-	content, _ := mainContent.Html()
+	// Resolve relative URLs against page URL
+	if options.URL != "" {
+		docBaseHref := urlutil.ExtractBaseHref(workingDoc)
+		urlutil.ResolveRelativeURLs(mainContent, options.URL, docBaseHref)
+	}
+
+	// Strip unsafe elements and attributes (XSS safety)
+	urlutil.SanitizeUnsafe(mainContent)
+
+	content, _ := goquery.OuterHtml(mainContent)
 	wordCount := d.countWords(content)
 	parseTime := time.Since(startTime).Milliseconds()
 
@@ -406,31 +494,80 @@ func (d *Defuddle) parseInternal(ctx context.Context, overrideOptions *Options) 
 	return result, nil
 }
 
-// removeBySelector removes elements by exact and partial selectors
-func (d *Defuddle) removeBySelector(doc *goquery.Document, removeExact, removePartial bool) {
+// removeBySelector removes elements by exact and partial selectors.
+// mainContent is used to protect the main content element and its ancestors from removal.
+func (d *Defuddle) removeBySelector(doc *goquery.Document, removeExact, removePartial bool, mainContent *goquery.Selection) {
 	if removeExact {
 		exactSelectors := constants.GetExactSelectors()
 		for _, selector := range exactSelectors {
-			doc.Find(selector).Remove()
+			doc.Find(selector).Each(func(_ int, el *goquery.Selection) {
+				// Never remove ancestors of main content
+				if mainContent != nil && scoring.NodeContains(el, mainContent) {
+					return
+				}
+				// Protect elements inside code blocks
+				if el.Closest("pre").Length() > 0 || el.Closest("code").Length() > 0 {
+					return
+				}
+				el.Remove()
+			})
 		}
 	}
 
 	if removePartial {
 		testAttributes := constants.GetTestAttributes()
-		partialSelectors := constants.GetPartialSelectors()
+		partialRegex := constants.GetPartialSelectorRegex()
 
-		doc.Find("*").Each(func(_ int, element *goquery.Selection) {
-			for _, attr := range testAttributes {
-				value, exists := element.Attr(attr)
-				if exists && value != "" {
-					lowerValue := strings.ToLower(value)
-					for _, pattern := range partialSelectors {
-						if strings.Contains(lowerValue, strings.ToLower(pattern)) {
-							element.Remove()
-							return
-						}
-					}
+		// Pre-compute footnote list selectors for protection
+		footnoteListSelectors := constants.GetFootnoteListSelectors()
+
+		// Only query elements that have at least one test attribute
+		attrSelector := make([]string, len(testAttributes))
+		for i, attr := range testAttributes {
+			attrSelector[i] = "[" + attr + "]"
+		}
+		combinedSelector := strings.Join(attrSelector, ",")
+
+		doc.Find(combinedSelector).Each(func(_ int, element *goquery.Selection) {
+			// Never remove ancestors of main content
+			if mainContent != nil && scoring.NodeContains(element, mainContent) {
+				return
+			}
+			// Protect elements inside code blocks
+			if element.Closest("pre").Length() > 0 || element.Closest("code").Length() > 0 {
+				return
+			}
+			// Protect footnote lists and their parents
+			for _, sel := range footnoteListSelectors {
+				if element.Is(sel) || element.Find(sel).Length() > 0 {
+					return
 				}
+			}
+			// Skip heading elements — their IDs often match partial selectors
+			tag := goquery.NodeName(element)
+			if tag == "h1" || tag == "h2" || tag == "h3" || tag == "h4" || tag == "h5" || tag == "h6" {
+				return
+			}
+			// Skip anchor links inside headings
+			if element.Closest("h1, h2, h3, h4, h5, h6").Length() > 0 {
+				return
+			}
+
+			// Combine all test attribute values into one string for single regex test
+			var combined strings.Builder
+			for _, attr := range testAttributes {
+				if value, exists := element.Attr(attr); exists && value != "" {
+					combined.WriteString(value)
+					combined.WriteByte(' ')
+				}
+			}
+			attrs := strings.ToLower(combined.String())
+			if strings.TrimSpace(attrs) == "" {
+				return
+			}
+
+			if partialRegex.MatchString(attrs) {
+				element.Remove()
 			}
 		})
 	}
@@ -450,116 +587,77 @@ func (d *Defuddle) mergeOptions(overrideOptions *Options) *Options {
 	options := &Options{
 		RemoveExactSelectors:   true,
 		RemovePartialSelectors: true,
+		RemoveHiddenElements:   true,
+		RemoveLowScoring:       true,
+		RemoveContentPatterns:  true,
 	}
 
-	// Apply instance options if they exist (...this.options)
-	if d.options != nil {
-		// Copy all values from instance options, including false values
-		options.Debug = d.options.Debug
-		if d.options.URL != "" {
-			options.URL = d.options.URL
-		}
-		options.Markdown = d.options.Markdown
-		options.SeparateMarkdown = d.options.SeparateMarkdown
-
-		// For boolean options that can override defaults, always apply them
-		options.RemoveExactSelectors = d.options.RemoveExactSelectors
-		options.RemovePartialSelectors = d.options.RemovePartialSelectors
-		options.RemoveImages = d.options.RemoveImages
-		options.ProcessCode = d.options.ProcessCode
-		options.ProcessImages = d.options.ProcessImages
-		options.ProcessHeadings = d.options.ProcessHeadings
-		options.ProcessMath = d.options.ProcessMath
-		options.ProcessFootnotes = d.options.ProcessFootnotes
-		options.ProcessRoles = d.options.ProcessRoles
-
-		// Copy pointer fields
-		if d.options.CodeOptions != nil {
-			options.CodeOptions = d.options.CodeOptions
-		}
-		if d.options.ImageOptions != nil {
-			options.ImageOptions = d.options.ImageOptions
-		}
-		if d.options.HeadingOptions != nil {
-			options.HeadingOptions = d.options.HeadingOptions
-		}
-		if d.options.MathOptions != nil {
-			options.MathOptions = d.options.MathOptions
-		}
-		if d.options.FootnoteOptions != nil {
-			options.FootnoteOptions = d.options.FootnoteOptions
-		}
-		if d.options.RoleOptions != nil {
-			options.RoleOptions = d.options.RoleOptions
-		}
-	}
-
-	// Apply override options if they exist (...overrideOptions)
-	if overrideOptions != nil {
-		// Copy all values from override options, including false values
-		options.Debug = overrideOptions.Debug
-		if overrideOptions.URL != "" {
-			options.URL = overrideOptions.URL
-		}
-		options.Markdown = overrideOptions.Markdown
-		options.SeparateMarkdown = overrideOptions.SeparateMarkdown
-
-		// Override boolean options (these will override any previous values)
-		options.RemoveExactSelectors = overrideOptions.RemoveExactSelectors
-		options.RemovePartialSelectors = overrideOptions.RemovePartialSelectors
-		options.RemoveImages = overrideOptions.RemoveImages
-		options.ProcessCode = overrideOptions.ProcessCode
-		options.ProcessImages = overrideOptions.ProcessImages
-		options.ProcessHeadings = overrideOptions.ProcessHeadings
-		options.ProcessMath = overrideOptions.ProcessMath
-		options.ProcessFootnotes = overrideOptions.ProcessFootnotes
-		options.ProcessRoles = overrideOptions.ProcessRoles
-
-		// Copy pointer fields
-		if overrideOptions.CodeOptions != nil {
-			options.CodeOptions = overrideOptions.CodeOptions
-		}
-		if overrideOptions.ImageOptions != nil {
-			options.ImageOptions = overrideOptions.ImageOptions
-		}
-		if overrideOptions.HeadingOptions != nil {
-			options.HeadingOptions = overrideOptions.HeadingOptions
-		}
-		if overrideOptions.MathOptions != nil {
-			options.MathOptions = overrideOptions.MathOptions
-		}
-		if overrideOptions.FootnoteOptions != nil {
-			options.FootnoteOptions = overrideOptions.FootnoteOptions
-		}
-		if overrideOptions.RoleOptions != nil {
-			options.RoleOptions = overrideOptions.RoleOptions
-		}
-	}
+	// Apply instance options then override options (mirrors JS spread order)
+	applyOptions(options, d.options)
+	applyOptions(options, overrideOptions)
 
 	return options
 }
 
-// countWords counts words in HTML content
+// applyOptions overlays src onto dst, skipping zero-value string fields so
+// that defaults set on dst are not accidentally cleared by empty strings.
+// All boolean and pointer fields are always copied because false/nil is a
+// meaningful caller intent (e.g. RemoveExactSelectors=false disables removal).
+func applyOptions(dst, src *Options) {
+	if src == nil {
+		return
+	}
+	dst.Debug = src.Debug
+	if src.URL != "" {
+		dst.URL = src.URL
+	}
+	dst.Markdown = src.Markdown
+	dst.SeparateMarkdown = src.SeparateMarkdown
+	dst.RemoveExactSelectors = src.RemoveExactSelectors
+	dst.RemovePartialSelectors = src.RemovePartialSelectors
+	dst.RemoveImages = src.RemoveImages
+	dst.RemoveHiddenElements = src.RemoveHiddenElements
+	dst.RemoveLowScoring = src.RemoveLowScoring
+	dst.RemoveContentPatterns = src.RemoveContentPatterns
+	if src.ContentSelector != "" {
+		dst.ContentSelector = src.ContentSelector
+	}
+	dst.ProcessCode = src.ProcessCode
+	dst.ProcessImages = src.ProcessImages
+	dst.ProcessHeadings = src.ProcessHeadings
+	dst.ProcessMath = src.ProcessMath
+	dst.ProcessFootnotes = src.ProcessFootnotes
+	dst.ProcessRoles = src.ProcessRoles
+	if src.CodeOptions != nil {
+		dst.CodeOptions = src.CodeOptions
+	}
+	if src.ImageOptions != nil {
+		dst.ImageOptions = src.ImageOptions
+	}
+	if src.HeadingOptions != nil {
+		dst.HeadingOptions = src.HeadingOptions
+	}
+	if src.MathOptions != nil {
+		dst.MathOptions = src.MathOptions
+	}
+	if src.FootnoteOptions != nil {
+		dst.FootnoteOptions = src.FootnoteOptions
+	}
+	if src.RoleOptions != nil {
+		dst.RoleOptions = src.RoleOptions
+	}
+}
+
+// countWords counts words in HTML content, with CJK-aware counting.
 func (d *Defuddle) countWords(content string) int {
 	// Parse HTML content to extract text
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(content))
 	if err != nil {
 		// Fallback: count words in raw content
-		text := strings.TrimSpace(content)
-		if text == "" {
-			return 0
-		}
-		words := strings.Fields(text)
-		return len(words)
+		return text.CountWords(strings.TrimSpace(content))
 	}
 
-	// Get text content, removing extra whitespace
-	text := strings.TrimSpace(doc.Text())
-	if text == "" {
-		return 0
-	}
-
-	return len(strings.Fields(text))
+	return text.CountWords(strings.TrimSpace(doc.Text()))
 }
 
 // collectMetaTags collects meta tags from the document
@@ -591,4 +689,20 @@ func (d *Defuddle) collectMetaTags() []MetaTag {
 // convertHTMLToMarkdown converts HTML content to Markdown
 func (d *Defuddle) convertHTMLToMarkdown(htmlContent string) (string, error) {
 	return markdown.ConvertHTML(htmlContent)
+}
+
+// toUTF8 converts raw bytes to a UTF-8 string using charset detection.
+// It inspects both the Content-Type header and the HTML content itself
+// (meta charset, BOM) to determine the source encoding.
+func toUTF8(body []byte, contentType string) (string, error) {
+	r, err := charset.NewReader(bytes.NewReader(body), contentType)
+	if err != nil {
+		// If charset detection fails, assume UTF-8 (best effort)
+		return string(body), nil //nolint:nilerr
+	}
+	utf8Body, err := io.ReadAll(r)
+	if err != nil {
+		return "", err
+	}
+	return string(utf8Body), nil
 }
