@@ -11,6 +11,8 @@ import (
 
 	htmltomarkdown "github.com/JohannesKaufmann/html-to-markdown/v2"
 	"github.com/JohannesKaufmann/html-to-markdown/v2/converter"
+	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/base"
+	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/commonmark"
 	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/strikethrough"
 	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/table"
 	"golang.org/x/net/html"
@@ -37,6 +39,8 @@ func ConvertHTML(htmlContent string) (string, error) {
 
 	conv := converter.NewConverter(
 		converter.WithPlugins(
+			base.NewBasePlugin(),
+			commonmark.NewCommonmarkPlugin(),
 			newDefuddlePlugin(),
 			table.NewTablePlugin(
 				table.WithSpanCellBehavior(table.SpanBehaviorEmpty),
