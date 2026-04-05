@@ -288,6 +288,9 @@ var ExactSelectors = []string{
 	// GitHub - avoid duplicate metadata
 	".gh-header-sticky",                     // GitHub
 	`[data-testid="issue-metadata-sticky"]`, // GitHub
+
+	// Substack - layout wrappers that are not content
+	`.pencraft:not(.pc-display-contents)`,
 }
 
 // TestAttributes are attributes to test against for partial matches
@@ -319,16 +322,22 @@ var TestAttributes = []string{
 // JavaScript original code: (first part of PARTIAL_SELECTORS array)
 var PartialSelectors = []string{
 	"a-statement",
+	// NOTE: TS uses negative lookbehind: (?<!main-)access-wall to avoid matching
+	// data-test="main-access-wall" (content container). Go regex lacks lookbehind
+	// support — this plain match may over-match. A post-match filter will be added later.
 	"access-wall",
 	"activitypub",
 	"actioncall",
 	"addcomment",
+	"addtoany",
 	"advert",
 	"adlayout",
 	"ad-tldr",
 	"ad-placement",
 	"ads-container",
 	"_ad_",
+	"AdBlock_",
+	"AdUnit",
 	"after_content",
 	"after_main_article",
 	"afterpost",
@@ -402,6 +411,7 @@ var PartialSelectors = []string{
 	"bottom-of-article",
 	"bottom-wrapper",
 	"brand-bar",
+	"bcrumb",
 	"breadcrumb",
 	"brdcrumb",
 	"button-wrapper",
@@ -423,6 +433,7 @@ var PartialSelectors = []string{
 	"chapter-list", // The Economist
 	"collections",
 	"comments",
+	"-comment", // comments in code blocks are skipped in removeBySelector
 	"commentbox",
 	"comment-button",
 	"commentcomp",
@@ -437,12 +448,15 @@ var PartialSelectors = []string{
 	"consent",
 	"contact-",
 	"content-card", // The Verge
+	"copycontent",
 	"content-topics",
 	"contentpromo",
 	"context-bar",
 	"context-widget", // Reuters
 	"core-collateral",
-	"cover-",
+	"cover-image",
+	"cover-photo",
+	"cover-wrap",
 	"created-date",
 	"creative-commons_",
 	"c-subscribe",
@@ -460,14 +474,20 @@ var PartialSelectors = []string{
 	"disclosure",
 	"discussion",
 	"discuss_",
+	"-dismiss",
 	"disqus",
 	"donate",
 	"donation",
 	"dropdown", // Ars Technica
+	"editorial_contact",
+	"editorial-contact",
+	"element-invisible",
+	"elementor-shortcode",
 	"eletters",
 	"emailsignup",
+	"emoji-bar",
 	"engagement-widget",
-	"enhancement",
+	"enhancement-",
 	"entry-author-info",
 	"entry-categories",
 	"entry-date",
@@ -500,6 +520,7 @@ var PartialSelectors = []string{
 	"frontmatter",
 	"further-reading",
 	"fullbleedheader",
+	"gallery-count",
 	"gated-",
 	"gh-feed",
 	"gist-meta",
@@ -517,13 +538,21 @@ var PartialSelectors = []string{
 	"hidden-sidenote",
 	"hidden-accessibility",
 	"infoline",
+	"inline-topic",
 	"instacartIntegration",
 	"interlude",
 	"interaction",
 	"itemendrow",
+	"intro-date",
 	"invisible",
+	"jp-no-solution",
+	"jp-relatedposts",
+	"jswarning",
+	"js-warning",
 	"jumplink",
+	"jumpto",
 	"jump-to-",
+	"js-skip-to-content",
 	"keepreading",
 	"keep-reading",
 	"keep_reading",
@@ -557,9 +586,13 @@ var PartialSelectors = []string{
 	"-menu",
 	"menu-",
 	"metadata",
+	"meta-bottom",
+	"meta-date",
+	"meta-row",
 	"might-like",
 	"minibio",
 	"more-about",
+	"mod-paywall",
 	"_modal",
 	"-modal",
 	"more-",
@@ -576,6 +609,8 @@ var PartialSelectors = []string{
 	"nav_",
 	"navigation-post",
 	"next-",
+	"next_prev",
+	"no-script",
 	"newsgallery",
 	"news-story-title",
 	"newsletter_",
@@ -605,6 +640,7 @@ var PartialSelectors = []string{
 	"popup_links",
 	"pop_stories",
 	"pop-up",
+	"post__author",
 	"post-author",
 	"post-bottom",
 	"post__category",
@@ -696,6 +732,7 @@ var PartialSelectors = []string{
 	"related",
 	"relevant",
 	"reversefootnote",
+	"robots-nocontent",
 	"_rss",
 	"rss-link",
 
@@ -715,6 +752,8 @@ var PartialSelectors = []string{
 	"share-post",
 	"share-print",
 	"share-section",
+	"sharing_",
+	"shariff-",
 	"show-for-print",
 	"sidebartitle",
 	//	'sidebar_',
@@ -736,14 +775,13 @@ var PartialSelectors = []string{
 	"site-name",
 	"site-wordpress",
 	//	'skip-',
-	//	'skip-link', TechCrunch
+	"skip-link",
 	"skip-content",
 	"skip-to-content",
 	"skip-to-main",
 	"skip-main",
 	"skip-nav",
 	"skip-navigation",
-	//	'skip-link',
 	"c-skip-link",
 	"_skip-link",
 	"-skip-link",
@@ -778,9 +816,11 @@ var PartialSelectors = []string{
 	"_tags",
 	"tags__item",
 	"tag_list",
+	"tag-list",
 	"taxonomy",
 	//	'table-content',
 	"table-of-contents",
+	"tblc",
 	"tabs-",
 	//	'teaser', Nature
 	"terminaltout",
@@ -795,8 +835,11 @@ var PartialSelectors = []string{
 	"toc-container",
 	"toggle-caption",
 	//	'toolbar', prism.js
-	"tooltip",
+	"tooltip-content",
 	"topbar",
+	"subnavbar",
+	"topic-authors",
+	"topic-footer",
 	"topic-list",
 	"topic-subnav",
 	//	'top-section',
@@ -806,16 +849,23 @@ var PartialSelectors = []string{
 	"trust-feat",
 	"trust-badge",
 	"trust-project",
+	"chakra-badge",
 	"twitter",
+	"twiblock",
 
 	"u-hide",
 	"upsell",
 
 	"viewbottom",
+	"view-language",
+	"yarpp-related",
 	"visually-hidden",
 	"welcomebox",
 	"widget_pages",
 	//	'widget-'
+	// Webflow form state messages — shown after form submit, never article content
+	"w-form-done",
+	"w-form-fail",
 }
 
 // FootnoteInlineReferences are selectors for footnotes and citations
@@ -851,6 +901,7 @@ var FootnoteInlineReferences = []string{
 	`sup[id^="fnr"]`,
 	`span[id^="fnr"]`,
 	`span[class*="footnote_ref"]`,
+	`span[class*="footnote-ref"]`,
 	"span.footnote-link",
 	"a.citation",
 	`a[id^="ref-link"]`,
@@ -867,6 +918,7 @@ var FootnoteInlineReferences = []string{
 	`a[role="doc-biblioref"]`,          // Science.org
 	`a[id^="fnref"]`,
 	`a[id^="ref-link"]`, // Nature.com
+	"sup.footnoteref",   // Wikidot
 }
 
 // FootnoteListSelectors are selectors for footnote lists
@@ -906,6 +958,9 @@ var FootnoteListSelectors = []string{
 	"ul.footnotes-list",
 	"ul.ltx_biblist",
 	`div.footnote[data-component-name="FootnoteToDOM"]`, // Substack
+	"div.footnotes-footer",                              // Wikidot
+	"div.footnote-definitions",
+	"#footnotes", // standardizeFootnotes output container
 }
 
 // GetEntryPointElements returns the entry point elements slice
@@ -1096,8 +1151,8 @@ var AllowedAttributes = map[string]bool{
 	"alt": true, "allow": true, "allowfullscreen": true, "aria-label": true, "checked": true,
 	"colspan": true, "controls": true, "data-latex": true, "data-src": true, "data-srcset": true,
 	"data-callout": true, "data-lang": true, "dir": true, "display": true, "frameborder": true, "headers": true,
-	"height": true, "href": true, "lang": true, "role": true, "rowspan": true, "src": true,
-	"srcset": true, "title": true, "type": true, "width": true,
+	"height": true, "href": true, "kind": true, "lang": true, "role": true, "rowspan": true, "src": true,
+	"srclang": true, "srcset": true, "title": true, "type": true, "width": true,
 
 	// MathML attributes
 	"accent": true, "accentunder": true, "align": true, "columnalign": true, "columnlines": true,

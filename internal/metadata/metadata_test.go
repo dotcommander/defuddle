@@ -152,3 +152,95 @@ func TestExtract_SchemaOrgData(t *testing.T) {
 	require.NotNil(t, m)
 	assert.Equal(t, schemaData, m.SchemaOrgData)
 }
+
+// --- Language extraction tests ---
+
+func TestGetLanguage_HtmlLang(t *testing.T) {
+	t.Parallel()
+	doc := parseDoc(t, `<html lang="en-US"><head></head><body></body></html>`)
+	lang := getLanguage(doc, nil, nil)
+	assert.Equal(t, "en-US", lang)
+}
+
+func TestGetLanguage_HtmlLangUnderscore(t *testing.T) {
+	t.Parallel()
+	doc := parseDoc(t, `<html lang="en_US"><head></head><body></body></html>`)
+	lang := getLanguage(doc, nil, nil)
+	assert.Equal(t, "en-US", lang, "underscores should be normalized to hyphens")
+}
+
+func TestGetLanguage_OgLocale(t *testing.T) {
+	t.Parallel()
+	doc := parseDoc(t, `<html><head></head><body></body></html>`)
+	tags := []MetaTag{{Property: ptr("og:locale"), Content: ptr("fr_FR")}}
+	lang := getLanguage(doc, nil, tags)
+	assert.Equal(t, "fr-FR", lang)
+}
+
+func TestGetLanguage_ContentLanguageMeta(t *testing.T) {
+	t.Parallel()
+	doc := parseDoc(t, `<html><head></head><body></body></html>`)
+	tags := []MetaTag{{Name: ptr("content-language"), Content: ptr("de")}}
+	lang := getLanguage(doc, nil, tags)
+	assert.Equal(t, "de", lang)
+}
+
+func TestGetLanguage_SchemaOrgInLanguage(t *testing.T) {
+	t.Parallel()
+	doc := parseDoc(t, `<html><head></head><body></body></html>`)
+	schema := map[string]any{
+		"@type":      "Article",
+		"inLanguage": "ja",
+	}
+	lang := getLanguage(doc, schema, nil)
+	assert.Equal(t, "ja", lang)
+}
+
+func TestGetLanguage_PriorityOrder(t *testing.T) {
+	t.Parallel()
+	// html[lang] should take priority over og:locale
+	doc := parseDoc(t, `<html lang="en"><head></head><body></body></html>`)
+	tags := []MetaTag{{Property: ptr("og:locale"), Content: ptr("fr_FR")}}
+	lang := getLanguage(doc, nil, tags)
+	assert.Equal(t, "en", lang, "html[lang] should take priority")
+}
+
+func TestGetLanguage_Empty(t *testing.T) {
+	t.Parallel()
+	doc := parseDoc(t, `<html><head></head><body></body></html>`)
+	lang := getLanguage(doc, nil, nil)
+	assert.Empty(t, lang)
+}
+
+func TestGetLanguage_WhitespaceOnly(t *testing.T) {
+	t.Parallel()
+	doc := parseDoc(t, `<html lang="  "><head></head><body></body></html>`)
+	lang := getLanguage(doc, nil, nil)
+	assert.Empty(t, lang, "whitespace-only lang should be treated as empty")
+}
+
+func TestNormalizeLangCode(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		input, expected string
+	}{
+		{"en_US", "en-US"},
+		{"en-US", "en-US"},
+		{"zh_Hans_CN", "zh-Hans-CN"},
+		{"fr", "fr"},
+		{"", ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.input, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.expected, normalizeLangCode(tc.input))
+		})
+	}
+}
+
+func TestExtract_LanguageField(t *testing.T) {
+	t.Parallel()
+	doc := parseDoc(t, `<html lang="pt-BR"><head><title>Test</title></head><body></body></html>`)
+	m := Extract(doc, nil, nil, "")
+	assert.Equal(t, "pt-BR", m.Language)
+}

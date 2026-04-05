@@ -12,8 +12,14 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
-// Pre-compiled regex for array index notation in schema property paths.
-var arrayIndexRe = regexp.MustCompile(`^\[\d+\]$`)
+// Pre-compiled regex patterns.
+var (
+	arrayIndexRe = regexp.MustCompile(`^\[\d+\]$`)
+	// Matches common date formats: YYYY-MM-DD, Month DD YYYY, DD Month YYYY, etc.
+	datePatternRe = regexp.MustCompile(`(?i)\b(\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\s+\d{4}|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\s+\d{1,2},?\s+\d{4})\b`)
+	// Matches "LastName, FirstName" pattern for name reversal.
+	nameReversalRe = regexp.MustCompile(`^(.*),\s(.*)$`)
+)
 
 // MetaTag represents a meta tag item from HTML
 // JavaScript original code:
@@ -51,6 +57,7 @@ type Metadata struct {
 	Domain        string `json:"domain"`
 	Favicon       string `json:"favicon"`
 	Image         string `json:"image"`
+	Language      string `json:"language"`
 	ParseTime     int64  `json:"parseTime"`
 	Published     string `json:"published"`
 	Author        string `json:"author"`
@@ -171,6 +178,7 @@ func Extract(doc *goquery.Document, schemaOrgData any, metaTags []MetaTag, baseU
 		Domain:        domain,
 		Favicon:       getFavicon(doc, documentURL, metaTags),
 		Image:         getImage(doc, schemaOrgData, metaTags),
+		Language:      getLanguage(doc, schemaOrgData, metaTags),
 		Published:     getPublished(doc, schemaOrgData, metaTags),
 		Author:        getAuthor(doc, schemaOrgData, metaTags),
 		Site:          getSite(doc, schemaOrgData, metaTags),
@@ -261,7 +269,25 @@ func Extract(doc *goquery.Document, schemaOrgData any, metaTags []MetaTag, baseU
 //	  return '';
 //	}
 func getAuthor(doc *goquery.Document, schemaOrgData any, metaTags []MetaTag) string {
-	// Meta tags - use cmp.Or for cleaner fallback chain (Go 1.22+)
+	// Research paper meta tags: citation_author, dc.creator (support multi-value)
+	citationAuthors := getMetaContents(metaTags, "name", "citation_author")
+	if len(citationAuthors) == 0 {
+		citationAuthors = getMetaContents(metaTags, "property", "dc.creator")
+	}
+	if len(citationAuthors) > 0 {
+		reversed := make([]string, 0, len(citationAuthors))
+		for _, s := range citationAuthors {
+			// Reverse "LastName, FirstName" → "FirstName LastName"
+			if m := nameReversalRe.FindStringSubmatch(s); m != nil {
+				reversed = append(reversed, strings.TrimSpace(m[2])+" "+strings.TrimSpace(m[1]))
+			} else {
+				reversed = append(reversed, strings.TrimSpace(s))
+			}
+		}
+		return strings.Join(reversed, ", ")
+	}
+
+	// Standard meta tags - use cmp.Or for cleaner fallback chain (Go 1.22+)
 	authors := cmp.Or(
 		getMetaContent(metaTags, "name", "sailthru.author"),
 		getMetaContent(metaTags, "property", "author"),
@@ -527,6 +553,44 @@ func getImage(_ *goquery.Document, schemaOrgData any, metaTags []MetaTag) string
 	)
 }
 
+// getLanguage extracts the document language using multiple fallback sources.
+// Priority: <html lang> → content-language meta → og:locale → http-equiv → schema.org inLanguage
+func getLanguage(doc *goquery.Document, schemaOrgData any, metaTags []MetaTag) string {
+	// 1. <html lang="...">
+	if lang, exists := doc.Find("html").Attr("lang"); exists {
+		if l := strings.TrimSpace(lang); l != "" {
+			return normalizeLangCode(l)
+		}
+	}
+
+	// 2. Content-Language meta tag or og:locale
+	if cl := cmp.Or(
+		getMetaContent(metaTags, "name", "content-language"),
+		getMetaContent(metaTags, "property", "og:locale"),
+	); cl != "" {
+		return normalizeLangCode(cl)
+	}
+
+	// 3. http-equiv Content-Language
+	if val, exists := doc.Find(`meta[http-equiv="Content-Language" i]`).Attr("content"); exists {
+		if l := strings.TrimSpace(val); l != "" {
+			return normalizeLangCode(l)
+		}
+	}
+
+	// 4. Schema.org inLanguage
+	if sl := getSchemaProperty(schemaOrgData, "inLanguage"); sl != "" {
+		return normalizeLangCode(sl)
+	}
+
+	return ""
+}
+
+// normalizeLangCode normalizes language codes to BCP 47 format (e.g. en_US → en-US).
+func normalizeLangCode(code string) string {
+	return strings.ReplaceAll(code, "_", "-")
+}
+
 // getFavicon extracts favicon URL
 // JavaScript original code:
 //
@@ -550,6 +614,11 @@ func getImage(_ *goquery.Document, schemaOrgData any, metaTags []MetaTag) string
 //	  return favicon;
 //	}
 func getFavicon(doc *goquery.Document, baseURL string, metaTags []MetaTag) string {
+	// First priority: og:image:favicon meta tag
+	if iconFromMeta := getMetaContent(metaTags, "property", "og:image:favicon"); iconFromMeta != "" {
+		return iconFromMeta
+	}
+
 	favicon := ""
 	iconLink := doc.Find(`link[rel*="icon"]`).First()
 	if iconLink.Length() > 0 {
@@ -563,7 +632,8 @@ func getFavicon(doc *goquery.Document, baseURL string, metaTags []MetaTag) strin
 		favicon = getMetaContent(metaTags, "name", "msapplication-TileImage")
 	}
 
-	if favicon == "" {
+	// Only fall back to /favicon.ico if we have a base URL to resolve against
+	if favicon == "" && baseURL != "" {
 		favicon = "/favicon.ico"
 	}
 
@@ -596,14 +666,48 @@ func getFavicon(doc *goquery.Document, baseURL string, metaTags []MetaTag) strin
 //	  );
 //	}
 func getPublished(doc *goquery.Document, schemaOrgData any, metaTags []MetaTag) string {
-	// Use cmp.Or for cleaner fallback chain (Go 1.22+)
-	return cmp.Or(
+	// Use cmp.Or for cleaner fallback chain matching TS priority order
+	result := cmp.Or(
 		getSchemaProperty(schemaOrgData, "datePublished"),
+		getMetaContent(metaTags, "name", "publishDate"),
 		getMetaContent(metaTags, "property", "article:published_time"),
+		getAbbrevDatePublished(doc),
+		getTimeElement(doc),
 		getMetaContent(metaTags, "name", "sailthru.date"),
 		getMetaContent(metaTags, "name", "date"),
-		getTimeElement(doc),
 	)
+	if result != "" {
+		return result
+	}
+
+	// Near-h1 date scanning: check up to 3 siblings after the h1
+	h1 := doc.Find("h1").First()
+	if h1.Length() > 0 {
+		sibling := h1.Next()
+		for range 3 {
+			if sibling.Length() == 0 {
+				break
+			}
+			text := strings.TrimSpace(sibling.Text())
+			if parsed := parseDateText(text); parsed != "" {
+				return parsed
+			}
+			sibling = sibling.Next()
+		}
+	}
+
+	return ""
+}
+
+// getAbbrevDatePublished extracts date from abbr[itemprop="datePublished"] title attr.
+func getAbbrevDatePublished(doc *goquery.Document) string {
+	abbr := doc.Find(`abbr[itemprop="datePublished"]`).First()
+	if abbr.Length() > 0 {
+		if title, exists := abbr.Attr("title"); exists {
+			return strings.TrimSpace(title)
+		}
+	}
+	return ""
 }
 
 // getMetaContent finds meta tag content by attribute and value
@@ -622,11 +726,38 @@ func getMetaContent(metaTags []MetaTag, attr, value string) string {
 		case "property":
 			tagValue = tag.Property
 		}
-		if tagValue != nil && *tagValue == value && tag.Content != nil {
+		if tagValue != nil && strings.EqualFold(*tagValue, value) && tag.Content != nil {
 			return *tag.Content
 		}
 	}
 	return ""
+}
+
+// getMetaContents returns all matching meta tag values (for multi-value meta like citation_author).
+func getMetaContents(metaTags []MetaTag, attr, value string) []string {
+	var results []string
+	for _, tag := range metaTags {
+		var tagValue *string
+		switch attr {
+		case "name":
+			tagValue = tag.Name
+		case "property":
+			tagValue = tag.Property
+		}
+		if tagValue != nil && strings.EqualFold(*tagValue, value) && tag.Content != nil && *tag.Content != "" {
+			results = append(results, *tag.Content)
+		}
+	}
+	return results
+}
+
+// parseDateText extracts a date from freeform text near headings.
+func parseDateText(text string) string {
+	if text == "" || len(text) > 200 {
+		return ""
+	}
+	m := datePatternRe.FindString(text)
+	return strings.TrimSpace(m)
 }
 
 // getTimeElement extracts time from time elements
