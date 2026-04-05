@@ -297,6 +297,11 @@ func (d *Defuddle) parseInternal(ctx context.Context, overrideOptions *Options) 
 		})
 	}
 
+	// Remove all images before extractor check (TS applies to doc before extractor)
+	if options.RemoveImages {
+		d.removeAllImages(d.doc)
+	}
+
 	// Try site-specific extractor first, if there is one
 	url := options.URL
 	extractor := extractors.FindExtractor(d.doc, url, schemaOrgData)
