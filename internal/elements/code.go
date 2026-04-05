@@ -130,11 +130,8 @@ type CodeBlockProcessor struct {
 //	  wrapInPre?: boolean;
 //	}
 type CodeBlockProcessingOptions struct {
-	DetectLanguage        bool
-	FormatCode            bool
-	AddLineNumbers        bool
-	EnableSyntaxHighlight bool
-	WrapInPre             bool
+	DetectLanguage bool
+	FormatCode     bool
 }
 
 // DefaultCodeBlockProcessingOptions returns default options for code block processing
@@ -149,11 +146,8 @@ type CodeBlockProcessingOptions struct {
 //	};
 func DefaultCodeBlockProcessingOptions() *CodeBlockProcessingOptions {
 	return &CodeBlockProcessingOptions{
-		DetectLanguage:        true,
-		FormatCode:            true,
-		AddLineNumbers:        false,
-		EnableSyntaxHighlight: true,
-		WrapInPre:             true,
+		DetectLanguage: true,
+		FormatCode:     true,
 	}
 }
 
