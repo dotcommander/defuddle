@@ -1,0 +1,6 @@
+.DS_Store
+.cursorrules
+
+node_modules/
+
+dist/
