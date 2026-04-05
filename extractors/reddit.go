@@ -425,9 +425,20 @@ func (r *RedditExtractor) processComments(comments []*goquery.Selection) string 
 
 		var date string
 		if timestamp != "" {
-			// Parse timestamp and convert to date
+			// Try Unix timestamp (integer milliseconds or seconds)
 			if ts, err := strconv.ParseInt(timestamp, 10, 64); err == nil {
-				date = time.Unix(ts, 0).Format("2006-01-02")
+				if ts > 1e12 {
+					// Milliseconds
+					date = time.Unix(ts/1000, 0).Format("2006-01-02")
+				} else {
+					date = time.Unix(ts, 0).Format("2006-01-02")
+				}
+			} else if t, err := time.Parse(time.RFC3339, timestamp); err == nil {
+				// ISO 8601 string
+				date = t.Format("2006-01-02")
+			} else if t, err := time.Parse("2006-01-02T15:04:05", timestamp); err == nil {
+				// ISO 8601 without timezone
+				date = t.Format("2006-01-02")
 			}
 		}
 
