@@ -12,13 +12,56 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/kaptinlin/defuddle-go/internal/constants"
+	textutil "github.com/kaptinlin/defuddle-go/internal/text"
 )
 
 // Pre-compiled regex patterns for content scoring.
 var (
 	dateRe   = regexp.MustCompile(`(?i)\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},?\s+\d{4}\b`)
 	authorRe = regexp.MustCompile(`(?i)\b(?:by|written by|author:)\s+[A-Za-z\s]+\b`)
+
+	// Social media profile URL pattern — used to detect author bios.
+	// Go regexp doesn't support lookaheads, so we match broadly here
+	// and filter out intent/share URLs in the calling code.
+	socialProfileRe = regexp.MustCompile(`(?i)(linkedin\.com/(in|company)/|twitter\.com/\w|x\.com/\w|facebook\.com/\w|instagram\.com/\w|threads\.net/\w|mastodon\.\w)`)
+
+	// Date pattern for detecting standalone bylines (no leading \b because
+	// textContent can concatenate adjacent elements without whitespace)
+	bylineDateRe = regexp.MustCompile(`(?i)(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2}`)
+
+	// Author attribution pattern — case-sensitive "By" + capitalized name
+	bylineAuthorRe = regexp.MustCompile(`\bBy\s+[A-Z]`)
+
+	// Sentence-ending punctuation for prose detection
+	sentenceEndRe = regexp.MustCompile(`[.?!]`)
 )
+
+// Pre-compiled word-boundary regexes for navigation indicator matching.
+// Using \b prevents false positives like "share" matching inside "shareholders".
+var navigationIndicatorRegexes = compileNavigationRegexes()
+
+// navigationHeadingPattern is a combined regex for heading text matching in isLikelyContent.
+var navigationHeadingPattern = compileNavigationHeadingPattern()
+
+func compileNavigationRegexes() []*regexp.Regexp {
+	regexes := make([]*regexp.Regexp, len(navigationIndicators))
+	for i, indicator := range navigationIndicators {
+		escaped := regexp.QuoteMeta(indicator)
+		escaped = strings.ReplaceAll(escaped, `\ `, `\s+`)
+		regexes[i] = regexp.MustCompile(`(?i)\b` + escaped + `\b`)
+	}
+	return regexes
+}
+
+func compileNavigationHeadingPattern() *regexp.Regexp {
+	patterns := make([]string, len(navigationIndicators))
+	for i, indicator := range navigationIndicators {
+		escaped := regexp.QuoteMeta(indicator)
+		escaped = strings.ReplaceAll(escaped, `\ `, `\s+`)
+		patterns[i] = `\b` + escaped + `\b`
+	}
+	return regexp.MustCompile(`(?i)` + strings.Join(patterns, "|"))
+}
 
 // ContentScore represents a scored element
 // JavaScript original code:
@@ -177,7 +220,9 @@ var navigationIndicators = []string{
 //		'widget'
 //	];
 var nonContentPatterns = []string{
-	"ad",
+	"advert",
+	"ad-",
+	"ads",
 	"banner",
 	"cookie",
 	"copyright",
@@ -298,17 +343,16 @@ func ScoreElement(element *goquery.Selection) float64 {
 
 	// Text density
 	text := strings.TrimSpace(element.Text())
-	words := len(strings.Fields(text))
+	words := textutil.CountWords(text)
 	score += float64(words)
 
 	// Paragraph ratio
 	paragraphs := element.Find("p").Length()
 	score += float64(paragraphs) * 10
 
-	// Link density (penalize high link density)
-	links := element.Find("a").Length()
-	linkDensity := float64(links) / float64(max(words, 1))
-	score -= linkDensity * 5
+	// Comma counting — prose text has commas; navigation doesn't
+	commas := strings.Count(text, ",")
+	score += float64(commas)
 
 	// Image ratio (penalize high image density)
 	images := element.Find("img").Length()
@@ -401,6 +445,17 @@ func ScoreElement(element *goquery.Selection) float64 {
 		}
 	}
 
+	// Link density as a multiplier (must be last scoring step).
+	// Scales score proportionally based on how much text is inside links.
+	// Capped at 0.5 to avoid over-penalizing link-heavy content like blog indexes.
+	linkTextLen := 0
+	element.Find("a").Each(func(_ int, a *goquery.Selection) {
+		linkTextLen += len(strings.TrimSpace(a.Text()))
+	})
+	textLen := max(len(text), 1)
+	linkDensity := min(float64(linkTextLen)/float64(textLen), 0.5)
+	score *= (1.0 - linkDensity)
+
 	return score
 }
 
@@ -485,7 +540,22 @@ func FindBestElement(elements []*goquery.Selection, minScore float64) *goquery.S
 //			});
 //		}
 //	}
-func ScoreAndRemove(doc *goquery.Document, debug bool) {
+//
+// NodeContains returns true if ancestor contains descendant in the DOM tree.
+func NodeContains(ancestor, descendant *goquery.Selection) bool {
+	if ancestor == nil || descendant == nil || ancestor.Length() == 0 || descendant.Length() == 0 {
+		return false
+	}
+	ancestorNode := ancestor.Get(0)
+	for n := descendant.Get(0); n != nil; n = n.Parent {
+		if n == ancestorNode {
+			return true
+		}
+	}
+	return false
+}
+
+func ScoreAndRemove(doc *goquery.Document, debug bool, mainContent *goquery.Selection) {
 	startTime := time.Now()
 	removedCount := 0
 
@@ -498,6 +568,16 @@ func ScoreAndRemove(doc *goquery.Document, debug bool) {
 
 	// Process each block element
 	doc.Find(blockSelector).Each(func(_ int, element *goquery.Selection) {
+		// Never remove ancestors of the main content element
+		if mainContent != nil && NodeContains(element, mainContent) {
+			return
+		}
+
+		// Skip elements inside code blocks
+		if element.Closest("pre").Length() > 0 || element.Closest("code").Length() > 0 {
+			return
+		}
+
 		// Skip elements that are likely to be content
 		if isLikelyContent(element) {
 			return
@@ -589,24 +669,83 @@ func isLikelyContent(element *goquery.Selection) bool {
 		}
 	}
 
-	// Check if the element has a high text density
-	text := strings.TrimSpace(element.Text())
-	words := len(strings.Fields(text))
-	paragraphs := element.Find("p").Length()
-
-	// If the element has a significant amount of text and paragraphs, it's likely content
-	if words > 50 && paragraphs > 1 {
+	// Elements containing code blocks or tables are likely content
+	if element.Find("pre, table").Length() > 0 {
 		return true
 	}
 
-	// Check for elements with significant text content, even if they don't have many paragraphs
+	text := strings.TrimSpace(element.Text())
+	words := textutil.CountWords(text)
+
+	// Navigation heading detection: blocks with headings that match navigation
+	// indicators (e.g. "Related Articles", "Popular Posts") are not content
+	if words < 1000 {
+		hasNavigationHeading := false
+		element.Find("h1, h2, h3, h4, h5, h6").EachWithBreak(func(_ int, h *goquery.Selection) bool {
+			headingText := strings.ToLower(strings.TrimSpace(h.Text()))
+			if navigationHeadingPattern.MatchString(headingText) {
+				hasNavigationHeading = true
+				return false
+			}
+			return true
+		})
+		if hasNavigationHeading {
+			if words < 200 {
+				return false
+			}
+			linkCount := element.Find("a").Length()
+			if float64(linkCount)/float64(max(words, 1)) > 0.2 {
+				return false
+			}
+		}
+	}
+
+	// Card grids are not content
+	if isCardGrid(element, words) {
+		return false
+	}
+
+	// Social profile links in small blocks indicate author bios, not content
+	if words < 80 {
+		hasSocialProfile := false
+		element.Find("a").EachWithBreak(func(_ int, a *goquery.Selection) bool {
+			href := strings.ToLower(a.AttrOr("href", ""))
+			if socialProfileRe.MatchString(href) && !isSocialIntentURL(href) {
+				hasSocialProfile = true
+				return false
+			}
+			return true
+		})
+		if hasSocialProfile {
+			return false
+		}
+	}
+
+	paragraphs := element.Find("p").Length()
+	listItems := element.Find("li").Length()
+	contentBlocks := paragraphs + listItems
+
+	// If the element has a significant amount of text and content blocks, it's likely content
+	if words > 50 && contentBlocks > 1 {
+		return true
+	}
+
+	// Check for elements with significant text content
 	if words > 100 {
 		return true
 	}
 
-	// Check for elements with text content and some paragraphs
-	if words > 30 && paragraphs > 0 {
+	// Check for elements with text content and some content blocks
+	if words > 30 && contentBlocks > 0 {
 		return true
+	}
+
+	// Prose text with sentence-ending punctuation and low link density
+	if words >= 10 && sentenceEndRe.MatchString(text) {
+		linkCount := element.Find("a").Length()
+		if float64(linkCount)/float64(words) < 0.1 {
+			return true
+		}
 	}
 
 	return false
@@ -664,10 +803,12 @@ func isLikelyContent(element *goquery.Selection) bool {
 //		return score;
 //	}
 func scoreNonContentBlock(element *goquery.Selection) float64 {
-	// Skip footnote list elements
+	// Skip footnote list elements and their descendants
 	footnoteListSelectors := constants.GetFootnoteListSelectors()
 	for _, selector := range footnoteListSelectors {
-		if element.Find(selector).Length() > 0 {
+		if element.Find(selector).Length() > 0 ||
+			element.Is(selector) ||
+			element.Closest(selector).Length() > 0 {
 			return 0
 		}
 	}
@@ -676,20 +817,26 @@ func scoreNonContentBlock(element *goquery.Selection) float64 {
 
 	// Get text content
 	text := strings.TrimSpace(element.Text())
-	words := len(strings.Fields(text))
+	words := textutil.CountWords(text)
 
 	// Skip very small elements
 	if words < 3 {
 		return 0
 	}
 
-	// Check for navigation indicators in text
+	// Comma counting — prose has commas, navigation/boilerplate doesn't
+	commas := strings.Count(text, ",")
+	score += float64(commas)
+
+	// Check for navigation indicators using word-boundary regexes
 	lowerText := strings.ToLower(text)
-	for _, indicator := range navigationIndicators {
-		if strings.Contains(lowerText, indicator) {
-			score -= 10
+	indicatorMatches := 0
+	for _, re := range navigationIndicatorRegexes {
+		if re.MatchString(lowerText) {
+			indicatorMatches++
 		}
 	}
+	score -= float64(indicatorMatches) * 10
 
 	// Check for high link density (navigation)
 	links := element.Find("a").Length()
@@ -698,10 +845,48 @@ func scoreNonContentBlock(element *goquery.Selection) float64 {
 		score -= 15
 	}
 
+	// Check for high link text ratio (e.g. card groups, nav sections).
+	// Requires multiple links to avoid penalizing content paragraphs
+	// that happen to be wrapped in a single link.
+	if links > 1 && words < 80 {
+		linkTextLen := 0
+		element.Find("a").Each(func(_ int, a *goquery.Selection) {
+			linkTextLen += len(a.Text())
+		})
+		totalTextLen := len(text)
+		if totalTextLen > 0 && float64(linkTextLen)/float64(totalTextLen) > 0.8 {
+			score -= 15
+		}
+	}
+
 	// Check for list structure (navigation)
 	lists := element.Find("ul").Length() + element.Find("ol").Length()
 	if lists > 0 && links > lists*3 {
 		score -= 10
+	}
+
+	// Check for social media profile links (author bios, social widgets)
+	if words < 80 {
+		element.Find("a").EachWithBreak(func(_ int, a *goquery.Selection) bool {
+			href := strings.ToLower(a.AttrOr("href", ""))
+			if socialProfileRe.MatchString(href) && !isSocialIntentURL(href) {
+				score -= 15
+				return false // break
+			}
+			return true
+		})
+	}
+
+	// Penalize very small blocks that look like standalone author bylines with dates
+	if words < 15 {
+		if bylineAuthorRe.MatchString(text) && bylineDateRe.MatchString(text) {
+			score -= 10
+		}
+	}
+
+	// Penalize blocks that look like article card grids
+	if isCardGrid(element, words) {
+		score -= 15
 	}
 
 	// Check for specific class patterns that indicate non-content
@@ -715,4 +900,34 @@ func scoreNonContentBlock(element *goquery.Selection) float64 {
 	}
 
 	return score
+}
+
+// isSocialIntentURL returns true if the URL is a social sharing/intent URL
+// rather than a profile URL. These should not trigger the social profile penalty.
+func isSocialIntentURL(href string) bool {
+	return strings.Contains(href, "/intent") ||
+		strings.Contains(href, "/share") ||
+		strings.Contains(href, "/sharer")
+}
+
+// isCardGrid detects article card grids: blocks with 3+ headings and 2+ images
+// but very little prose per heading.
+func isCardGrid(element *goquery.Selection, words int) bool {
+	if words < 3 || words >= 500 {
+		return false
+	}
+	headings := element.Find("h2, h3, h4")
+	if headings.Length() < 3 {
+		return false
+	}
+	images := element.Find("img")
+	if images.Length() < 2 {
+		return false
+	}
+	headingWordCount := 0
+	headings.Each(func(_ int, h *goquery.Selection) {
+		headingWordCount += textutil.CountWords(strings.TrimSpace(h.Text()))
+	})
+	prosePerHeading := float64(words-headingWordCount) / float64(headings.Length())
+	return prosePerHeading < 20
 }
