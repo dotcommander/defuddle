@@ -1056,6 +1056,13 @@ func (p *ImageProcessor) isImportantImage(s *goquery.Selection) bool {
 //	  return index < 3;
 //	}
 func (p *ImageProcessor) isAboveFold(s *goquery.Selection) bool {
+	// When there is no document context (e.g. scoped processing), we cannot
+	// determine a global image index, so conservatively treat the image as
+	// not above-the-fold.
+	if p.doc == nil {
+		return false
+	}
+
 	// Simple heuristic: check if it's one of the first few images
 	var imageIndex int
 	found := false
@@ -1214,6 +1221,9 @@ func (p *ImageProcessor) isTrackingPixel(src string) bool {
 //	}
 func (p *ImageProcessor) generateImageID() int {
 	// Simple counter-based ID generation
+	if p.doc == nil {
+		return 1
+	}
 	var counter int
 	p.doc.Find("img[id]").Each(func(_ int, _ *goquery.Selection) {
 		counter++
@@ -1231,4 +1241,21 @@ func (p *ImageProcessor) generateImageID() int {
 func ProcessImages(doc *goquery.Document, options *ImageProcessingOptions) {
 	processor := NewImageProcessor(doc)
 	processor.ProcessImages(options)
+}
+
+// ProcessImagesInScope processes images within the given container element.
+func ProcessImagesInScope(scope *goquery.Selection, options *ImageProcessingOptions) {
+	processor := &ImageProcessor{}
+	if options == nil {
+		options = DefaultImageProcessingOptions()
+	}
+	scope.Find("img").Each(func(_ int, s *goquery.Selection) {
+		processor.processImage(s, options)
+	})
+	scope.Find("figure").Each(func(_ int, s *goquery.Selection) {
+		processor.processFigure(s, options)
+	})
+	scope.Find("picture").Each(func(_ int, s *goquery.Selection) {
+		processor.processPicture(s, options)
+	})
 }

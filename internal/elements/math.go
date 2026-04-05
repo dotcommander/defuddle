@@ -5,12 +5,16 @@ package elements
 
 import (
 	"log/slog"
+	"net/url"
 	"regexp"
 	"slices"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
 )
+
+// Pre-compiled regex for WordPress LaTeX URL extraction.
+var wpLatexRe = regexp.MustCompile(`latex\.php\?latex=([^&]+)`)
 
 /*
 TypeScript source code (math.core.ts, 68 lines and math.base.ts, 222 lines):
@@ -133,22 +137,37 @@ func (p *MathProcessor) ProcessMath(options *MathProcessingOptions) {
 
 	slog.Debug("processing mathematical formulas", "extractMathML", options.ExtractMathML, "extractLaTeX", options.ExtractLaTeX)
 
-	// Math element selectors based on TypeScript mathSelectors
+	// Math element selectors matching TypeScript mathSelectors
 	selectors := []string{
-		"math",
-		".MathJax",
+		// WordPress LaTeX images
+		`img.latex[src*="latex.php"]`,
+		// MathJax elements (v2 and v3)
+		"span.MathJax",
+		"mjx-container",
+		`.MathJax_Preview + script[type="math/tex"]`,
 		".MathJax_Display",
-		".MathJax_Preview",
+		".MathJax_SVG",
+		".MathJax_MathML",
+		// MediaWiki math elements
+		".mwe-math-element",
+		".mwe-math-fallback-image-inline",
+		".mwe-math-fallback-image-display",
+		".mwe-math-mathml-inline",
+		".mwe-math-mathml-display",
+		// KaTeX elements
 		".katex",
 		".katex-display",
-		".katex-block",
-		"script[type^=\"math/\"]",
-		"script[type=\"application/x-tex\"]",
-		"script[type=\"text/latex\"]",
+		".katex-mathml",
+		".katex-html",
+		"[data-katex]",
+		`script[type="math/katex"]`,
+		// Generic math elements
+		"math",
 		"[data-math]",
 		"[data-latex]",
-		"[data-katex]",
-		"[data-mathjax]",
+		"[data-tex]",
+		`script[type^="math/"]`,
+		`annotation[encoding="application/x-tex"]`,
 	}
 
 	combinedSelector := strings.Join(selectors, ", ")
@@ -261,21 +280,53 @@ func (p *MathProcessor) processMathElement(s *goquery.Selection, options *MathPr
 //	  return null;
 //	};
 func (p *MathProcessor) getMathMLFromElement(s *goquery.Selection) *MathData {
-	// Try to extract MathML directly
+	// 1. Try to extract MathML directly
 	mathElement := s.Find("math").First()
 	if mathElement.Length() > 0 {
-		mathHTML, err := mathElement.Html()
+		outerHTML, err := goquery.OuterHtml(mathElement)
 		if err == nil {
 			display := mathElement.AttrOr("display", "inline")
 			return &MathData{
-				MathML:  mathHTML,
+				MathML:  outerHTML,
 				Type:    "mathml",
 				Display: display,
 			}
 		}
 	}
 
-	// Check for KaTeX
+	// 2. MathJax v2: data-mathml attribute
+	if mathmlStr, exists := s.Attr("data-mathml"); exists && mathmlStr != "" {
+		tempDoc, err := goquery.NewDocumentFromReader(strings.NewReader(mathmlStr))
+		if err == nil {
+			mathEl := tempDoc.Find("math").First()
+			if mathEl.Length() > 0 {
+				outerHTML, _ := goquery.OuterHtml(mathEl)
+				display := mathEl.AttrOr("display", "inline")
+				return &MathData{
+					MathML:  outerHTML,
+					Type:    "mathjax",
+					Display: display,
+				}
+			}
+		}
+	}
+
+	// 3. MathJax v3: assistive MathML (.MJX_Assistive_MathML, mjx-assistive-mml)
+	assistive := s.Find(".MJX_Assistive_MathML, mjx-assistive-mml").First()
+	if assistive.Length() > 0 {
+		mathEl := assistive.Find("math").First()
+		if mathEl.Length() > 0 {
+			outerHTML, _ := goquery.OuterHtml(mathEl)
+			display := mathEl.AttrOr("display", "inline")
+			return &MathData{
+				MathML:  outerHTML,
+				Type:    "mathjax",
+				Display: display,
+			}
+		}
+	}
+
+	// 4. Check for KaTeX
 	if s.HasClass("katex") {
 		annotation := s.Find("annotation[encoding=\"application/x-tex\"]").First()
 		if annotation.Length() > 0 {
@@ -287,7 +338,7 @@ func (p *MathProcessor) getMathMLFromElement(s *goquery.Selection) *MathData {
 		}
 	}
 
-	// Check for MathJax
+	// 5. Check for MathJax script
 	if s.HasClass("MathJax") {
 		script := s.Find("script[type^=\"math/\"]").First()
 		if script.Length() > 0 {
@@ -342,6 +393,27 @@ func (p *MathProcessor) getLaTeXFromElement(s *goquery.Selection) string {
 	}
 	if dataTex, hasDataTex := s.Attr("data-tex"); hasDataTex && dataTex != "" {
 		return dataTex
+	}
+
+	// WordPress LaTeX images: extract from src URL
+	if src, exists := s.Attr("src"); exists && strings.Contains(src, "latex.php") {
+		if m := wpLatexRe.FindStringSubmatch(src); m != nil {
+			decoded, err := url.QueryUnescape(m[1])
+			if err == nil {
+				decoded = strings.ReplaceAll(decoded, "+", " ")
+				return decoded
+			}
+		}
+	}
+
+	// KaTeX .math wrapper: check data-latex on parent
+	if s.HasClass("katex") {
+		parent := s.Parent()
+		if parent.Length() > 0 {
+			if dataLatex, exists := parent.Attr("data-latex"); exists && dataLatex != "" {
+				return dataLatex
+			}
+		}
 	}
 
 	// Check for script elements with LaTeX content
@@ -417,20 +489,23 @@ func (p *MathProcessor) isBlockDisplay(s *goquery.Selection) bool {
 		}
 	}
 
-	// Check CSS classes
-	blockClasses := []string{"MathJax_Display", "katex-display", "katex-block"}
+	// Check CSS classes on the element itself
+	blockClasses := []string{"MathJax_Display", "katex-display", "katex-block", "mwe-math-mathml-display", "mwe-math-fallback-image-display"}
 	if slices.ContainsFunc(blockClasses, s.HasClass) {
 		return true
 	}
 
-	// Check parent context (simplified heuristic)
+	// Check ancestor context for block display containers
+	if s.Closest(".katex-display, .MathJax_Display, .mwe-math-mathml-display").Length() > 0 {
+		return true
+	}
+
+	// Check parent context
 	parent := s.Parent()
 	if parent.Length() > 0 {
-		// Check for display math containers
 		if parent.Is("div") && parent.HasClass("math-display") {
 			return true
 		}
-		// Check if parent has center alignment
 		if style, hasStyle := parent.Attr("style"); hasStyle {
 			if strings.Contains(strings.ToLower(style), "text-align") && strings.Contains(strings.ToLower(style), "center") {
 				return true
@@ -606,4 +681,31 @@ func (p *MathProcessor) looksLikeLaTeX(text string) bool {
 func ProcessMath(doc *goquery.Document, options *MathProcessingOptions) {
 	processor := NewMathProcessor(doc)
 	processor.ProcessMath(options)
+}
+
+// ProcessMathInScope processes mathematical formulas within the given container element.
+func ProcessMathInScope(scope *goquery.Selection, options *MathProcessingOptions) {
+	processor := &MathProcessor{}
+	if options == nil {
+		options = DefaultMathProcessingOptions()
+	}
+	combinedSelector := strings.Join([]string{
+		"math",
+		".MathJax",
+		".MathJax_Display",
+		".MathJax_Preview",
+		".katex",
+		".katex-display",
+		".katex-block",
+		`script[type^="math/"]`,
+		`script[type="application/x-tex"]`,
+		`script[type="text/latex"]`,
+		"[data-math]",
+		"[data-latex]",
+		"[data-katex]",
+		"[data-mathjax]",
+	}, ", ")
+	scope.Find(combinedSelector).Each(func(_ int, s *goquery.Selection) {
+		processor.processMathElement(s, options)
+	})
 }

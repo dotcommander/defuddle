@@ -734,3 +734,24 @@ func ProcessCodeBlocks(doc *goquery.Document, options *CodeBlockProcessingOption
 	processor := NewCodeBlockProcessor(doc)
 	processor.ProcessCodeBlocks(options)
 }
+
+// ProcessCodeBlocksInScope processes code blocks within the given container element.
+func ProcessCodeBlocksInScope(scope *goquery.Selection, options *CodeBlockProcessingOptions) {
+	processor := &CodeBlockProcessor{}
+	if options == nil {
+		options = DefaultCodeBlockProcessingOptions()
+	}
+	selector := strings.Join([]string{
+		"pre",
+		`div[class*="prismjs"]`,
+		".syntaxhighlighter",
+		".highlight",
+		".highlight-source",
+		".wp-block-syntaxhighlighter-code",
+		".wp-block-code",
+		`div[class*="language-"]`,
+	}, ", ")
+	scope.Find(selector).Each(func(_ int, s *goquery.Selection) {
+		processor.processCodeBlock(s, options)
+	})
+}

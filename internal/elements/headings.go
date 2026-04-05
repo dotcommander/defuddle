@@ -498,3 +498,14 @@ func ProcessHeadings(doc *goquery.Document, options *HeadingProcessingOptions) {
 	processor := NewHeadingProcessor(doc)
 	processor.ProcessHeadings(options)
 }
+
+// ProcessHeadingsInScope processes headings within the given container element.
+func ProcessHeadingsInScope(scope *goquery.Selection, options *HeadingProcessingOptions) {
+	processor := &HeadingProcessor{}
+	if options == nil {
+		options = DefaultHeadingProcessingOptions()
+	}
+	scope.Find("h1, h2, h3, h4, h5, h6").Each(func(_ int, s *goquery.Selection) {
+		processor.processHeading(s, options)
+	})
+}

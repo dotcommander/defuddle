@@ -4,6 +4,7 @@
 package markdown
 
 import (
+	"bytes"
 	"fmt"
 	"regexp"
 	"strings"
@@ -17,14 +18,23 @@ import (
 
 // Pre-compiled patterns for post-processing.
 var (
-	leadingTitleRe = regexp.MustCompile(`^#\s+.+\n+`)
-	emptyLinkRe    = regexp.MustCompile(`\n*(?:^|[^!])\[]\([^)]+\)\n*`)
-	tripleNewline  = regexp.MustCompile(`\n{3,}`)
+	leadingTitleRe      = regexp.MustCompile(`^#\s+.+\n+`)
+	emptyLinkRe         = regexp.MustCompile(`\n*([^!]|^)\[]\([^)]+\)\n*`)
+	tripleNewline       = regexp.MustCompile(`\n{3,}`)
+	bangBeforeImageRe   = regexp.MustCompile(`!(!\[|\[!\[)`)
+	wbrTagRe            = regexp.MustCompile(`(?i)<wbr\s*/?>`)
+	widthDescriptorRe   = regexp.MustCompile(`^(\d+)w,?$`)
+	densityDescriptorRe = regexp.MustCompile(`^\d+(?:\.\d+)?x,?$`)
+	backLinkRe          = regexp.MustCompile(`\s*↩︎\s*$`)
 )
 
 // ConvertHTML converts HTML content to Markdown with custom rules
 // matching the TypeScript Defuddle implementation.
 func ConvertHTML(htmlContent string) (string, error) {
+	// Strip <wbr> tags before conversion — word break opportunity hints
+	// that are invisible in browsers but insert unwanted spaces.
+	htmlContent = wbrTagRe.ReplaceAllString(htmlContent, "")
+
 	conv := converter.NewConverter(
 		converter.WithPlugins(
 			newDefuddlePlugin(),
@@ -54,8 +64,13 @@ func postProcess(md string) string {
 	// Remove the title from the beginning of the content if it exists
 	md = leadingTitleRe.ReplaceAllString(md, "")
 
-	// Remove any empty links [](url) but not image links ![](url)
-	md = emptyLinkRe.ReplaceAllString(md, "")
+	// Remove any empty links [](url) but not image links ![](url).
+	// Group 1 captures the non-! character before [ so we can restore it.
+	md = emptyLinkRe.ReplaceAllString(md, "$1")
+
+	// Add a space between exclamation marks and image syntax ![
+	// e.g. "Yey!![IMG](url)" becomes "Yey! ![IMG](url)"
+	md = bangBeforeImageRe.ReplaceAllString(md, "! $1")
 
 	// Remove any consecutive newlines more than two
 	md = tripleNewline.ReplaceAllString(md, "\n\n")
@@ -88,6 +103,9 @@ func (p *defuddlePlugin) Init(conv *converter.Converter) error {
 	// Footnote references (sup#fnref:X)
 	conv.Register.RendererFor("sup", converter.TagTypeInline, renderFootnoteRef, converter.PriorityEarly)
 
+	// Footnote definition list (ol inside #footnotes → [^id]: content)
+	conv.Register.RendererFor("ol", converter.TagTypeBlock, renderFootnotesList, converter.PriorityEarly)
+
 	// Footnote backlink removal
 	conv.Register.RendererFor("a", converter.TagTypeInline, renderLink, converter.PriorityEarly)
 
@@ -97,10 +115,28 @@ func (p *defuddlePlugin) Init(conv *converter.Converter) error {
 	// Callout blockquotes with data-callout
 	conv.Register.RendererFor("blockquote", converter.TagTypeBlock, renderCalloutBlockquote, converter.PriorityEarly)
 
+	// Standalone images with srcset resolution and title support
+	conv.Register.RendererFor("img", converter.TagTypeInline, renderImage, converter.PriorityEarly)
+
 	// Remove button, style, script elements
 	conv.Register.RendererFor("button", converter.TagTypeBlock, renderRemove, converter.PriorityEarly)
 	conv.Register.RendererFor("style", converter.TagTypeBlock, renderRemove, converter.PriorityEarly)
 	conv.Register.RendererFor("script", converter.TagTypeBlock, renderRemove, converter.PriorityEarly)
+
+	// Non-footnote superscripts (footnote refs handled by renderFootnoteRef)
+	conv.Register.RendererFor("sup", converter.TagTypeInline, renderSuperscript, converter.PriorityStandard)
+
+	// Math elements → LaTeX ($...$, $$...$$)
+	conv.Register.RendererFor("math", converter.TagTypeInline, renderMath, converter.PriorityEarly)
+
+	// KaTeX/MathJax spans → LaTeX
+	conv.Register.RendererFor("span", converter.TagTypeInline, renderKaTeX, converter.PriorityEarly)
+
+	// Keep HTML elements that have no markdown equivalent
+	conv.Register.RendererFor("video", converter.TagTypeBlock, renderKeepHTML, converter.PriorityEarly)
+	conv.Register.RendererFor("audio", converter.TagTypeBlock, renderKeepHTML, converter.PriorityEarly)
+	conv.Register.RendererFor("svg", converter.TagTypeBlock, renderKeepHTML, converter.PriorityEarly)
+	conv.Register.RendererFor("sub", converter.TagTypeInline, renderKeepHTML, converter.PriorityEarly)
 
 	return nil
 }
@@ -151,9 +187,15 @@ func renderCodeBlock(ctx converter.Context, w converter.Writer, n *html.Node) co
 	code := extractText(codeNode)
 	code = strings.TrimSpace(code)
 
-	w.WriteString("\n```" + lang + "\n")
+	// Choose a fence that doesn't conflict with the code content.
+	fence := "```"
+	if strings.Contains(code, "```") {
+		fence = "````"
+	}
+
+	w.WriteString("\n" + fence + lang + "\n")
 	w.WriteString(code)
-	w.WriteString("\n```\n")
+	w.WriteString("\n" + fence + "\n")
 	return converter.RenderSuccess
 }
 
@@ -180,7 +222,7 @@ func renderFigure(ctx converter.Context, w converter.Writer, n *html.Node) conve
 	}
 
 	alt := getAttr(imgNode, "alt")
-	src := getAttr(imgNode, "src")
+	src := getBestImageSrc(imgNode)
 
 	var caption string
 	if captionNode != nil {
@@ -205,8 +247,9 @@ func renderHighlight(ctx converter.Context, w converter.Writer, n *html.Node) co
 }
 
 var (
-	youtubeRe = regexp.MustCompile(`(?:youtube\.com|youtu\.be)/(?:embed/|watch\?v=)?([a-zA-Z0-9_-]+)`)
-	tweetRe   = regexp.MustCompile(`(?:twitter\.com|x\.com)/[^/]+/status/([0-9]+)`)
+	youtubeRe    = regexp.MustCompile(`(?:youtube\.com|youtube-nocookie\.com|youtu\.be)/(?:embed/|watch\?v=)?([a-zA-Z0-9_-]+)`)
+	tweetRe      = regexp.MustCompile(`(?:twitter\.com|x\.com)/([^/]+)/status/([0-9]+)`)
+	tweetEmbedRe = regexp.MustCompile(`(?:platform\.)?twitter\.com/embed/Tweet\.html\?.*?id=([0-9]+)`)
 )
 
 func renderEmbed(ctx converter.Context, w converter.Writer, n *html.Node) converter.RenderStatus {
@@ -220,11 +263,19 @@ func renderEmbed(ctx converter.Context, w converter.Writer, n *html.Node) conver
 	}
 
 	if m := youtubeRe.FindStringSubmatch(src); m != nil {
-		w.WriteString("\n![[ " + m[1] + " ]]\n")
+		w.WriteString("\n![](https://www.youtube.com/watch?v=" + m[1] + ")\n")
 		return converter.RenderSuccess
 	}
+
+	// Direct tweet URL: /user/status/id
 	if m := tweetRe.FindStringSubmatch(src); m != nil {
-		w.WriteString("\n![[ " + m[1] + " ]]\n")
+		w.WriteString("\n![](https://x.com/" + m[1] + "/status/" + m[2] + ")\n")
+		return converter.RenderSuccess
+	}
+
+	// Platform embed: ?id=
+	if m := tweetEmbedRe.FindStringSubmatch(src); m != nil {
+		w.WriteString("\n![](https://x.com/i/status/" + m[1] + ")\n")
 		return converter.RenderSuccess
 	}
 
@@ -245,6 +296,154 @@ func renderFootnoteRef(ctx converter.Context, w converter.Writer, n *html.Node) 
 	return converter.RenderSuccess
 }
 
+// renderMath converts <math> elements to LaTeX ($...$, $$...$$).
+func renderMath(_ converter.Context, w converter.Writer, n *html.Node) converter.RenderStatus {
+	if n.Type != html.ElementNode || n.Data != "math" {
+		return converter.RenderTryNext
+	}
+
+	latex := extractLatexFromNode(n)
+	if latex == "" {
+		// No LaTeX available — keep as raw HTML
+		var sb strings.Builder
+		html.Render(&sb, n)
+		w.WriteString(sb.String())
+		return converter.RenderSuccess
+	}
+
+	isBlock := getAttr(n, "display") == "block"
+
+	// Never use block math inside tables (breaks layout)
+	if isBlock && isInsideTable(n) {
+		isBlock = false
+	}
+
+	if isBlock {
+		w.WriteString("\n$$\n")
+		w.WriteString(latex)
+		w.WriteString("\n$$\n")
+	} else {
+		w.WriteString("$")
+		w.WriteString(latex)
+		w.WriteString("$")
+	}
+	return converter.RenderSuccess
+}
+
+// renderKaTeX converts KaTeX (.katex, .math) and MWE (.mwe-math-element) spans to LaTeX.
+func renderKaTeX(ctx converter.Context, w converter.Writer, n *html.Node) converter.RenderStatus {
+	if n.Type != html.ElementNode || n.Data != "span" {
+		return converter.RenderTryNext
+	}
+
+	class := getAttr(n, "class")
+	isKatex := hasExactClass(class, "katex") || hasExactClass(class, "math")
+	isMweMath := hasExactClass(class, "mwe-math-element") ||
+		strings.Contains(class, "mwe-math-fallback-image")
+
+	if !isKatex && !isMweMath {
+		return converter.RenderTryNext
+	}
+
+	// Extract LaTeX from various sources
+	latex := getAttr(n, "data-latex")
+	if latex == "" {
+		// KaTeX annotation
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			if latex != "" {
+				break
+			}
+			walkChildren(c, func(child *html.Node) bool {
+				if child.Type == html.ElementNode && child.Data == "annotation" &&
+					getAttr(child, "encoding") == "application/x-tex" {
+					latex = strings.TrimSpace(extractText(child))
+					return false
+				}
+				return true
+			})
+		}
+	}
+	if latex == "" {
+		// Check alttext on child math elements
+		walkChildren(n, func(child *html.Node) bool {
+			if child.Type == html.ElementNode && child.Data == "math" {
+				if alt := getAttr(child, "alttext"); alt != "" {
+					latex = strings.TrimSpace(alt)
+					return false
+				}
+				if dl := getAttr(child, "data-latex"); dl != "" {
+					latex = strings.TrimSpace(dl)
+					return false
+				}
+			}
+			return true
+		})
+	}
+	if latex == "" {
+		latex = strings.TrimSpace(extractText(n))
+	}
+	if latex == "" {
+		return converter.RenderTryNext
+	}
+
+	// Determine display mode
+	isBlock := hasExactClass(class, "katex-display") ||
+		strings.Contains(class, "mwe-math-fallback-image-display") ||
+		hasExactClass(class, "math-display")
+
+	if !isBlock {
+		// Check child math element
+		walkChildren(n, func(child *html.Node) bool {
+			if child.Type == html.ElementNode && child.Data == "math" &&
+				getAttr(child, "display") == "block" {
+				isBlock = true
+				return false
+			}
+			return true
+		})
+	}
+
+	if isBlock && !isInsideTable(n) {
+		w.WriteString("\n$$\n")
+		w.WriteString(latex)
+		w.WriteString("\n$$\n")
+	} else {
+		w.WriteString("$")
+		w.WriteString(latex)
+		w.WriteString("$")
+	}
+	return converter.RenderSuccess
+}
+
+// extractLatexFromNode extracts LaTeX from a <math> node's data-latex or alttext attributes.
+func extractLatexFromNode(n *html.Node) string {
+	if latex := getAttr(n, "data-latex"); latex != "" {
+		return strings.TrimSpace(latex)
+	}
+	if alttext := getAttr(n, "alttext"); alttext != "" {
+		return strings.TrimSpace(alttext)
+	}
+	return ""
+}
+
+func isInsideTable(n *html.Node) bool {
+	for p := n.Parent; p != nil; p = p.Parent {
+		if p.Type == html.ElementNode && p.Data == "table" {
+			return true
+		}
+	}
+	return false
+}
+
+func hasExactClass(classAttr, className string) bool {
+	for _, token := range strings.Fields(classAttr) {
+		if token == className {
+			return true
+		}
+	}
+	return false
+}
+
 func renderLink(ctx converter.Context, w converter.Writer, n *html.Node) converter.RenderStatus {
 	if n.Type != html.ElementNode || n.Data != "a" {
 		return converter.RenderTryNext
@@ -260,8 +459,140 @@ func renderLink(ctx converter.Context, w converter.Writer, n *html.Node) convert
 		return converter.RenderSuccess
 	}
 
+	// Complex link structure: <a> wrapping a heading + other content.
+	// Restructure as: heading → remaining content → [View original](url)
+	if hasChildHeading(n) {
+		return renderComplexLink(ctx, w, n)
+	}
+
 	// Let the default link handler take care of normal links
 	return converter.RenderTryNext
+}
+
+func hasChildHeading(n *html.Node) bool {
+	childCount := 0
+	hasHeading := false
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type == html.ElementNode {
+			childCount++
+			switch c.Data {
+			case "h1", "h2", "h3", "h4", "h5", "h6":
+				hasHeading = true
+			}
+		}
+	}
+	return hasHeading && childCount > 1
+}
+
+func renderComplexLink(ctx converter.Context, w converter.Writer, n *html.Node) converter.RenderStatus {
+	href := getAttr(n, "href")
+
+	// Find and render the heading
+	var headingNode *html.Node
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type == html.ElementNode {
+			switch c.Data {
+			case "h1", "h2", "h3", "h4", "h5", "h6":
+				headingNode = c
+			}
+		}
+		if headingNode != nil {
+			break
+		}
+	}
+
+	var headingBuf bytes.Buffer
+	if headingNode != nil {
+		ctx.RenderChildNodes(ctx, &headingBuf, headingNode)
+	}
+
+	// Remove heading from parent temporarily to render remaining content
+	if headingNode != nil {
+		n.RemoveChild(headingNode)
+	}
+	var remainBuf bytes.Buffer
+	ctx.RenderChildNodes(ctx, &remainBuf, n)
+
+	w.WriteString(strings.TrimSpace(headingBuf.String()))
+	remaining := strings.TrimSpace(remainBuf.String())
+	if remaining != "" {
+		w.WriteString("\n\n")
+		w.WriteString(remaining)
+	}
+	if href != "" {
+		w.WriteString("\n\n")
+		w.WriteString("[View original](" + href + ")")
+		if title := getAttr(n, "title"); title != "" {
+			w.WriteString(fmt.Sprintf(` "%s"`, title))
+		}
+	}
+	return converter.RenderSuccess
+}
+
+// renderFootnotesList converts <ol> inside a #footnotes container to
+// markdown footnote definition syntax: [^id]: content
+func renderFootnotesList(ctx converter.Context, w converter.Writer, n *html.Node) converter.RenderStatus {
+	if n.Type != html.ElementNode || n.Data != "ol" {
+		return converter.RenderTryNext
+	}
+
+	// Only match <ol> whose parent has id="footnotes"
+	if n.Parent == nil || getAttr(n.Parent, "id") != "footnotes" {
+		return converter.RenderTryNext
+	}
+
+	var defs []string
+	for li := n.FirstChild; li != nil; li = li.NextSibling {
+		if li.Type != html.ElementNode || li.Data != "li" {
+			continue
+		}
+
+		// Extract footnote ID from li's id attribute
+		liID := getAttr(li, "id")
+		id := liID
+		if strings.HasPrefix(liID, "fn:") {
+			id = strings.TrimPrefix(liID, "fn:")
+		} else if idx := strings.LastIndex(liID, "/"); idx >= 0 {
+			// Handle cite_note-style IDs
+			tail := liID[idx+1:]
+			if strings.HasPrefix(tail, "cite_note-") {
+				id = strings.TrimPrefix(tail, "cite_note-")
+			}
+		}
+
+		// Remove leading <sup> if its text matches the footnote ID
+		for c := li.FirstChild; c != nil; c = c.NextSibling {
+			if c.Type == html.ElementNode && c.Data == "sup" {
+				if strings.TrimSpace(extractText(c)) == id {
+					li.RemoveChild(c)
+				}
+				break
+			}
+		}
+
+		// Render li content to markdown
+		var buf bytes.Buffer
+		ctx.RenderChildNodes(ctx, &buf, li)
+		content := strings.TrimSpace(buf.String())
+
+		// Remove backlink symbol
+		content = strings.TrimRight(content, " ")
+		content = backLinkRe.ReplaceAllString(content, "")
+		content = strings.TrimSpace(content)
+
+		if content != "" {
+			defs = append(defs, fmt.Sprintf("[^%s]: %s", strings.ToLower(id), content))
+		}
+	}
+
+	if len(defs) == 0 {
+		return converter.RenderSuccess
+	}
+
+	w.WriteString("\n\n")
+	w.WriteString(strings.Join(defs, "\n\n"))
+	w.WriteString("\n\n")
+	return converter.RenderSuccess
 }
 
 func renderCallout(ctx converter.Context, w converter.Writer, n *html.Node) converter.RenderStatus {
@@ -321,7 +652,49 @@ func renderCalloutBlockquote(ctx converter.Context, w converter.Writer, n *html.
 	return converter.RenderSuccess
 }
 
+func renderImage(ctx converter.Context, w converter.Writer, n *html.Node) converter.RenderStatus {
+	if n.Type != html.ElementNode || n.Data != "img" {
+		return converter.RenderTryNext
+	}
+
+	alt := getAttr(n, "alt")
+	src := getBestImageSrc(n)
+	if src == "" {
+		return converter.RenderTryNext
+	}
+	title := getAttr(n, "title")
+	titlePart := ""
+	if title != "" {
+		titlePart = ` "` + title + `"`
+	}
+	w.WriteString("![" + alt + "](" + src + titlePart + ")")
+	return converter.RenderSuccess
+}
+
+func renderKeepHTML(_ converter.Context, w converter.Writer, n *html.Node) converter.RenderStatus {
+	if n.Type != html.ElementNode {
+		return converter.RenderTryNext
+	}
+	var sb strings.Builder
+	html.Render(&sb, n)
+	w.WriteString(sb.String())
+	return converter.RenderSuccess
+}
+
 func renderRemove(_ converter.Context, _ converter.Writer, _ *html.Node) converter.RenderStatus {
+	return converter.RenderSuccess
+}
+
+// renderSuperscript keeps non-footnote <sup> as raw HTML.
+// Footnote refs (sup#fnref:X) are handled at PriorityEarly by renderFootnoteRef,
+// so only non-footnote sups reach this PriorityStandard handler.
+func renderSuperscript(_ converter.Context, w converter.Writer, n *html.Node) converter.RenderStatus {
+	if n.Type != html.ElementNode || n.Data != "sup" {
+		return converter.RenderTryNext
+	}
+	var sb strings.Builder
+	html.Render(&sb, n)
+	w.WriteString(sb.String())
 	return converter.RenderSuccess
 }
 
@@ -354,4 +727,40 @@ func walkChildren(n *html.Node, fn func(*html.Node) bool) {
 		}
 		walkChildren(c, fn)
 	}
+}
+
+// getBestImageSrc parses srcset to find the highest-resolution image URL.
+// Falls back to src. Handles CDN URLs with commas (e.g. Substack).
+func getBestImageSrc(n *html.Node) string {
+	srcset := getAttr(n, "srcset")
+	if srcset != "" {
+		var bestURL string
+		var bestWidth int
+		tokens := strings.Fields(strings.TrimSpace(srcset))
+		var urlParts []string
+
+		for _, token := range tokens {
+			if m := widthDescriptorRe.FindStringSubmatch(token); m != nil {
+				width := 0
+				fmt.Sscanf(m[1], "%d", &width)
+				if len(urlParts) > 0 && width > bestWidth {
+					u := strings.TrimLeft(strings.Join(urlParts, " "), ", ")
+					if u != "" {
+						bestWidth = width
+						bestURL = u
+					}
+				}
+				urlParts = nil
+			} else if densityDescriptorRe.MatchString(token) {
+				// Density descriptor (e.g. 2x) — skip
+				urlParts = nil
+			} else {
+				urlParts = append(urlParts, token)
+			}
+		}
+		if bestURL != "" {
+			return bestURL
+		}
+	}
+	return getAttr(n, "src")
 }
