@@ -8,7 +8,6 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/go-json-experiment/json"
-	"github.com/piprate/json-gold/ld"
 )
 
 // Pre-compiled regex patterns for JSON-LD content cleaning.
@@ -42,10 +41,6 @@ var (
 //	  return schemaItems;
 //	}
 func (d *Defuddle) extractSchemaOrgData() any {
-	processor := ld.NewJsonLdProcessor()
-	options := ld.NewJsonLdOptions("")
-	options.ProcessingMode = ld.JsonLd_1_1
-
 	var allSchemaItems []any
 
 	if d.debugger.IsEnabled() {
@@ -67,11 +62,11 @@ func (d *Defuddle) extractSchemaOrgData() any {
 			return
 		}
 
-		// Parse and process JSON-LD using json-gold
-		processedData, err := d.processSchemaOrgData(processor, options, cleanedContent)
-		if err != nil {
+		// Parse JSON — matching TS which uses JSON.parse() directly
+		var rawData any
+		if err := json.Unmarshal([]byte(cleanedContent), &rawData); err != nil {
 			if d.debug {
-				slog.Debug("Failed to process schema.org JSON-LD",
+				slog.Debug("Failed to parse schema.org JSON-LD",
 					"error", err,
 					"index", i,
 					"content_preview", cleanedContent[:min(len(cleanedContent), 100)])
@@ -79,8 +74,8 @@ func (d *Defuddle) extractSchemaOrgData() any {
 			return
 		}
 
-		// Extract items from processed data
-		items := d.extractSchemaItems(processedData)
+		// Extract items from parsed data
+		items := d.extractSchemaItems(rawData)
 		allSchemaItems = append(allSchemaItems, items...)
 	})
 
@@ -136,45 +131,7 @@ func (d *Defuddle) cleanJSONLDContent(content string) string {
 	return content
 }
 
-// processSchemaOrgData processes JSON-LD data using json-gold processor
-// JavaScript original code:
-//
-//	// Standard JSON-LD processing with context expansion and validation
-func (d *Defuddle) processSchemaOrgData(processor *ld.JsonLdProcessor, options *ld.JsonLdOptions, jsonContent string) (any, error) {
-	// Parse raw JSON first
-	var rawData any
-	if err := json.Unmarshal([]byte(jsonContent), &rawData); err != nil {
-		return nil, fmt.Errorf("invalid JSON syntax: %w", err)
-	}
-
-	// Expand JSON-LD to resolve contexts and normalize structure
-	expanded, err := processor.Expand(rawData, options)
-	if err != nil {
-		return nil, fmt.Errorf("JSON-LD expansion failed: %w", err)
-	}
-
-	// If expansion succeeded, try to compact with schema.org context for cleaner output
-	if len(expanded) > 0 {
-		schemaContext := map[string]any{
-			"@context": "https://schema.org/",
-		}
-
-		compacted, err := processor.Compact(expanded, schemaContext, options)
-		if err != nil {
-			// If compaction fails, use expanded data
-			if d.debug {
-				slog.Debug("Schema.org compaction failed, using expanded data", "error", err)
-			}
-			return expanded, nil
-		}
-
-		return compacted, nil
-	}
-
-	return expanded, nil
-}
-
-// extractSchemaItems extracts individual schema items from processed JSON-LD data
+// extractSchemaItems extracts individual schema items from parsed JSON-LD data
 // JavaScript original code:
 //
 //	// Handle both single items and @graph arrays
