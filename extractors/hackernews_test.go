@@ -8,101 +8,105 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// hnStoryHTML is a minimal but realistic HN story page with one top-level comment
-// and one nested reply.
+// hnStoryHTML is a minimal but realistic HN story page.
+//
+// Important: tr.comtr rows must be direct children of the outer table, not
+// nested inside a <td>. The HTML5 parser drops <tr> elements that appear
+// directly inside a <td>. On real HN all comment rows live as siblings in
+// <table id="hnmain"> — the fatitem row and comment rows are all at the same
+// table level, separated only by the <td> wrapper trick.
 const hnStoryHTML = `<html><head><title>Show HN: Some Cool Project | Hacker News</title></head>
 <body>
 <table id="hnmain">
-<tr>
+<tr><td>
+  <table class="fatitem">
+    <tr class="athing" id="12345">
+      <td class="title">
+        <span class="titleline">
+          <a href="https://example.com/cool-project">Show HN: Some Cool Project</a>
+        </span>
+      </td>
+    </tr>
+    <tr>
+      <td class="subtext">
+        <span class="score">142 points</span> by
+        <a class="hnuser" href="/user?id=testauthor">testauthor</a>
+        <span class="age" title="2024-03-15T10:00:00">3 hours ago</span>
+        | <a href="item?id=12345">58 comments</a>
+      </td>
+    </tr>
+  </table>
+</td></tr>
+
+<tr class="comtr" id="100001">
   <td>
-    <table class="fatitem">
-      <tr class="athing" id="12345">
-        <td class="title">
-          <span class="titleline">
-            <a href="https://example.com/cool-project">Show HN: Some Cool Project</a>
-          </span>
+    <table>
+      <tr>
+        <td class="ind"><img width="0"></td>
+        <td class="comhead">
+          <a class="hnuser" href="/user?id=alice">alice</a>
+          <span class="age" title="2024-03-15T11:00:00">2 hours ago</span>
+          <span class="score">42 points</span>
         </td>
       </tr>
       <tr>
-        <td class="subtext">
-          <span class="score">142 points</span> by
-          <a class="hnuser" href="/user?id=testauthor">testauthor</a>
-          <span class="age" title="2024-03-15T10:00:00">3 hours ago</span>
-          | <a href="item?id=12345">58 comments</a>
-        </td>
+        <td class="commtext c00">This is a top-level comment.</td>
       </tr>
     </table>
-
-    <tr class="comtr" id="100001">
-      <td>
-        <table>
-          <tr>
-            <td class="ind"><img width="0"></td>
-            <td class="comhead">
-              <a class="hnuser" href="/user?id=alice">alice</a>
-              <span class="age" title="2024-03-15T11:00:00">2 hours ago</span>
-              <span class="score">42 points</span>
-            </td>
-          </tr>
-          <tr>
-            <td class="commtext c00">This is a top-level comment.</td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-
-    <tr class="comtr" id="100002">
-      <td>
-        <table>
-          <tr>
-            <td class="ind"><img width="40"></td>
-            <td class="comhead">
-              <a class="hnuser" href="/user?id=bob">bob</a>
-              <span class="age" title="2024-03-15T11:30:00">90 minutes ago</span>
-            </td>
-          </tr>
-          <tr>
-            <td class="commtext c00">This is a nested reply to alice.</td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-
-    <tr class="comtr" id="100003">
-      <td>
-        <table>
-          <tr>
-            <td class="ind"><img width="80"></td>
-            <td class="comhead">
-              <a class="hnuser" href="/user?id=carol">carol</a>
-              <span class="age" title="2024-03-15T12:00:00">1 hour ago</span>
-            </td>
-          </tr>
-          <tr>
-            <td class="commtext c00">Deeply nested reply.</td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-
-    <tr class="comtr" id="100004">
-      <td>
-        <table>
-          <tr>
-            <td class="ind"><img width="0"></td>
-            <td class="comhead">
-              <a class="hnuser" href="/user?id=dave">dave</a>
-              <span class="age" title="2024-03-15T12:30:00">30 minutes ago</span>
-            </td>
-          </tr>
-          <tr>
-            <td class="commtext c00">Another top-level comment.</td>
-          </tr>
-        </table>
-      </td>
-    </tr>
   </td>
 </tr>
+
+<tr class="comtr" id="100002">
+  <td>
+    <table>
+      <tr>
+        <td class="ind"><img width="40"></td>
+        <td class="comhead">
+          <a class="hnuser" href="/user?id=bob">bob</a>
+          <span class="age" title="2024-03-15T11:30:00">90 minutes ago</span>
+        </td>
+      </tr>
+      <tr>
+        <td class="commtext c00">This is a nested reply to alice.</td>
+      </tr>
+    </table>
+  </td>
+</tr>
+
+<tr class="comtr" id="100003">
+  <td>
+    <table>
+      <tr>
+        <td class="ind"><img width="80"></td>
+        <td class="comhead">
+          <a class="hnuser" href="/user?id=carol">carol</a>
+          <span class="age" title="2024-03-15T12:00:00">1 hour ago</span>
+        </td>
+      </tr>
+      <tr>
+        <td class="commtext c00">Deeply nested reply.</td>
+      </tr>
+    </table>
+  </td>
+</tr>
+
+<tr class="comtr" id="100004">
+  <td>
+    <table>
+      <tr>
+        <td class="ind"><img width="0"></td>
+        <td class="comhead">
+          <a class="hnuser" href="/user?id=dave">dave</a>
+          <span class="age" title="2024-03-15T12:30:00">30 minutes ago</span>
+        </td>
+      </tr>
+      <tr>
+        <td class="commtext c00">Another top-level comment.</td>
+      </tr>
+    </table>
+  </td>
+</tr>
+
 </table>
 </body></html>`
 
@@ -131,28 +135,39 @@ const hnCommentPageHTML = `<html><head><title>Comment by carol | Hacker News</ti
 </body></html>`
 
 // hnDeletedCommentHTML has a comment row with no .hnuser (deleted author).
+// Both the fatitem and tr.comtr must live inside the same outer table so that
+// the HTML5 parser preserves the tr elements.
 const hnDeletedCommentHTML = `<html><body>
-<table class="fatitem">
-  <tr class="athing" id="99999">
-    <td class="title">
-      <span class="titleline"><a href="https://example.com">Deleted author post</a></span>
-    </td>
-  </tr>
-</table>
-<table class="comment-tree">
-  <tr class="comtr" id="200001">
-    <td>
-      <table>
-        <tr>
-          <td class="ind"><img width="0"></td>
-          <td class="comhead"></td>
-        </tr>
-        <tr>
-          <td class="commtext c00">Comment from deleted user.</td>
-        </tr>
-      </table>
-    </td>
-  </tr>
+<table id="hnmain">
+<tr><td>
+  <table class="fatitem">
+    <tr class="athing" id="99999">
+      <td class="title">
+        <span class="titleline"><a href="https://example.com">Deleted author post</a></span>
+      </td>
+    </tr>
+    <tr>
+      <td class="subtext">
+        <span class="age" title="2024-01-01T00:00:00">1 day ago</span>
+      </td>
+    </tr>
+  </table>
+</td></tr>
+
+<tr class="comtr" id="200001">
+  <td>
+    <table>
+      <tr>
+        <td class="ind"><img width="0"></td>
+        <td class="comhead"></td>
+      </tr>
+      <tr>
+        <td class="commtext c00">Comment from deleted user.</td>
+      </tr>
+    </table>
+  </td>
+</tr>
+
 </table>
 </body></html>`
 
