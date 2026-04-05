@@ -382,6 +382,11 @@ func (p *FootnoteProcessor) detectExistingFootnotes(_ *FootnoteProcessingOptions
 //	  }
 //	}
 func (p *FootnoteProcessor) detectTextFootnotes(options *FootnoteProcessingOptions) []*Footnote {
+	// Skip entirely if no footnote definition sections exist in the document.
+	if p.doc.Find(".footnotes, .notes, .references, .endnotes").Length() == 0 {
+		return nil
+	}
+
 	var footnotes []*Footnote
 
 	// Common footnote patterns
@@ -398,9 +403,13 @@ func (p *FootnoteProcessor) detectTextFootnotes(options *FootnoteProcessingOptio
 		compiledPatterns[i] = regexp.MustCompile(p)
 	}
 
+	// Cache the candidate selection once — only elements that plausibly contain
+	// footnote references. This avoids scanning every DOM element per pattern.
+	candidates := p.doc.Find("p, li, td, dd, span")
+
 	for _, re := range compiledPatterns {
 		// Find all text nodes and search for patterns
-		p.doc.Find("*").Each(func(_ int, s *goquery.Selection) {
+		candidates.Each(func(_ int, s *goquery.Selection) {
 			// Skip elements that are already footnotes
 			if s.Is("sup, .footnote, .footnote-ref") {
 				return
