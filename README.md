@@ -6,7 +6,7 @@
 <a href="https://github.com/dotcommander/defuddle/releases"><img src="https://img.shields.io/github/v/release/dotcommander/defuddle" alt="Release"></a>
 <a href="https://github.com/dotcommander/defuddle/actions"><img src="https://github.com/dotcommander/defuddle/workflows/Test/badge.svg" alt="Tests"></a>
 <a href="https://goreportcard.com/report/github.com/dotcommander/defuddle"><img src="https://goreportcard.com/badge/github.com/dotcommander/defuddle" alt="Go Report Card"></a>
-<a href="https://godoc.org/github.com/dotcommander/defuddle"><img src="https://godoc.org/github.com/dotcommander/defuddle?status.svg" alt="GoDoc"></a>
+<a href="https://pkg.go.dev/github.com/kaptinlin/defuddle-go"><img src="https://pkg.go.dev/badge/github.com/kaptinlin/defuddle-go.svg" alt="Go Reference"></a>
 </p>
 
 ## Introduction
@@ -22,7 +22,7 @@ Available as both a **Go library** and a drop-in **CLI tool** compatible with th
 Download a pre-built binary from the [releases page](https://github.com/dotcommander/defuddle/releases), or install with Go:
 
 ```bash
-go install github.com/dotcommander/defuddle/cmd/defuddle@latest
+go install github.com/kaptinlin/defuddle-go/cmd/defuddle@latest
 ```
 
 ### Library
@@ -30,7 +30,7 @@ go install github.com/dotcommander/defuddle/cmd/defuddle@latest
 Require Defuddle Go using `go get`:
 
 ```bash
-go get github.com/dotcommander/defuddle
+go get github.com/kaptinlin/defuddle-go
 ```
 
 > Requires Go 1.26 or higher.
@@ -133,6 +133,7 @@ Defuddle automatically detects popular platforms and applies specialized extract
 | Reddit | Posts with comment trees |
 | Substack | Newsletter articles |
 | Twitter / X | Tweets and threads |
+| X Articles | Long-form articles (Draft.js) |
 | YouTube | Video metadata and descriptions |
 
 ### Custom Extractors
@@ -141,30 +142,32 @@ Implement the `BaseExtractor` interface to add support for any site:
 
 ```go
 type MyExtractor struct {
-    doc          *goquery.Document
-    url          string
-    schemaOrgData any
+    *extractors.ExtractorBase
 }
 
-func (e *MyExtractor) Name() string    { return "MyExtractor" }
+func NewMyExtractor(doc *goquery.Document, url string, schema any) extractors.BaseExtractor {
+    return &MyExtractor{ExtractorBase: extractors.NewExtractorBase(doc, url, schema)}
+}
+
+func (e *MyExtractor) Name() string     { return "MyExtractor" }
 func (e *MyExtractor) CanExtract() bool { return true }
 
-func (e *MyExtractor) Extract() (*defuddle.ExtractedContent, error) {
-    title := e.doc.Find("h1.article-title").Text()
-    content, _ := e.doc.Find(".article-body").Html()
-    return &defuddle.ExtractedContent{
-        Title:       &title,
-        ContentHTML: &content,
-    }, nil
+func (e *MyExtractor) Extract() *extractors.ExtractorResult {
+    doc := e.GetDocument()
+    content, _ := doc.Find(".article-body").Html()
+    return &extractors.ExtractorResult{
+        ContentHTML: content,
+        Variables:   map[string]string{"site": "My Site"},
+    }
 }
 ```
 
 Register it before parsing:
 
 ```go
-extractors.DefaultRegistry.Register(extractors.ExtractorMapping{
+extractors.Register(extractors.ExtractorMapping{
     Patterns:  []any{"mysite.com"},
-    Extractor: func(doc, url, schema) { return &MyExtractor{doc, url, schema} },
+    Extractor: NewMyExtractor,
 })
 ```
 
