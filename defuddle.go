@@ -101,8 +101,8 @@ func (d *Defuddle) Parse(ctx context.Context) (*Result, error) {
 			return result, retryErr
 		}
 
-		// Return the result with more content (must be 2x improvement to match TS)
-		if retryResult.WordCount > result.WordCount*2 {
+		// Return the result with more content (any improvement, matching TS)
+		if retryResult.WordCount > result.WordCount {
 			if d.debug {
 				slog.Debug("Retry produced more content", "originalWordCount", result.WordCount, "retryWordCount", retryResult.WordCount)
 			}

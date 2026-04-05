@@ -57,10 +57,10 @@ import (
 //		}
 //	}
 func Content(element *goquery.Selection, metadata *metadata.Metadata, doc *goquery.Document, debug bool) {
-	// Remove HTML comments before any text processing
-	removeHtmlComments(element)
-
 	standardizeSpaces(element)
+
+	// Remove HTML comments (TS order: after spaces, before headings)
+	removeHtmlComments(element)
 
 	// Handle H1 elements - remove first one and convert others to H2
 	standardizeHeadings(element, metadata.Title, doc)
