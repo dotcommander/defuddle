@@ -3,6 +3,7 @@ package extractors
 import (
 	"fmt"
 	"log/slog"
+	"net/url"
 	"regexp"
 	"strings"
 
@@ -12,7 +13,9 @@ import (
 // Pre-compiled regex patterns for ChatGPT extraction.
 var (
 	chatgptEmptyParagraphRe = regexp.MustCompile(`<p[^>]*>\s*</p>`)
-	chatgptCitationRe       = regexp.MustCompile(`(&ZeroWidthSpace;)?(<span[^>]*?>\s*<a[^>]*?href="([^"]+)"[^>]*?target="_blank"[^>]*?rel="noopener"[^>]*?>[\s\S]*?</a>\s*</span>)`)
+	// Broadly matches span+a citation structure; attribute order validated in code.
+	chatgptCitationRe = regexp.MustCompile(`(?s)(&ZeroWidthSpace;)?(<span[^>]*?>\s*<a\s([^>]*?)>[\s\S]*?</a>\s*</span>)`)
+	chatgptHrefRe     = regexp.MustCompile(`href="([^"]+)"`)
 )
 
 // ChatGPTExtractor handles ChatGPT conversation content extraction
@@ -449,56 +452,89 @@ func (c *ChatGPTExtractor) getTitle() string {
 	return "ChatGPT Conversation"
 }
 
-// processFootnotes processes footnotes in the content
-// TypeScript original code:
-//
-//	private processFootnotes(content: string): string {
-//	  // Find all citation links and replace them with footnotes
-//	  const citationPattern = /(&ZeroWidthSpace;)?(<span[^>]*?>\s*<a(?=[^>]*?href="([^"]+)")(?=[^>]*?target="_blank")(?=[^>]*?rel="noopener")[^>]*?>[\s\S]*?<\/a>\s*<\/span>)/g;
-//	  let processedContent = content;
-//	  let match;
-//
-//	  while ((match = citationPattern.exec(content)) !== null) {
-//	    const fullMatch = match[0];
-//	    const url = match[3];
-//
-//	    // Add to footnotes
-//	    this.footnoteCounter++;
-//	    this.footnotes.push({
-//	      number: this.footnoteCounter,
-//	      url: url,
-//	      text: `Source ${this.footnoteCounter}`
-//	    });
-//
-//	    // Replace with footnote reference
-//	    processedContent = processedContent.replace(fullMatch, `<sup><a href="#footnote-${this.footnoteCounter}">[${this.footnoteCounter}]</a></sup>`);
-//	  }
-//
-//	  return processedContent;
-//	}
+// processFootnotes processes citation links into footnote references.
+// Matches span+a structures with href, target="_blank", and rel="noopener"
+// in any attribute order (TS uses lookaheads; Go validates in code).
+// Deduplicates footnotes by URL and extracts fragment text from #:~:text= hashes.
 func (c *ChatGPTExtractor) processFootnotes(content string) string {
-	// Simplified pattern without Perl lookaheads
-	// Matches: <span...><a href="..." target="_blank" rel="noopener">...</a></span>
 	matches := chatgptCitationRe.FindAllStringSubmatch(content, -1)
 	processedContent := content
 
 	for _, match := range matches {
-		if len(match) >= 4 {
-			fullMatch := match[0]
-			url := match[3]
-
-			// Add to footnotes
-			c.footnoteCounter++
-			c.footnotes = append(c.footnotes, Footnote{
-				URL:  url,
-				Text: fmt.Sprintf("Source %d", c.footnoteCounter),
-			})
-
-			// Replace with footnote reference
-			replacement := fmt.Sprintf(`<sup><a href="#footnote-%d">[%d]</a></sup>`, c.footnoteCounter, c.footnoteCounter)
-			processedContent = strings.Replace(processedContent, fullMatch, replacement, 1)
+		if len(match) < 4 {
+			continue
 		}
+		fullMatch := match[0]
+		attrs := match[3]
+
+		// Validate required attributes exist (any order)
+		if !strings.Contains(attrs, `target="_blank"`) || !strings.Contains(attrs, `rel="noopener"`) {
+			continue
+		}
+		hrefMatch := chatgptHrefRe.FindStringSubmatch(attrs)
+		if hrefMatch == nil {
+			continue
+		}
+		citationURL := hrefMatch[1]
+
+		// Extract domain and fragment text
+		domain := extractCitationDomain(citationURL)
+		fragmentText := extractFragmentText(citationURL)
+
+		// Deduplicate: reuse existing footnote number for same URL
+		footnoteNumber := -1
+		for i, fn := range c.footnotes {
+			if fn.URL == citationURL {
+				footnoteNumber = i + 1
+				break
+			}
+		}
+
+		if footnoteNumber == -1 {
+			c.footnoteCounter++
+			footnoteNumber = c.footnoteCounter
+			c.footnotes = append(c.footnotes, Footnote{
+				URL:  citationURL,
+				Text: fmt.Sprintf(`<a href="%s">%s</a>%s`, citationURL, domain, fragmentText),
+			})
+		}
+
+		// Replace with footnote reference using fn:N format (matching TS)
+		replacement := fmt.Sprintf(`<sup id="fnref:%d"><a href="#fn:%d">%d</a></sup>`, footnoteNumber, footnoteNumber, footnoteNumber)
+		processedContent = strings.Replace(processedContent, fullMatch, replacement, 1)
 	}
 
 	return processedContent
+}
+
+// extractCitationDomain extracts the hostname without www. prefix.
+func extractCitationDomain(rawURL string) string {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL
+	}
+	return strings.TrimPrefix(parsed.Hostname(), "www.")
+}
+
+// extractFragmentText extracts text from #:~:text= URL fragment.
+func extractFragmentText(rawURL string) string {
+	parts := strings.SplitN(rawURL, "#:~:text=", 2)
+	if len(parts) < 2 {
+		return ""
+	}
+	fragment, err := url.QueryUnescape(parts[1])
+	if err != nil {
+		return ""
+	}
+	fragment = strings.ReplaceAll(fragment, "%2C", ",")
+
+	commaParts := strings.SplitN(fragment, ",", 2)
+	first := strings.TrimSpace(commaParts[0])
+	if first == "" {
+		return ""
+	}
+	if len(commaParts) > 1 {
+		return fmt.Sprintf(" — %s...", first)
+	}
+	return fmt.Sprintf(" — %s", strings.TrimSpace(fragment))
 }

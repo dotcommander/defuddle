@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
+	"golang.org/x/net/html"
 )
 
 // Pre-compiled regex patterns for Twitter extraction.
@@ -128,6 +129,19 @@ func NewTwitterExtractor(document *goquery.Document, url string, schemaOrgData a
 		timeline.Find(`article[data-testid="tweet"]`).Each(func(_ int, s *goquery.Selection) {
 			allTweets = append(allTweets, s)
 		})
+
+		// Filter out recommended tweets after section/h2 boundary
+		// (e.g. "Discover more" sections). TS uses compareDocumentPosition;
+		// Go walks the DOM tree to determine document order.
+		if len(allTweets) > 0 {
+			sectionBoundary := timeline.Find("section, h2").First()
+			if sectionBoundary.Length() > 0 {
+				boundaryParent := sectionBoundary.Parent()
+				if boundaryParent.Length() > 0 {
+					allTweets = filterTweetsBeforeBoundary(timeline, allTweets, boundaryParent)
+				}
+			}
+		}
 	}
 
 	// Fallback: Try to find tweets anywhere in the document if timeline method fails
@@ -158,6 +172,38 @@ func NewTwitterExtractor(document *goquery.Document, url string, schemaOrgData a
 	}
 
 	return extractor
+}
+
+// filterTweetsBeforeBoundary removes tweets that appear after the boundary
+// element in document order, matching TypeScript's compareDocumentPosition logic.
+func filterTweetsBeforeBoundary(timeline *goquery.Selection, tweets []*goquery.Selection, boundary *goquery.Selection) []*goquery.Selection {
+	nodePos := make(map[*html.Node]int)
+	pos := 0
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		nodePos[n] = pos
+		pos++
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(timeline.Get(0))
+
+	boundaryIdx, ok := nodePos[boundary.Get(0)]
+	if !ok {
+		return tweets
+	}
+
+	cutoff := len(tweets)
+	for i, tweet := range tweets {
+		tweetIdx, exists := nodePos[tweet.Get(0)]
+		if exists && tweetIdx > boundaryIdx {
+			cutoff = i
+			break
+		}
+	}
+
+	return tweets[:cutoff]
 }
 
 // CanExtract checks if the extractor can extract content
@@ -293,16 +339,18 @@ func (t *TwitterExtractor) formatTweetText(text string) string {
 		return ""
 	}
 
-	// Add safety check for base document to mirror TypeScript fix
-	if t.document == nil {
-		return text
-	}
-
 	// Parse HTML content to clean it
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(text))
 	if err != nil {
 		return text
 	}
+
+	// Convert emoji images to alt text
+	doc.Find(`img[src*="/emoji/"]`).Each(func(_ int, img *goquery.Selection) {
+		if alt, exists := img.Attr("alt"); exists && alt != "" {
+			img.ReplaceWithHtml(alt)
+		}
+	})
 
 	// Convert links to plain text with @ handles
 	doc.Find("a").Each(func(_ int, link *goquery.Selection) {
@@ -310,10 +358,10 @@ func (t *TwitterExtractor) formatTweetText(text string) string {
 		link.ReplaceWithHtml(handle)
 	})
 
-	// Remove unnecessary spans and divs but keep their content
+	// Remove unnecessary spans and divs but keep their child nodes
 	doc.Find("span, div").Each(func(_ int, element *goquery.Selection) {
-		content := element.Text()
-		element.ReplaceWithHtml(content)
+		innerHTML, _ := element.Html()
+		element.ReplaceWithHtml(innerHTML)
 	})
 
 	// Get cleaned text and split into paragraphs

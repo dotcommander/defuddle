@@ -23,7 +23,7 @@ var claudeTitleSuffixRe = regexp.MustCompile(` - Claude$`)
 //		constructor(document: Document, url: string) {
 //			super(document, url);
 //			// Find all message blocks - both user and assistant messages
-//			this.articles = document.querySelectorAll('div[data-testid="user-message"], div[data-testid="assistant-message"], div.font-claude-message');
+//			this.articles = document.querySelectorAll('div[data-testid="user-message"], div[data-testid="assistant-message"], div.font-claude-response');
 //		}
 //
 //		canExtract(): boolean {
@@ -121,11 +121,11 @@ type ClaudeExtractor struct {
 //	constructor(document: Document, url: string) {
 //		super(document, url);
 //		// Find all message blocks - both user and assistant messages
-//		this.articles = document.querySelectorAll('div[data-testid="user-message"], div[data-testid="assistant-message"], div.font-claude-message');
+//		this.articles = document.querySelectorAll('div[data-testid="user-message"], div[data-testid="assistant-message"], div.font-claude-response');
 //	}
 func NewClaudeExtractor(document *goquery.Document, urlStr string, schemaOrgData any) *ClaudeExtractor {
 	// Primary selectors from TypeScript reference
-	articles := document.Find(`div[data-testid="user-message"], div[data-testid="assistant-message"], div.font-claude-message`)
+	articles := document.Find(`div[data-testid="user-message"], div[data-testid="assistant-message"], div.font-claude-response`)
 
 	// Fallback selectors if primary ones don't work
 	if articles.Length() == 0 {

@@ -15,7 +15,7 @@ var (
 	githubUserRe      = regexp.MustCompile(`github\.com/([^/?#]+)`)
 	githubRepoRe      = regexp.MustCompile(`github\.com/([^/]+)/([^/]+)`)
 	githubTitleRepoRe = regexp.MustCompile(`([^/\s]+)/([^/\s]+)`)
-	githubIssueRe     = regexp.MustCompile(`/issues/(\d+)`)
+	githubIssueRe     = regexp.MustCompile(`/(?:issues|pull)/(\d+)`)
 )
 
 // GitHubExtractor handles GitHub content extraction

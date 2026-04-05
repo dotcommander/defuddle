@@ -308,8 +308,10 @@ func (r *Registry) initializeBuiltins() {
 	//   });
 	r.Register(ExtractorMapping{
 		Patterns: []any{
+			"grok.com",
 			"grok.x.ai",
 			"x.ai",
+			regexp.MustCompile(`^https?://grok\.com/(chat|share)(/.*)?$`),
 			regexp.MustCompile(`^https?://grok\.x\.ai.*`),
 			regexp.MustCompile(`^https?://x\.ai.*`),
 		},
