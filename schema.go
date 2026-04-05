@@ -1,13 +1,13 @@
 package defuddle
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"regexp"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/go-json-experiment/json"
 )
 
 // Pre-compiled regex patterns for JSON-LD content cleaning.
