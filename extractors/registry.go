@@ -201,23 +201,29 @@ var (
 // initializeBuiltins registers all built-in extractors
 // TypeScript original code: initialize() method with all extractor registrations
 func (r *Registry) initializeBuiltins() {
-	// Register Twitter/X extractor
+	// Register XArticle extractor BEFORE Twitter so article pages take priority.
 	// TypeScript original code:
-	//   this.register({
-	//     patterns: ['twitter.com', /\/x\.com\/.*/],
-	//     extractor: TwitterExtractor
-	//   });
+	//   // X Article extractor must be registered BEFORE Twitter to take priority
+	//   this.register({ patterns: ['x.com', 'twitter.com'], extractor: XArticleExtractor });
 	r.Register(ExtractorMapping{
 		Patterns: []any{
-			"twitter.com",
 			"x.com",
-			regexp.MustCompile(`twitter\.com/.*/status/.*`),
-			regexp.MustCompile(`x\.com/.*/status/.*`),
+			"twitter.com",
+			regexp.MustCompile(`x\.com/.*/article/.*`),
+			regexp.MustCompile(`twitter\.com/.*/article/.*`),
 		},
 		Extractor: func(doc *goquery.Document, url string, schemaOrgData any) BaseExtractor {
+			xa := NewXArticleExtractor(doc, url, schemaOrgData)
+			if xa.CanExtract() {
+				return xa
+			}
 			return NewTwitterExtractor(doc, url, schemaOrgData)
 		},
 	})
+
+	// The combined XArticle+Twitter entry above handles both x.com and twitter.com.
+	// A separate registration is not needed; twitter.com/x.com domains are already
+	// covered with canExtract()-based fallback to TwitterExtractor.
 
 	// Register YouTube extractor
 	// TypeScript original code:
