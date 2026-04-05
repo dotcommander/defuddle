@@ -58,7 +58,7 @@ var (
 // RemoveByContentPattern detects and removes boilerplate, metadata, and
 // navigational fragments from mainContent. It is a faithful port of the
 // TypeScript removeByContentPattern function.
-func RemoveByContentPattern(mainContent *goquery.Selection, doc *goquery.Document, debug bool, pageURL string) {
+func RemoveByContentPattern(mainContent *goquery.Selection, _ *goquery.Document, debug bool, pageURL string) {
 	mainNode := mainContent.Nodes[0]
 
 	removeBreadcrumbList(mainContent, mainNode, debug)
@@ -584,7 +584,7 @@ func removeTrailingExternalLinkLists(mainContent *goquery.Selection, pageURL str
 
 // removeTrailingRelatedPostsBlock removes a last-child section/div/aside that
 // consists entirely of link-dense paragraphs (related posts pattern).
-func removeTrailingRelatedPostsBlock(mainContent *goquery.Selection, mainNode *html.Node, debug bool) {
+func removeTrailingRelatedPostsBlock(_ *goquery.Selection, mainNode *html.Node, debug bool) {
 	lastChild := lastElementChild(mainNode)
 	for lastChild != nil {
 		tag := strings.ToUpper(lastChild.Data)
@@ -635,7 +635,7 @@ func removeTrailingRelatedPostsBlock(mainContent *goquery.Selection, mainNode *h
 		for _, a := range links {
 			linkTextLen += len(strings.TrimSpace(nodeText(a)))
 		}
-		if float64(linkTextLen)/float64(max(1, len(text))) <= 0.6 {
+		if float64(linkTextLen)/float64(maxInt(1, len(text))) <= 0.6 {
 			allLinkDense = false
 			break
 		}
@@ -930,8 +930,8 @@ func removeNewsletterSections(mainContent *goquery.Selection, mainNode *html.Nod
 	})
 }
 
-// max returns the larger of two ints.
-func max(a, b int) int {
+// maxInt returns the larger of two ints.
+func maxInt(a, b int) int {
 	if a > b {
 		return a
 	}

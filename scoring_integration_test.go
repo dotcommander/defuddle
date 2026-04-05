@@ -101,7 +101,7 @@ func TestScoringIntegration(t *testing.T) {
 		// Build many near-empty divs and one substantive one.
 		var sb strings.Builder
 		for i := range 15 {
-			sb.WriteString(fmt.Sprintf(`<div class="filler-%d">word%d</div>`, i, i))
+			fmt.Fprintf(&sb, `<div class="filler-%d">word%d</div>`, i, i)
 		}
 		winnerContent := strings.Repeat(
 			"<p>Content scoring selects the element whose text density, "+
@@ -109,7 +109,7 @@ func TestScoringIntegration(t *testing.T) {
 				"This paragraph provides enough signal to rank above the fillers.</p>\n",
 			6,
 		)
-		sb.WriteString(fmt.Sprintf(`<div class="winner">%s</div>`, winnerContent))
+		fmt.Fprintf(&sb, `<div class="winner">%s</div>`, winnerContent)
 
 		html := buildScoringPage("Winner Div Test", sb.String())
 

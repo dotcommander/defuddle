@@ -60,7 +60,7 @@ func Content(element *goquery.Selection, metadata *metadata.Metadata, doc *goque
 	standardizeSpaces(element)
 
 	// Remove HTML comments (TS order: after spaces, before headings)
-	removeHtmlComments(element)
+	removeHTMLComments(element)
 
 	// Handle H1 elements - remove first one and convert others to H2
 	standardizeHeadings(element, metadata.Title, doc)

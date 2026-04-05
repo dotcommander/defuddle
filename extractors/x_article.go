@@ -280,14 +280,14 @@ func (x *XArticleExtractor) convertEmbeddedTweets(container *goquery.Selection) 
 			if handle != "" {
 				cite = fullName + " " + handle
 			}
-			blockquote.WriteString(fmt.Sprintf("<cite>%s</cite>", cite))
+			fmt.Fprintf(&blockquote, "<cite>%s</cite>", cite)
 		}
 
 		// extract tweet text
 		tweetTextEl := tweet.Find(`[data-testid="tweetText"]`).First()
 		tweetText := strings.TrimSpace(tweetTextEl.Text())
 		if tweetText != "" {
-			blockquote.WriteString(fmt.Sprintf("<p>%s</p>", tweetText))
+			fmt.Fprintf(&blockquote, "<p>%s</p>", tweetText)
 		}
 
 		blockquote.WriteString(`</blockquote>`)
@@ -324,9 +324,9 @@ func (x *XArticleExtractor) convertCodeBlocks(container *goquery.Selection) {
 		var replacement strings.Builder
 		replacement.WriteString("<pre><code")
 		if language != "" {
-			replacement.WriteString(fmt.Sprintf(` data-lang="%s" class="language-%s"`, language, language))
+			fmt.Fprintf(&replacement, ` data-lang="%s" class="language-%s"`, language, language)
 		}
-		replacement.WriteString(fmt.Sprintf(">%s</code></pre>", codeText))
+		fmt.Fprintf(&replacement, ">%s</code></pre>", codeText)
 
 		block.ReplaceWithHtml(replacement.String())
 	})
@@ -428,12 +428,12 @@ func buildParagraphContent(sel *goquery.Selection) string {
 		case "#text":
 			sb.WriteString(node.Text())
 		case "strong":
-			sb.WriteString(fmt.Sprintf("<strong>%s</strong>", node.Text()))
+			fmt.Fprintf(&sb, "<strong>%s</strong>", node.Text())
 		case "a":
 			href := node.AttrOr("href", "")
-			sb.WriteString(fmt.Sprintf(`<a href="%s">%s</a>`, href, node.Text()))
+			fmt.Fprintf(&sb, `<a href="%s">%s</a>`, href, node.Text())
 		case "code":
-			sb.WriteString(fmt.Sprintf("<code>%s</code>", node.Text()))
+			fmt.Fprintf(&sb, "<code>%s</code>", node.Text())
 		default:
 			// recurse into other elements (spans, divs, etc.)
 			sb.WriteString(buildParagraphContent(node))

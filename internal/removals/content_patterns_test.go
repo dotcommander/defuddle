@@ -285,7 +285,6 @@ func TestIsBreadcrumbList(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			doc, err := goquery.NewDocumentFromReader(strings.NewReader("<body>" + tc.html + "</body>"))

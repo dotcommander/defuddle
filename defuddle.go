@@ -150,12 +150,11 @@ func (d *Defuddle) Parse(ctx context.Context) (*Result, error) {
 	return result, nil
 }
 
-// ParseFromURL fetches content from a URL and parses it
-// JavaScript original code:
-// // This corresponds to Node.js usage: Defuddle(htmlOrDom, url?, options?)
 // maxResponseSize is the maximum HTML body size (5 MB).
 const maxResponseSize = 5 * 1024 * 1024
 
+// ParseFromURL fetches content from a URL and parses it.
+// This corresponds to Node.js usage: Defuddle(htmlOrDom, url?, options?)
 func ParseFromURL(ctx context.Context, url string, options *Options) (*Result, error) {
 	if options == nil {
 		options = &Options{}

@@ -469,17 +469,17 @@ func (t *TwitterExtractor) extractTweet(tweet *goquery.Selection) string {
 	var result strings.Builder
 	result.WriteString(`<div class="tweet">`)
 	result.WriteString(`<div class="tweet-header">`)
-	result.WriteString(fmt.Sprintf(`<span class="tweet-author"><strong>%s</strong> <span class="tweet-handle">%s</span></span>`,
-		userInfo.FullName, userInfo.Handle))
+	fmt.Fprintf(&result, `<span class="tweet-author"><strong>%s</strong> <span class="tweet-handle">%s</span></span>`,
+		userInfo.FullName, userInfo.Handle)
 
 	if userInfo.Date != "" {
-		result.WriteString(fmt.Sprintf(` <a href="%s" class="tweet-date">%s</a>`, userInfo.Permalink, userInfo.Date))
+		fmt.Fprintf(&result, ` <a href="%s" class="tweet-date">%s</a>`, userInfo.Permalink, userInfo.Date)
 	}
 
 	result.WriteString(`</div>`)
 
 	if formattedText != "" {
-		result.WriteString(fmt.Sprintf(`<div class="tweet-text">%s</div>`, formattedText))
+		fmt.Fprintf(&result, `<div class="tweet-text">%s</div>`, formattedText)
 	}
 
 	if len(images) > 0 {
@@ -492,7 +492,7 @@ func (t *TwitterExtractor) extractTweet(tweet *goquery.Selection) string {
 	}
 
 	if quotedContent != "" {
-		result.WriteString(fmt.Sprintf(`<blockquote class="quoted-tweet">%s</blockquote>`, quotedContent))
+		fmt.Fprintf(&result, `<blockquote class="quoted-tweet">%s</blockquote>`, quotedContent)
 	}
 
 	result.WriteString(`</div>`)

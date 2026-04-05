@@ -448,8 +448,8 @@ func hasCalloutClass(classValue string) bool {
 	return false
 }
 
-// removeHtmlComments removes all HTML comment nodes from the element tree.
-func removeHtmlComments(element *goquery.Selection) {
+// removeHTMLComments removes all HTML comment nodes from the element tree.
+func removeHTMLComments(element *goquery.Selection) {
 	if element.Length() == 0 {
 		return
 	}
@@ -511,7 +511,7 @@ func unwrapBareSpans(element *goquery.Selection) {
 // 2. Unwraps javascript: links (keep text, remove the link)
 // 3. Restructures block-wrapping links containing headings into heading-wrapping links
 // 4. Unwraps anchor links that wrap headings (clickable section headers)
-func unwrapSpecialLinks(element *goquery.Selection, doc *goquery.Document) {
+func unwrapSpecialLinks(element *goquery.Selection, _ *goquery.Document) {
 	// 1. Unwrap links inside inline code
 	element.Find("code a").Each(func(_ int, a *goquery.Selection) {
 		unwrapSelection(a)

@@ -271,7 +271,7 @@ func TestRemoveHtmlComments(t *testing.T) {
 	}
 	require.True(t, found, "comment should exist before removal")
 
-	removeHtmlComments(root)
+	removeHTMLComments(root)
 
 	// Verify comment removed
 	for c := root.Get(0).FirstChild; c != nil; c = c.NextSibling {

@@ -567,8 +567,8 @@ func findMainImage(el *goquery.Selection) *goquery.Selection {
 	}
 
 	// Last resort: any image element
-	if any := el.Find("img, picture, source, video").First(); any.Length() > 0 {
-		return any
+	if mediaEl := el.Find("img, picture, source, video").First(); mediaEl.Length() > 0 {
+		return mediaEl
 	}
 	return nil
 }
@@ -585,16 +585,16 @@ func findCaption(el *goquery.Selection) *goquery.Selection {
 
 	// Check for caption-class elements (skip image elements)
 	var found *goquery.Selection
-	el.Find(captionSelectors).Each(func(_ int, cap *goquery.Selection) {
+	el.Find(captionSelectors).Each(func(_ int, capEl *goquery.Selection) {
 		if found != nil {
 			return
 		}
-		tag := goquery.NodeName(cap)
+		tag := goquery.NodeName(capEl)
 		if tag == "img" || tag == "video" || tag == "picture" || tag == "source" {
 			return
 		}
-		if text := strings.TrimSpace(cap.Text()); text != "" {
-			found = cap
+		if text := strings.TrimSpace(capEl.Text()); text != "" {
+			found = capEl
 		}
 	})
 	if found != nil {

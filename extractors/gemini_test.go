@@ -60,7 +60,6 @@ func TestGeminiExtractor_CanExtract_URLVariants(t *testing.T) {
 	}
 
 	for _, u := range urls {
-		u := u
 		t.Run(u, func(t *testing.T) {
 			t.Parallel()
 			doc := newTestDoc(t, geminiConversationHTML)

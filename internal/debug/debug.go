@@ -1,7 +1,5 @@
 // Package debug provides debugging functionality for the defuddle content extraction system.
 // It tracks removed elements, processing steps, timing information, and parsing statistics.
-//
-//nolint:revive // Package name 'debug' is intentional and contextually appropriate for this library
 package debug
 
 import (
@@ -183,28 +181,28 @@ func (d *Debugger) GetSummary() string {
 
 	// Extractor information
 	if d.extractorUsed != "" {
-		summary.WriteString(fmt.Sprintf("Extractor Used: %s\n\n", d.extractorUsed))
+		fmt.Fprintf(&summary, "Extractor Used: %s\n\n", d.extractorUsed)
 	}
 
 	// Statistics
 	summary.WriteString("Statistics:\n")
-	summary.WriteString(fmt.Sprintf("  Original Elements: %d\n", d.statistics.OriginalElementCount))
-	summary.WriteString(fmt.Sprintf("  Final Elements: %d\n", d.statistics.FinalElementCount))
-	summary.WriteString(fmt.Sprintf("  Removed Elements: %d\n", d.statistics.RemovedElementCount))
-	summary.WriteString(fmt.Sprintf("  Word Count: %d\n", d.statistics.WordCount))
-	summary.WriteString(fmt.Sprintf("  Character Count: %d\n", d.statistics.CharacterCount))
-	summary.WriteString(fmt.Sprintf("  Images: %d\n", d.statistics.ImageCount))
-	summary.WriteString(fmt.Sprintf("  Links: %d\n\n", d.statistics.LinkCount))
+	fmt.Fprintf(&summary, "  Original Elements: %d\n", d.statistics.OriginalElementCount)
+	fmt.Fprintf(&summary, "  Final Elements: %d\n", d.statistics.FinalElementCount)
+	fmt.Fprintf(&summary, "  Removed Elements: %d\n", d.statistics.RemovedElementCount)
+	fmt.Fprintf(&summary, "  Word Count: %d\n", d.statistics.WordCount)
+	fmt.Fprintf(&summary, "  Character Count: %d\n", d.statistics.CharacterCount)
+	fmt.Fprintf(&summary, "  Images: %d\n", d.statistics.ImageCount)
+	fmt.Fprintf(&summary, "  Links: %d\n\n", d.statistics.LinkCount)
 
 	// Processing steps
 	summary.WriteString("Processing Steps:\n")
 	for i, step := range d.processingSteps {
-		summary.WriteString(fmt.Sprintf("  %d. %s (%v)\n", i+1, step.Description, step.Duration))
+		fmt.Fprintf(&summary, "  %d. %s (%v)\n", i+1, step.Description, step.Duration)
 		if step.ElementsAffected > 0 {
-			summary.WriteString(fmt.Sprintf("     Elements affected: %d\n", step.ElementsAffected))
+			fmt.Fprintf(&summary, "     Elements affected: %d\n", step.ElementsAffected)
 		}
 		if step.Details != "" {
-			summary.WriteString(fmt.Sprintf("     Details: %s\n", step.Details))
+			fmt.Fprintf(&summary, "     Details: %s\n", step.Details)
 		}
 	}
 
@@ -212,13 +210,13 @@ func (d *Debugger) GetSummary() string {
 	if len(d.durations) > 0 {
 		summary.WriteString("\nTiming Information:\n")
 		for operation, duration := range d.durations {
-			summary.WriteString(fmt.Sprintf("  %s: %v\n", operation, duration))
+			fmt.Fprintf(&summary, "  %s: %v\n", operation, duration)
 		}
 	}
 
 	// Removed elements summary
 	if len(d.removedElements) > 0 {
-		summary.WriteString(fmt.Sprintf("\nRemoved Elements (%d total):\n", len(d.removedElements)))
+		fmt.Fprintf(&summary, "\nRemoved Elements (%d total):\n", len(d.removedElements))
 
 		// Group by reason
 		reasonCounts := make(map[string]int)
@@ -227,7 +225,7 @@ func (d *Debugger) GetSummary() string {
 		}
 
 		for reason, count := range reasonCounts {
-			summary.WriteString(fmt.Sprintf("  %s: %d elements\n", reason, count))
+			fmt.Fprintf(&summary, "  %s: %d elements\n", reason, count)
 		}
 	}
 

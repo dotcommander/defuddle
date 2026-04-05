@@ -494,7 +494,21 @@ func FindBestElement(elements []*goquery.Selection, minScore float64) *goquery.S
 	return nil
 }
 
-// ScoreAndRemove scores blocks and removes those that are likely not content
+// NodeContains returns true if ancestor contains descendant in the DOM tree.
+func NodeContains(ancestor, descendant *goquery.Selection) bool {
+	if ancestor == nil || descendant == nil || ancestor.Length() == 0 || descendant.Length() == 0 {
+		return false
+	}
+	ancestorNode := ancestor.Get(0)
+	for n := descendant.Get(0); n != nil; n = n.Parent {
+		if n == ancestorNode {
+			return true
+		}
+	}
+	return false
+}
+
+// ScoreAndRemove scores blocks and removes those that are likely not content.
 // JavaScript original code:
 //
 //	public static scoreAndRemove(doc: Document, debug: boolean = false) {
@@ -540,21 +554,6 @@ func FindBestElement(elements []*goquery.Selection, minScore float64) *goquery.S
 //			});
 //		}
 //	}
-//
-// NodeContains returns true if ancestor contains descendant in the DOM tree.
-func NodeContains(ancestor, descendant *goquery.Selection) bool {
-	if ancestor == nil || descendant == nil || ancestor.Length() == 0 || descendant.Length() == 0 {
-		return false
-	}
-	ancestorNode := ancestor.Get(0)
-	for n := descendant.Get(0); n != nil; n = n.Parent {
-		if n == ancestorNode {
-			return true
-		}
-	}
-	return false
-}
-
 func ScoreAndRemove(doc *goquery.Document, debug bool, mainContent *goquery.Selection) {
 	startTime := time.Now()
 	removedCount := 0

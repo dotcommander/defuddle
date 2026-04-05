@@ -61,8 +61,7 @@ func TestToUTF8(t *testing.T) {
 		// strip the BOM — the U+FEFF codepoint is preserved in the output.
 		// This test documents the actual behaviour so future callers know they
 		// may need to trim strings.TrimPrefix(s, "\ufeff") themselves.
-		bom := []byte{0xEF, 0xBB, 0xBF}
-		body := append(bom, []byte("<p>content</p>")...)
+		body := append([]byte{0xEF, 0xBB, 0xBF}, "<p>content</p>"...)
 		got, err := toUTF8(body, "text/html; charset=utf-8")
 		require.NoError(t, err)
 		assert.True(t, strings.HasPrefix(got, "\ufeff"),

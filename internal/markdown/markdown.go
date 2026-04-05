@@ -153,7 +153,7 @@ func (p *defuddlePlugin) Init(conv *converter.Converter) error {
 
 // --- Renderers ---
 
-func renderCodeBlock(ctx converter.Context, w converter.Writer, n *html.Node) converter.RenderStatus {
+func renderCodeBlock(_ converter.Context, w converter.Writer, n *html.Node) converter.RenderStatus {
 	if n.Type != html.ElementNode || n.Data != "pre" {
 		return converter.RenderTryNext
 	}
@@ -261,7 +261,7 @@ var (
 	tweetEmbedRe = regexp.MustCompile(`(?:platform\.)?twitter\.com/embed/Tweet\.html\?.*?id=([0-9]+)`)
 )
 
-func renderEmbed(ctx converter.Context, w converter.Writer, n *html.Node) converter.RenderStatus {
+func renderEmbed(_ converter.Context, w converter.Writer, n *html.Node) converter.RenderStatus {
 	if n.Type != html.ElementNode || n.Data != "iframe" {
 		return converter.RenderTryNext
 	}
@@ -291,7 +291,7 @@ func renderEmbed(ctx converter.Context, w converter.Writer, n *html.Node) conver
 	return converter.RenderTryNext
 }
 
-func renderFootnoteRef(ctx converter.Context, w converter.Writer, n *html.Node) converter.RenderStatus {
+func renderFootnoteRef(_ converter.Context, w converter.Writer, n *html.Node) converter.RenderStatus {
 	if n.Type != html.ElementNode || n.Data != "sup" {
 		return converter.RenderTryNext
 	}
@@ -340,7 +340,7 @@ func renderMath(_ converter.Context, w converter.Writer, n *html.Node) converter
 }
 
 // renderKaTeX converts KaTeX (.katex, .math) and MWE (.mwe-math-element) spans to LaTeX.
-func renderKaTeX(ctx converter.Context, w converter.Writer, n *html.Node) converter.RenderStatus {
+func renderKaTeX(_ converter.Context, w converter.Writer, n *html.Node) converter.RenderStatus {
 	if n.Type != html.ElementNode || n.Data != "span" {
 		return converter.RenderTryNext
 	}
@@ -537,9 +537,6 @@ func renderComplexLink(ctx converter.Context, w converter.Writer, n *html.Node) 
 	}
 	return converter.RenderSuccess
 }
-
-// ltxTagItemRe matches ArXiv tag spans like <span class="ltx_tag ltx_tag_item">1.</span>
-var ltxTagItemRe = regexp.MustCompile(`(?i)^<span [^>]*class="[^"]*ltx_tag[^"]*"[^>]*>.*?</span>\s*`)
 
 // renderListItem handles task-list checkboxes and OL start attribute.
 // Only intercepts special cases; returns RenderTryNext for normal list items.
@@ -905,7 +902,7 @@ func renderCalloutBlockquote(ctx converter.Context, w converter.Writer, n *html.
 	return converter.RenderSuccess
 }
 
-func renderImage(ctx converter.Context, w converter.Writer, n *html.Node) converter.RenderStatus {
+func renderImage(_ converter.Context, w converter.Writer, n *html.Node) converter.RenderStatus {
 	if n.Type != html.ElementNode || n.Data != "img" {
 		return converter.RenderTryNext
 	}

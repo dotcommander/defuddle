@@ -90,7 +90,6 @@ func TestXArticleExtractor_CanExtract_URLVariants(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			doc := newTestDoc(t, tt.html)
@@ -363,7 +362,6 @@ func TestXArticleExtractor_GetArticleID_FromURL(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			doc := newTestDoc(t, "<html><body></body></html>")
@@ -399,7 +397,6 @@ func TestXArticleExtractor_UpgradeImageQuality(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			got := upgradeXImageQuality(tt.src)

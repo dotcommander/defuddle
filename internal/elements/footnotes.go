@@ -722,9 +722,9 @@ func (p *FootnoteProcessor) generateFootnoteSection(footnotes []*Footnote, optio
 
 	// Create footnote section HTML
 	var sectionHTML strings.Builder
-	sectionHTML.WriteString(fmt.Sprintf(`<div class="footnotes">
+	fmt.Fprintf(&sectionHTML, `<div class="footnotes">
 <h2>%s</h2>
-<ol>`, options.SectionTitle))
+<ol>`, options.SectionTitle)
 
 	for _, footnote := range footnotes {
 		if footnote.Content == "" {
@@ -734,10 +734,10 @@ func (p *FootnoteProcessor) generateFootnoteSection(footnotes []*Footnote, optio
 		defID := fmt.Sprintf("%s:%d", options.FootnotePrefix, footnote.Number)
 		refID := fmt.Sprintf("%sref:%d", options.FootnotePrefix, footnote.Number)
 
-		sectionHTML.WriteString(fmt.Sprintf(`
+		fmt.Fprintf(&sectionHTML, `
 <li id="%s" class="footnote">
 <p>%s <a href="#%s" class="footnote-backref" title="return to article">↩</a></p>
-</li>`, defID, footnote.Content, refID))
+</li>`, defID, footnote.Content, refID)
 	}
 
 	sectionHTML.WriteString(`
@@ -1025,7 +1025,7 @@ func (p *FootnoteProcessor) createFootnoteRefHTML(number int, refID string) stri
 //	// copy paragraphs from content, append backlinks
 func (p *FootnoteProcessor) createFootnoteItemHTML(number int, content *goquery.Selection, refs []string) string {
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf(`<li id="fn:%d">`, number))
+	fmt.Fprintf(&b, `<li id="fn:%d">`, number)
 
 	// Get paragraphs from content element
 	paragraphs := content.Find("p")
@@ -1049,7 +1049,7 @@ func (p *FootnoteProcessor) createFootnoteItemHTML(number int, content *goquery.
 
 	// Append back-links into the last paragraph
 	for i, refID := range refs {
-		b.WriteString(fmt.Sprintf(`<a href="#%s" title="return to article" class="footnote-backref">↩</a>`, refID))
+		fmt.Fprintf(&b, `<a href="#%s" title="return to article" class="footnote-backref">↩</a>`, refID)
 		if i < len(refs)-1 {
 			b.WriteString(" ")
 		}
