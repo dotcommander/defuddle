@@ -68,8 +68,8 @@ func Content(element *goquery.Selection, metadata *metadata.Metadata, doc *goque
 	// Remove permalink anchors from headings
 	removeHeadingAnchors(element)
 
-	// Standardize footnotes and citations
-	standardizeFootnotes(element)
+	// Standardize footnotes and citations (full TS-compatible rewrite)
+	elements.StandardizeFootnotesInScope(doc, element)
 
 	// Wrap <code> with white-space:pre not inside <pre>
 	wrapPreformattedCode(element)
