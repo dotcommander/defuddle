@@ -53,6 +53,11 @@ var (
 	// Byline strip patterns (preserve spaces so name words can be identified).
 	bylineStripBy    = regexp.MustCompile(`(?i)\bby\b`)
 	bylineStripPunct = regexp.MustCompile(`[/|·•—–\-,]+`)
+
+	// Sentence punctuation patterns used across multiple removal functions.
+	sentencePunctRe      = regexp.MustCompile(`[.!?]`)
+	sentencePunctEndRe   = regexp.MustCompile(`[.!?]$`)
+	sentencePunctSpaceRe = regexp.MustCompile(`[.!?]\s`)
 )
 
 // RemoveByContentPattern detects and removes boilerplate, metadata, and
@@ -127,7 +132,7 @@ func removePromotionalBanners(mainContent *goquery.Selection, debug bool) {
 		if textutil.CountWords(text) > 25 {
 			return
 		}
-		if regexp.MustCompile(`[.!?]\s`).MatchString(text) {
+		if sentencePunctSpaceRe.MatchString(text) {
 			return
 		}
 		if debug {
@@ -213,7 +218,7 @@ func removeSinglePassMetadata(mainContent *goquery.Selection, mainNode *html.Nod
 		}
 
 		// DIV metadata blocks near top (date but no sentence punctuation).
-		if tag == "DIV" && words >= 1 && words <= 10 && hasDate && !regexp.MustCompile(`[.!?]`).MatchString(text) && getPos() <= 400 {
+		if tag == "DIV" && words >= 1 && words <= 10 && hasDate && !sentencePunctRe.MatchString(text) && getPos() <= 400 {
 			hasBigPara := false
 			el.Find("p, h1, h2, h3, h4, h5, h6").Each(func(_ int, sub *goquery.Selection) {
 				if textutil.CountWords(sub.Text()) > 8 {
@@ -230,7 +235,7 @@ func removeSinglePassMetadata(mainContent *goquery.Selection, mainNode *html.Nod
 		}
 
 		// Author byline "By Name" near start.
-		if !bylineFound && startsByPattern.MatchString(text) && words >= 2 && !regexp.MustCompile(`[.!?]$`).MatchString(text) && getPos() <= 600 {
+		if !bylineFound && startsByPattern.MatchString(text) && words >= 2 && !sentencePunctEndRe.MatchString(text) && getPos() <= 600 {
 			target := walkUpToWrapper(node, mainNode, text)
 			if debug {
 				slog.Debug("removeByContentPattern: author byline", "text", previewNode(target))
@@ -376,7 +381,7 @@ func removeBlogMetadataLists(mainContent *goquery.Selection, debug bool) {
 		isMetadata := true
 		for _, item := range items {
 			t := strings.TrimSpace(item.Text())
-			if textutil.CountWords(t) > 8 || regexp.MustCompile(`[.!?]$`).MatchString(t) {
+			if textutil.CountWords(t) > 8 || sentencePunctEndRe.MatchString(t) {
 				isMetadata = false
 				break
 			}
@@ -635,7 +640,7 @@ func removeTrailingRelatedPostsBlock(_ *goquery.Selection, mainNode *html.Node, 
 		for _, a := range links {
 			linkTextLen += len(strings.TrimSpace(nodeText(a)))
 		}
-		if float64(linkTextLen)/float64(maxInt(1, len(text))) <= 0.6 {
+		if float64(linkTextLen)/float64(max(1, len(text))) <= 0.6 {
 			allLinkDense = false
 			break
 		}
@@ -644,7 +649,7 @@ func removeTrailingRelatedPostsBlock(_ *goquery.Selection, mainNode *html.Node, 
 		for _, a := range links {
 			nonLink = strings.Replace(nonLink, strings.TrimSpace(nodeText(a)), "", 1)
 		}
-		if regexp.MustCompile(`[.!?]`).MatchString(nonLink) {
+		if sentencePunctRe.MatchString(nonLink) {
 			allLinkDense = false
 			break
 		}
@@ -928,12 +933,4 @@ func removeNewsletterSections(mainContent *goquery.Selection, mainNode *html.Nod
 		}
 		el.Remove()
 	})
-}
-
-// maxInt returns the larger of two ints.
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }

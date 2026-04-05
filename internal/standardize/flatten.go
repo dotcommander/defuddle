@@ -213,7 +213,6 @@ func flattenWrapperElements(element *goquery.Selection, _ *goquery.Document, deb
 
 		// Check if all children are block elements
 		allBlockElements := true
-		blockElements := constants.GetBlockElements()
 
 		children.Each(func(_ int, child *goquery.Selection) {
 			tag := goquery.NodeName(child)
@@ -364,7 +363,6 @@ func flattenWrapperElements(element *goquery.Selection, _ *goquery.Document, deb
 			childTag := goquery.NodeName(child)
 
 			// Only unwrap if the single child is a block element and not preserved
-			blockElements := constants.GetBlockElements()
 			isBlockChild := slices.Contains(blockElements, childTag)
 
 			if isBlockChild && !shouldPreserveElement(child) {
@@ -383,7 +381,6 @@ func flattenWrapperElements(element *goquery.Selection, _ *goquery.Document, deb
 		// Case 6: Deeply nested element - merge up
 		nestingDepth := 0
 		parent := el.Parent()
-		blockElements := constants.GetBlockElements()
 
 		for parent.Length() > 0 {
 			parentTag := goquery.NodeName(parent)
@@ -407,7 +404,6 @@ func flattenWrapperElements(element *goquery.Selection, _ *goquery.Document, deb
 	// First pass: Process top-level wrapper elements
 	processTopLevelElements := func() bool {
 		modified := false
-		blockElements := constants.GetBlockElements()
 
 		element.Children().Each(func(_ int, el *goquery.Selection) {
 			tag := goquery.NodeName(el)

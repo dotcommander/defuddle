@@ -393,9 +393,12 @@ func (p *FootnoteProcessor) detectTextFootnotes(options *FootnoteProcessingOptio
 		`\[([a-zA-Z]+)\]`, // [a], [b], [note], etc.
 	}
 
-	for _, pattern := range patterns {
-		re := regexp.MustCompile(pattern)
+	compiledPatterns := make([]*regexp.Regexp, len(patterns))
+	for i, p := range patterns {
+		compiledPatterns[i] = regexp.MustCompile(p)
+	}
 
+	for _, re := range compiledPatterns {
 		// Find all text nodes and search for patterns
 		p.doc.Find("*").Each(func(_ int, s *goquery.Selection) {
 			// Skip elements that are already footnotes
@@ -550,7 +553,13 @@ func (p *FootnoteProcessor) findFootnoteDefinition(key string) *goquery.Selectio
 		}
 	}
 
-	// Try to find in footnote sections by text content
+	// Try to find in footnote sections by text content.
+	// Compile patterns once per call rather than inside the nested loop.
+	keyPatterns := []*regexp.Regexp{
+		regexp.MustCompile(`^` + regexp.QuoteMeta(key) + `\.`),
+		regexp.MustCompile(`^\[` + regexp.QuoteMeta(key) + `\]`),
+		regexp.MustCompile(`^` + regexp.QuoteMeta(key) + `\)`),
+	}
 	var found *goquery.Selection
 	p.doc.Find(".footnotes, .notes, .references, .endnotes").Each(func(_ int, section *goquery.Selection) {
 		if found != nil {
@@ -561,14 +570,8 @@ func (p *FootnoteProcessor) findFootnoteDefinition(key string) *goquery.Selectio
 				return
 			}
 			text := el.Text()
-			patterns := []string{
-				fmt.Sprintf("^%s\\.", key),
-				fmt.Sprintf("^\\[%s\\]", key),
-				fmt.Sprintf("^%s\\)", key),
-			}
-
-			for _, pattern := range patterns {
-				if matched, _ := regexp.MatchString(pattern, text); matched {
+			for _, re := range keyPatterns {
+				if re.MatchString(text) {
 					found = el
 					return
 				}

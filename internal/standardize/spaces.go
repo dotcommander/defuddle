@@ -276,6 +276,7 @@ func standardizeSpaces(element *goquery.Selection) {
 func removeEmptyLines(element *goquery.Selection, _ *goquery.Document, debug bool) {
 	removedCount := 0
 	startTime := time.Now()
+	blockElements := constants.GetBlockElements()
 
 	// First pass: remove empty text nodes and clean up text content
 	var removeEmptyTextNodes func(node *html.Node)
@@ -368,7 +369,6 @@ func removeEmptyLines(element *goquery.Selection, _ *goquery.Document, debug boo
 		}
 
 		// Determine if this is a block element (simplified check)
-		blockElements := constants.GetBlockElements()
 		isBlockElement := slices.Contains(blockElements, tag)
 
 		// Additional block elements
