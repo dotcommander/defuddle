@@ -387,20 +387,19 @@ func (p *FootnoteProcessor) detectTextFootnotes(options *FootnoteProcessingOptio
 				if len(match) > 1 {
 					key := match[1]
 
-					// Try to find definition
+					// Try to find definition — only create footnote if definition exists
+					// to avoid false positives on math expressions, array notation, etc.
 					definition := p.findFootnoteDefinition(key)
+					if definition == nil || definition.Length() == 0 {
+						continue
+					}
 
-					footnote := &Footnote{
+					footnotes = append(footnotes, &Footnote{
 						ID:         p.generateFootnoteID(key, options),
 						RefText:    match[0],
 						Definition: definition,
-					}
-
-					if definition != nil && definition.Length() > 0 {
-						footnote.Content = strings.TrimSpace(definition.Text())
-					}
-
-					footnotes = append(footnotes, footnote)
+						Content:    strings.TrimSpace(definition.Text()),
+					})
 				}
 			}
 		})
