@@ -349,6 +349,17 @@ func (r *Registry) initializeBuiltins() {
 			return NewGitHubExtractor(doc, url, schemaOrgData)
 		},
 	})
+
+	// Substack — matches *.substack.com and custom domains with Substack generator meta
+	r.Register(ExtractorMapping{
+		Patterns: []any{
+			"substack.com",
+			regexp.MustCompile(`\.substack\.com`),
+		},
+		Extractor: func(doc *goquery.Document, url string, schemaOrgData any) BaseExtractor {
+			return NewSubstackExtractor(doc, url, schemaOrgData)
+		},
+	})
 }
 
 // Convenience functions for working with the default registry

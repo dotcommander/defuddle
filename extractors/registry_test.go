@@ -204,7 +204,7 @@ func TestInitializeBuiltins_RegistersNineExtractors(t *testing.T) {
 	r.initializeBuiltins()
 
 	mappings := r.GetMappings()
-	assert.Len(t, mappings, 9, "should register exactly 9 built-in extractors")
+	assert.Len(t, mappings, 10, "should register exactly 10 built-in extractors")
 }
 
 func TestInitializeBuiltins_EachExtractorRoutes(t *testing.T) {
@@ -223,6 +223,7 @@ func TestInitializeBuiltins_EachExtractorRoutes(t *testing.T) {
 		{"Grok", "https://grok.x.ai/chat"},
 		{"Gemini", "https://gemini.google.com/app/abc123"},
 		{"GitHub", "https://github.com/owner/repo/issues/1"},
+		{"Substack", "https://newsletter.substack.com/p/some-post"},
 	}
 
 	r := NewRegistry()
