@@ -218,8 +218,8 @@ var ExactSelectors = []string{
 	`[role="listbox"]`,
 	`[role="option"]`,
 	"textarea",
-	// "time", // see issue #136 — removes all time elements
-	// "relative-time", // see issue #136
+	"time",
+	"relative-time",
 
 	// hidden
 	"[hidden]",
@@ -230,9 +230,9 @@ var ExactSelectors = []string{
 	".hidden",
 	".invisible",
 
-	// iframes
+	// iframes — keep YouTube, Vimeo, Twitter/X, and Datawrapper embeds
 	"instaread-player",
-	`iframe:not([src])`,
+	`iframe:not([src*="youtube"]):not([src*="youtu.be"]):not([src*="vimeo"]):not([src*="twitter"]):not([src*="x.com"]):not([src*="datawrapper"])`,
 
 	// logos
 	`[class="logo" i]`,
