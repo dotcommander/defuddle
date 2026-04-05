@@ -85,6 +85,54 @@ type Footnote struct {
 	Linked     bool
 }
 
+// FootnoteInlineReferences matches inline footnote reference elements.
+// Ported from TypeScript FOOTNOTE_INLINE_REFERENCES.
+var FootnoteInlineReferences = strings.Join([]string{
+	`sup.reference`,
+	`cite.ltx_cite`,
+	`sup[id^="fnr"]`,
+	`span[id^="fnr"]`,
+	`span[class*="footnote_ref"]`,
+	`span[class*="footnote-ref"]`,
+	`span.footnote-link`,
+	`a.citation`,
+	`a[id^="ref-link"]`,
+	`a[href^="#fn"]`,
+	`a[href^="#cite"]`,
+	`a[href^="#reference"]`,
+	`a[href^="#footnote"]`,
+	`a[href^="#r"]`,
+	`a[href^="#b"]`,
+	`a[href*="cite_note"]`,
+	`a[href*="cite_ref"]`,
+	`a.footnote-anchor`,
+	`a.footnote`,
+	`a[role="doc-biblioref"]`,
+	`a[id^="fnref"]`,
+	`.footnote-ref`,
+	`sup a[href^="#"]`,
+}, ", ")
+
+// FootnoteListSelectors matches footnote definition list containers.
+// Ported from TypeScript FOOTNOTE_LIST_SELECTORS.
+var FootnoteListSelectors = strings.Join([]string{
+	`div.footnote ol`,
+	`div.footnotes ol`,
+	`div[role="doc-endnotes"]`,
+	`div[role="doc-footnotes"]`,
+	`ol.footnotes-list`,
+	`ol.footnotes`,
+	`ol.references`,
+	`ol[class*="article-references"]`,
+	`section.footnotes ol`,
+	`section[role="doc-endnotes"]`,
+	`section[role="doc-footnotes"]`,
+	`section[role="doc-bibliography"]`,
+	`ul.footnotes-list`,
+	`ul.ltx_biblist`,
+	`div.footnote[data-component-name="FootnoteToDOM"]`,
+}, ", ")
+
 // DefaultFootnoteProcessingOptions returns default options for footnote processing
 // TypeScript original code:
 //
@@ -222,23 +270,56 @@ func (p *FootnoteProcessor) detectFootnotes(options *FootnoteProcessingOptions) 
 func (p *FootnoteProcessor) detectExistingFootnotes(_ *FootnoteProcessingOptions) []*Footnote {
 	var footnotes []*Footnote
 
-	// Find footnote references
-	p.doc.Find("sup a[href^='#'], a.footnote, .footnote-ref, a[href^='#footnote'], a[href^='#fn']").Each(func(_ int, s *goquery.Selection) {
-		href, hasHref := s.Attr("href")
-		if !hasHref {
-			return
+	// Find footnote references using TS-compatible selector list
+	p.doc.Find(FootnoteInlineReferences).Each(func(_ int, s *goquery.Selection) {
+		var footnoteID string
+
+		// Science.org: a[role="doc-biblioref"] with data-xml-rid
+		if role, _ := s.Attr("role"); role == "doc-biblioref" {
+			if xmlRid, exists := s.Attr("data-xml-rid"); exists && xmlRid != "" {
+				footnoteID = xmlRid
+			}
 		}
 
-		// Extract footnote ID from href
-		footnoteID := strings.TrimPrefix(href, "#")
+		// Nature.com: a[id^="ref-link"] — ID from text content
+		if footnoteID == "" {
+			if id, _ := s.Attr("id"); strings.HasPrefix(id, "ref-link") {
+				footnoteID = strings.TrimSpace(s.Text())
+			}
+		}
+
+		// LessWrong: span.footnote-reference with data-footnote-id
+		if footnoteID == "" {
+			if fnID, exists := s.Attr("data-footnote-id"); exists && fnID != "" {
+				footnoteID = fnID
+			}
+		}
+
+		// Default: extract from href
+		if footnoteID == "" {
+			href, hasHref := s.Attr("href")
+			if !hasHref || !strings.HasPrefix(href, "#") {
+				// Try fnref ID pattern (a[id^="fnref"])
+				if id, _ := s.Attr("id"); strings.HasPrefix(id, "fnref") {
+					footnoteID = strings.TrimPrefix(id, "fnref")
+					footnoteID = strings.TrimPrefix(footnoteID, ":")
+					footnoteID = strings.TrimPrefix(footnoteID, "-")
+				}
+				if footnoteID == "" {
+					return
+				}
+			} else {
+				footnoteID = strings.TrimPrefix(href, "#")
+			}
+		}
+
 		if footnoteID == "" {
 			return
 		}
 
-		// Find corresponding definition
-		definition := p.doc.Find("#" + footnoteID).First()
+		// Find corresponding definition (use attribute selector for IDs with special chars like colons)
+		definition := p.doc.Find(fmt.Sprintf(`[id="%s"]`, footnoteID)).First()
 
-		// Create footnote even if definition is not found
 		footnote := &Footnote{
 			ID:         footnoteID,
 			Reference:  s,
@@ -358,15 +439,36 @@ func (p *FootnoteProcessor) detectTextFootnotes(options *FootnoteProcessingOptio
 func (p *FootnoteProcessor) detectWikipediaFootnotes(_ *FootnoteProcessingOptions) []*Footnote {
 	var footnotes []*Footnote
 
-	// Find Wikipedia-style footnote lists
-	p.doc.Find("ol.references, ul.references, .footnotes ol, .footnotes ul").Each(func(_ int, list *goquery.Selection) {
-		list.Find("li").Each(func(_ int, li *goquery.Selection) {
+	// Find footnote lists using TS-compatible selector list
+	p.doc.Find(FootnoteListSelectors).Each(func(_ int, list *goquery.Selection) {
+		// Substack: individual footnote divs with no parent list
+		if goquery.NodeName(list) == "div" {
+			if _, ok := list.Attr("data-component-name"); ok {
+				anchor := list.Find("a.footnote-number").First()
+				content := list.Find(".footnote-content").First()
+				if anchor.Length() > 0 && content.Length() > 0 {
+					id, _ := anchor.Attr("id")
+					id = strings.TrimPrefix(id, "footnote-")
+					id = strings.ToLower(id)
+					if id != "" {
+						footnotes = append(footnotes, &Footnote{
+							ID:         id,
+							Definition: content,
+							Content:    strings.TrimSpace(content.Text()),
+						})
+					}
+				}
+				return
+			}
+		}
+
+		// Standard list format: find li items (or div[role="listitem"])
+		list.Find("li, div[role='listitem']").Each(func(_ int, li *goquery.Selection) {
 			id, hasID := li.Attr("id")
 			if !hasID {
 				return
 			}
 
-			// Extract footnote content
 			content := strings.TrimSpace(li.Text())
 
 			// Look for backlink
@@ -381,7 +483,7 @@ func (p *FootnoteProcessor) detectWikipediaFootnotes(_ *FootnoteProcessingOption
 			if backlink.Length() > 0 {
 				href, _ := backlink.Attr("href")
 				refID := strings.TrimPrefix(href, "#")
-				if ref := p.doc.Find("#" + refID).First(); ref.Length() > 0 {
+				if ref := p.doc.Find(fmt.Sprintf(`[id="%s"]`, refID)).First(); ref.Length() > 0 {
 					footnote.Reference = ref
 				}
 			}
