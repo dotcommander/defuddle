@@ -7,6 +7,8 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -18,7 +20,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const version = "0.2.2"
+// Build-injected via ldflags (goreleaser, go build -ldflags "-X main.version=...")
+var (
+	version = "dev"
+	commit  = "unknown"
+	date    = "unknown"
+)
 
 // Define static errors to avoid dynamic error creation
 var (
@@ -37,7 +44,7 @@ var knownProperties = []string{
 var rootCmd = &cobra.Command{
 	Use:     "defuddle",
 	Short:   "Extract and structure content from web pages",
-	Version: version,
+	Version: fmt.Sprintf("%s (commit: %s, built: %s)", version, commit, date),
 	Long: `defuddle is a CLI tool for extracting and structuring content from web pages.
 It can parse HTML, extract metadata, and convert content to various formats.`,
 }
@@ -53,16 +60,19 @@ You can output the content in different formats and extract specific properties.
 }
 
 type ParseOptions struct {
-	Source    string
-	JSON      bool
-	Markdown  bool
-	Property  string
-	Output    string
-	UserAgent string
-	Headers   []string
-	Timeout   time.Duration
-	Debug     bool
-	Proxy     string
+	Source           string
+	JSON             bool
+	Markdown         bool
+	Property         string
+	Output           string
+	UserAgent        string
+	Headers          []string
+	Timeout          time.Duration
+	Debug            bool
+	Proxy            string
+	RemoveImages     bool
+	ContentSelector  string
+	NoClutterRemoval bool
 }
 
 func init() {
@@ -79,8 +89,131 @@ func init() {
 	parseCmd.Flags().Duration("timeout", 30*time.Second, "Request timeout")
 	parseCmd.Flags().Bool("debug", false, "Enable debug mode")
 	parseCmd.Flags().String("proxy", "", "Proxy URL (e.g., http://localhost:8080, socks5://localhost:1080)")
+	parseCmd.Flags().Bool("remove-images", false, "Remove images from extracted content")
+	parseCmd.Flags().String("content-selector", "", "CSS selector for content root (bypasses auto-detection)")
+	parseCmd.Flags().Bool("no-clutter-removal", false, "Disable all clutter removal heuristics")
+
+	extractorsCmd.Flags().String("match", "", "Show which extractor matches the given URL")
+
+	batchCmd.Flags().StringP("input", "i", "", "Read URLs from file instead of stdin")
+	batchCmd.Flags().IntP("concurrency", "c", 5, "Maximum concurrent requests")
+	batchCmd.Flags().BoolP("markdown", "m", false, "Include markdown in output")
+	batchCmd.Flags().Bool("continue-on-error", false, "Continue processing on individual URL errors")
 
 	rootCmd.AddCommand(parseCmd)
+	rootCmd.AddCommand(extractorsCmd)
+	rootCmd.AddCommand(batchCmd)
+}
+
+var extractorsCmd = &cobra.Command{
+	Use:   "extractors",
+	Short: "List registered site-specific extractors",
+	RunE: func(cmd *cobra.Command, _ []string) error {
+		matchURL, _ := cmd.Flags().GetString("match")
+		mappings := extractors.DefaultRegistry.GetMappings()
+
+		for _, m := range mappings {
+			if matchURL != "" {
+				if !extractors.DefaultRegistry.MatchesURL(matchURL, m) {
+					continue
+				}
+				fmt.Println("MATCH:", mappingLabel(m))
+				return nil
+			}
+			fmt.Println(mappingLabel(m))
+		}
+
+		if matchURL != "" {
+			fmt.Fprintln(os.Stderr, "no extractor matches the given URL")
+		}
+		return nil
+	},
+}
+
+// mappingLabel returns a human-readable string listing the patterns for an extractor mapping.
+func mappingLabel(m extractors.ExtractorMapping) string {
+	patterns := make([]string, 0, len(m.Patterns))
+	for _, p := range m.Patterns {
+		switch v := p.(type) {
+		case string:
+			patterns = append(patterns, v)
+		case *regexp.Regexp:
+			patterns = append(patterns, v.String())
+		}
+	}
+	return strings.Join(patterns, ", ")
+}
+
+var batchCmd = &cobra.Command{
+	Use:   "batch",
+	Short: "Parse multiple URLs, output JSONL",
+	Long:  `Reads one URL per line from stdin (default) or --input file. Outputs one JSON object per line to stdout.`,
+	RunE:  runBatch,
+}
+
+func runBatch(cmd *cobra.Command, _ []string) error {
+	cmd.SilenceUsage = true
+
+	inputFile, _ := cmd.Flags().GetString("input")
+	concurrency, _ := cmd.Flags().GetInt("concurrency")
+	markdown, _ := cmd.Flags().GetBool("markdown")
+	continueOnError, _ := cmd.Flags().GetBool("continue-on-error")
+
+	var reader io.Reader = os.Stdin
+	if inputFile != "" {
+		f, err := os.Open(inputFile) // #nosec G304 - user-provided input file
+		if err != nil {
+			return fmt.Errorf("opening input file: %w", err)
+		}
+		defer f.Close()
+		reader = f
+	}
+
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		return fmt.Errorf("reading input: %w", err)
+	}
+
+	var urls []string
+	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" && !strings.HasPrefix(line, "#") {
+			urls = append(urls, line)
+		}
+	}
+
+	if len(urls) == 0 {
+		return fmt.Errorf("no URLs provided")
+	}
+
+	opts := &defuddle.Options{
+		Markdown:         markdown,
+		SeparateMarkdown: markdown,
+		MaxConcurrency:   concurrency,
+	}
+
+	ctx := context.Background()
+	results := defuddle.ParseFromURLs(ctx, urls, opts)
+
+	enc := jsontext.NewEncoder(os.Stdout)
+	for _, r := range results {
+		if r.Err != nil {
+			if !continueOnError {
+				return fmt.Errorf("error parsing %s: %w", r.URL, r.Err)
+			}
+			errObj := map[string]string{"url": r.URL, "error": r.Err.Error()}
+			if err := json.MarshalEncode(enc, errObj); err != nil {
+				return fmt.Errorf("encoding error result: %w", err)
+			}
+			fmt.Println()
+			continue
+		}
+		if err := json.MarshalEncode(enc, r.Result); err != nil {
+			return fmt.Errorf("encoding result for %s: %w", r.URL, err)
+		}
+		fmt.Println()
+	}
+	return nil
 }
 
 func main() {
@@ -105,6 +238,9 @@ func parseContent(cmd *cobra.Command, args []string) error {
 	timeout, _ := cmd.Flags().GetDuration("timeout")
 	debug, _ := cmd.Flags().GetBool("debug")
 	proxy, _ := cmd.Flags().GetString("proxy")
+	removeImages, _ := cmd.Flags().GetBool("remove-images")
+	contentSelector, _ := cmd.Flags().GetString("content-selector")
+	noClutterRemoval, _ := cmd.Flags().GetBool("no-clutter-removal")
 
 	// Handle markdown alias
 	if mdAlias {
@@ -112,16 +248,19 @@ func parseContent(cmd *cobra.Command, args []string) error {
 	}
 
 	opts := &ParseOptions{
-		Source:    source,
-		JSON:      jsonOutput,
-		Markdown:  markdown,
-		Property:  property,
-		Output:    output,
-		UserAgent: userAgent,
-		Headers:   headers,
-		Timeout:   timeout,
-		Debug:     debug,
-		Proxy:     proxy,
+		Source:           source,
+		JSON:             jsonOutput,
+		Markdown:         markdown,
+		Property:         property,
+		Output:           output,
+		UserAgent:        userAgent,
+		Headers:          headers,
+		Timeout:          timeout,
+		Debug:            debug,
+		Proxy:            proxy,
+		RemoveImages:     removeImages,
+		ContentSelector:  contentSelector,
+		NoClutterRemoval: noClutterRemoval,
 	}
 
 	if debug {
@@ -129,6 +268,16 @@ func parseContent(cmd *cobra.Command, args []string) error {
 	}
 
 	return executeParseContent(opts)
+}
+
+// buildContext returns a context (with optional timeout) and its cancel func.
+// Callers must always defer cancel().
+func buildContext(timeout time.Duration) (context.Context, context.CancelFunc) {
+	ctx := context.Background()
+	if timeout > 0 {
+		return context.WithTimeout(ctx, timeout)
+	}
+	return context.WithCancel(ctx)
 }
 
 func executeParseContent(opts *ParseOptions) error {
@@ -148,7 +297,19 @@ func executeParseContent(opts *ParseOptions) error {
 		URL:              opts.Source,
 		Markdown:         opts.Markdown,
 		SeparateMarkdown: opts.Markdown,
+		RemoveImages:     opts.RemoveImages,
+		ContentSelector:  opts.ContentSelector,
 	}
+	if opts.NoClutterRemoval {
+		defuddleOpts.RemoveExactSelectors = defuddle.PtrBool(false)
+		defuddleOpts.RemovePartialSelectors = defuddle.PtrBool(false)
+		defuddleOpts.RemoveHiddenElements = defuddle.PtrBool(false)
+		defuddleOpts.RemoveLowScoring = defuddle.PtrBool(false)
+		defuddleOpts.RemoveContentPatterns = defuddle.PtrBool(false)
+	}
+
+	ctx, cancel := buildContext(opts.Timeout)
+	defer cancel()
 
 	var result *defuddle.Result
 	var err error
@@ -165,21 +326,9 @@ func executeParseContent(opts *ParseOptions) error {
 		if createErr != nil {
 			return fmt.Errorf("error creating defuddle instance: %w", createErr)
 		}
-		ctx := context.Background()
-		if opts.Timeout > 0 {
-			var cancel context.CancelFunc
-			ctx, cancel = context.WithTimeout(ctx, opts.Timeout)
-			defer cancel()
-		}
 		result, err = defuddleInstance.Parse(ctx)
 	case strings.HasPrefix(opts.Source, "http://") || strings.HasPrefix(opts.Source, "https://"):
 		// Parse from URL
-		ctx := context.Background()
-		if opts.Timeout > 0 {
-			var cancel context.CancelFunc
-			ctx, cancel = context.WithTimeout(ctx, opts.Timeout)
-			defer cancel()
-		}
 		result, err = defuddle.ParseFromURL(ctx, opts.Source, defuddleOpts)
 	default:
 		// Parse from file
@@ -187,17 +336,9 @@ func executeParseContent(opts *ParseOptions) error {
 		if fileErr != nil {
 			return fileErr
 		}
-
 		defuddleInstance, createErr := defuddle.NewDefuddle(htmlContent, defuddleOpts)
 		if createErr != nil {
 			return fmt.Errorf("error creating defuddle instance: %w", createErr)
-		}
-
-		ctx := context.Background()
-		if opts.Timeout > 0 {
-			var cancel context.CancelFunc
-			ctx, cancel = context.WithTimeout(ctx, opts.Timeout)
-			defer cancel()
 		}
 		result, err = defuddleInstance.Parse(ctx)
 	}
@@ -228,37 +369,7 @@ func executeParseContent(opts *ParseOptions) error {
 		if result.ContentMarkdown != nil {
 			content = *result.ContentMarkdown
 		} else {
-			// If ContentMarkdown is not available, try to convert HTML content to markdown
-			// Create a new defuddle instance specifically for markdown conversion
-			markdownOpts := &defuddle.Options{
-				Debug:            false,
-				URL:              opts.Source,
-				Markdown:         true,
-				SeparateMarkdown: true,
-			}
-
-			// Create temporary HTML document for conversion
-			htmlContent := fmt.Sprintf("<html><body>%s</body></html>", result.Content)
-			defuddleInstance, err := defuddle.NewDefuddle(htmlContent, markdownOpts)
-			if err == nil {
-				ctx := context.Background()
-				if opts.Timeout > 0 {
-					var cancel context.CancelFunc
-					ctx, cancel = context.WithTimeout(ctx, opts.Timeout)
-					defer cancel()
-				}
-
-				markdownResult, markdownErr := defuddleInstance.Parse(ctx)
-				if markdownErr == nil && markdownResult.ContentMarkdown != nil {
-					content = *markdownResult.ContentMarkdown
-				} else {
-					// Fallback to original content if markdown conversion fails
-					content = result.Content
-				}
-			} else {
-				// Fallback to original content if defuddle creation fails
-				content = result.Content
-			}
+			content = result.Content
 		}
 	default:
 		content = result.Content
@@ -287,9 +398,15 @@ func readFile(filename string) (string, error) {
 }
 
 func validateFilePath(filename string) error {
-	// Add basic path validation to prevent directory traversal
-	if strings.Contains(filename, "..") {
-		return ErrDirectoryTraversal
+	// Reject directory traversal by cleaning the path and checking for ".." components.
+	// strings.Contains(filename, "..") is bypassable (e.g. "a..b" matches but is safe;
+	// "%2e%2e" or unicode variants could slip through after URL decode).
+	// filepath.Clean resolves all ".." sequences first, so the check is exact.
+	cleaned := filepath.Clean(filename)
+	for _, part := range strings.Split(cleaned, string(filepath.Separator)) {
+		if part == ".." {
+			return ErrDirectoryTraversal
+		}
 	}
 	return nil
 }

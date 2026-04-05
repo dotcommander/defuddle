@@ -167,11 +167,17 @@ func (r *Registry) matchesPatterns(urlStr, domain string, patterns []any) bool {
 //	  this.domainCache.clear();
 //	}
 func (r *Registry) ClearCache() *Registry {
-	r.domainCache.Range(func(key, _ any) bool {
-		r.domainCache.Delete(key)
-		return true
-	})
+	r.domainCache.Clear()
 	return r // Enable method chaining
+}
+
+// MatchesURL checks if a URL matches any pattern in the given mapping.
+func (r *Registry) MatchesURL(urlStr string, mapping ExtractorMapping) bool {
+	parsedURL, err := url.Parse(urlStr)
+	if err != nil {
+		return false
+	}
+	return r.matchesPatterns(urlStr, parsedURL.Hostname(), mapping.Patterns)
 }
 
 // GetMappings returns a copy of current mappings (read-only access)
