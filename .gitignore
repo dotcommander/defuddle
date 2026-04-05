@@ -85,3 +85,6 @@ pids
 temp/
 testdata/output/
 tmp/
+
+# Root binary build artifact
+/defuddle
