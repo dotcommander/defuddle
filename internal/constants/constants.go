@@ -1151,7 +1151,7 @@ var AllowedAttributes = map[string]bool{
 	"alt": true, "allow": true, "allowfullscreen": true, "aria-label": true, "checked": true,
 	"colspan": true, "controls": true, "data-latex": true, "data-src": true, "data-srcset": true,
 	"data-callout": true, "data-lang": true, "dir": true, "display": true, "frameborder": true, "headers": true,
-	"height": true, "href": true, "kind": true, "lang": true, "role": true, "rowspan": true, "src": true,
+	"height": true, "href": true, "kind": true, "label": true, "lang": true, "role": true, "rowspan": true, "src": true,
 	"srclang": true, "srcset": true, "title": true, "type": true, "width": true,
 
 	// MathML attributes

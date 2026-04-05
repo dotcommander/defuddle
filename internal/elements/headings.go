@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/kaptinlin/defuddle-go/internal/constants"
 )
 
 /*
@@ -153,7 +154,6 @@ type HeadingProcessor struct {
 type HeadingProcessingOptions struct {
 	RemoveNavigation  bool
 	PreserveStructure bool
-	AllowedAttributes []string
 }
 
 // DefaultHeadingProcessingOptions returns default options for heading processing
@@ -168,7 +168,6 @@ func DefaultHeadingProcessingOptions() *HeadingProcessingOptions {
 	return &HeadingProcessingOptions{
 		RemoveNavigation:  true,
 		PreserveStructure: true,
-		AllowedAttributes: []string{"id", "class"},
 	}
 }
 
@@ -452,24 +451,25 @@ func (p *HeadingProcessor) removeNavigationElements(s *goquery.Selection) {
 //
 // // Set the clean text content
 // newHeading.textContent = textContent;
-func (p *HeadingProcessor) replaceHeadingContent(s *goquery.Selection, textContent string, options *HeadingProcessingOptions) {
+func (p *HeadingProcessor) replaceHeadingContent(s *goquery.Selection, textContent string, _ *HeadingProcessingOptions) {
 	tagName := goquery.NodeName(s)
 
-	// Build new heading HTML
+	// Build new heading HTML matching TS: iterate element's attributes,
+	// keep those in ALLOWED_ATTRIBUTES (does NOT include class or id).
 	var headingHTML strings.Builder
 	headingHTML.WriteString("<")
 	headingHTML.WriteString(tagName)
 
-	// Copy allowed attributes
-	for _, attrName := range options.AllowedAttributes {
-		if attrValue, hasAttr := s.Attr(attrName); hasAttr {
-			headingHTML.WriteString(" ")
-			headingHTML.WriteString(attrName)
-			headingHTML.WriteString("=\"")
-			// Escape attribute value
-			escapedValue := strings.ReplaceAll(attrValue, "\"", "&quot;")
-			headingHTML.WriteString(escapedValue)
-			headingHTML.WriteString("\"")
+	if node := s.Get(0); node != nil {
+		for _, attr := range node.Attr {
+			if constants.IsAllowedAttribute(strings.ToLower(attr.Key)) {
+				headingHTML.WriteString(" ")
+				headingHTML.WriteString(attr.Key)
+				headingHTML.WriteString("=\"")
+				escapedValue := strings.ReplaceAll(attr.Val, "\"", "&quot;")
+				headingHTML.WriteString(escapedValue)
+				headingHTML.WriteString("\"")
+			}
 		}
 	}
 
