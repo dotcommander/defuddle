@@ -170,28 +170,23 @@ func renderCodeBlock(ctx converter.Context, w converter.Writer, n *html.Node) co
 		return converter.RenderTryNext
 	}
 
-	// Detect language from various attributes
+	// Detect language from data attributes (code, then pre)
 	lang := getAttr(codeNode, "data-lang")
 	if lang == "" {
 		lang = getAttr(codeNode, "data-language")
 	}
 	if lang == "" {
-		lang = getAttr(n, "data-language")
+		lang = getAttr(n, "data-lang")
 	}
 	if lang == "" {
-		class := getAttr(codeNode, "class")
-		if class != "" {
-			for _, token := range strings.Fields(class) {
-				if strings.HasPrefix(token, "language-") {
-					lang = strings.TrimPrefix(token, "language-")
-					break
-				}
-				if strings.HasPrefix(token, "lang-") {
-					lang = strings.TrimPrefix(token, "lang-")
-					break
-				}
-			}
-		}
+		lang = getAttr(n, "data-language")
+	}
+	// Detect from class tokens (code, then pre)
+	if lang == "" {
+		lang = extractLangFromClass(getAttr(codeNode, "class"))
+	}
+	if lang == "" {
+		lang = extractLangFromClass(getAttr(n, "class"))
 	}
 
 	code := extractText(codeNode)
@@ -962,6 +957,20 @@ func getAttr(n *html.Node, key string) string {
 	for _, a := range n.Attr {
 		if a.Key == key {
 			return a.Val
+		}
+	}
+	return ""
+}
+
+// extractLangFromClass extracts a language identifier from CSS class tokens
+// matching "language-*" or "lang-*" patterns.
+func extractLangFromClass(class string) string {
+	for _, token := range strings.Fields(class) {
+		if strings.HasPrefix(token, "language-") {
+			return strings.TrimPrefix(token, "language-")
+		}
+		if strings.HasPrefix(token, "lang-") {
+			return strings.TrimPrefix(token, "lang-")
 		}
 	}
 	return ""
