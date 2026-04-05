@@ -168,12 +168,12 @@ tasks:
       - task: build
 
   install-cli:
-    desc: Install CLI to system
+    desc: Build and symlink CLI to $GOPATH/bin
     deps:
-      - build-cli
+      - build
     cmds:
-      - sudo cp {{.GOBIN}}/{{.BINARY_NAME}} /usr/local/bin/{{.BINARY_NAME}}
-      - echo "{{.BINARY_NAME}} CLI installed to /usr/local/bin/{{.BINARY_NAME}}"
+      - ln -sf {{.GOBIN}}/{{.BINARY_NAME}} $(go env GOPATH)/bin/{{.BINARY_NAME}}
+      - echo "{{.BINARY_NAME}} symlinked to $(go env GOPATH)/bin/{{.BINARY_NAME}}"
 
   snapshot:
     desc: Test release build locally
