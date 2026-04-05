@@ -2,6 +2,7 @@ package standardize
 
 import (
 	"cmp"
+	"html"
 	"log/slog"
 	"regexp"
 	"slices"
@@ -367,8 +368,13 @@ func flattenWrapperElements(element *goquery.Selection, _ *goquery.Document, deb
 			isBlockChild := slices.Contains(blockElements, childTag)
 
 			if isBlockChild && !shouldPreserveElement(child) {
+				// Build opening tag preserving child's attributes
+				var attrStr strings.Builder
+				for _, a := range child.Nodes[0].Attr {
+					attrStr.WriteString(" " + a.Key + `="` + html.EscapeString(a.Val) + `"`)
+				}
 				childHTML, _ := child.Html()
-				el.ReplaceWithHtml("<" + childTag + ">" + childHTML + "</" + childTag + ">")
+				el.ReplaceWithHtml("<" + childTag + attrStr.String() + ">" + childHTML + "</" + childTag + ">")
 				processedCount++
 				return true
 			}

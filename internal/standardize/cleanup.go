@@ -2,10 +2,17 @@ package standardize
 
 import (
 	"log/slog"
+	"regexp"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/kaptinlin/defuddle-go/internal/constants"
+	"golang.org/x/net/html"
+)
+
+var (
+	whiteSpacePreRe   = regexp.MustCompile(`white-space\s*:\s*pre`)
+	permalinkSymbolRe = regexp.MustCompile(`^[#¶§🔗]$`)
 )
 
 // stripUnwantedAttributes removes unwanted attributes from elements
@@ -99,10 +106,13 @@ func stripUnwantedAttributes(element *goquery.Selection, debug bool) {
 				preserveAttribute = true
 			}
 
-			// Preserve code block language classes and footnote backref class
-			if attrName == "class" && ((tagName == "code" && strings.HasPrefix(attrValue, "language-")) ||
-				attrValue == "footnote-backref") {
-				preserveAttribute = true
+			// Preserve code block language classes, footnote backref class, and callout classes
+			if attrName == "class" {
+				if (tagName == "code" && strings.HasPrefix(attrValue, "language-")) ||
+					attrValue == "footnote-backref" ||
+					hasCalloutClass(attrValue) {
+					preserveAttribute = true
+				}
 			}
 
 			if preserveAttribute {
@@ -313,23 +323,46 @@ func removeEmptyElements(element *goquery.Selection, debug bool) {
 //		});
 //	}
 func removeTrailingHeadings(element *goquery.Selection) {
-	hasContentAfter := func(el *goquery.Selection) bool {
-		found := false
-		el.NextAll().EachWithBreak(func(_ int, sibling *goquery.Selection) bool {
-			if strings.TrimSpace(sibling.Text()) != "" {
-				found = true
-				return false // stop iteration
+	// hasContentAfter checks siblings (including text nodes) and climbs to parent,
+	// matching the TS implementation that walks all sibling nodes and recurses up.
+	var hasContentAfter func(el *goquery.Selection) bool
+	hasContentAfter = func(el *goquery.Selection) bool {
+		// Check all following sibling nodes (elements AND text nodes)
+		if len(el.Nodes) > 0 {
+			for sib := el.Nodes[0].NextSibling; sib != nil; sib = sib.NextSibling {
+				if sib.Type == html.ElementNode {
+					sibDoc := goquery.NewDocumentFromNode(sib)
+					if strings.TrimSpace(sibDoc.Text()) != "" {
+						return true
+					}
+				} else if sib.Type == html.TextNode {
+					if strings.TrimSpace(sib.Data) != "" {
+						return true
+					}
+				}
 			}
-			return true
-		})
-		return found
+		}
+		// Climb to parent and check its following siblings
+		parent := el.Parent()
+		if parent.Length() > 0 && parent.Nodes[0] != element.Nodes[0] {
+			return hasContentAfter(parent)
+		}
+		return false
 	}
 
-	element.Find("h1, h2, h3, h4, h5, h6").Each(func(_ int, heading *goquery.Selection) {
-		if !hasContentAfter(heading) {
-			heading.Remove()
-		}
+	// Process headings in reverse order (deepest/last first) and break
+	// after finding the first heading with content after it.
+	headings := element.Find("h1, h2, h3, h4, h5, h6")
+	nodes := make([]*goquery.Selection, 0, headings.Length())
+	headings.Each(func(_ int, h *goquery.Selection) {
+		nodes = append(nodes, h)
 	})
+	for i := len(nodes) - 1; i >= 0; i-- {
+		if hasContentAfter(nodes[i]) {
+			break
+		}
+		nodes[i].Remove()
+	}
 }
 
 // stripExtraBrElements removes excessive br elements
@@ -379,4 +412,251 @@ func stripExtraBrElements(element *goquery.Selection) {
 	for _, br := range toRemove {
 		br.Remove()
 	}
+}
+
+// hasCalloutClass checks if a class attribute value contains a callout class (callout or callout-*).
+func hasCalloutClass(classValue string) bool {
+	for _, c := range strings.Fields(classValue) {
+		if c == "callout" || strings.HasPrefix(c, "callout-") {
+			return true
+		}
+	}
+	return false
+}
+
+// removeHtmlComments removes all HTML comment nodes from the element tree.
+func removeHtmlComments(element *goquery.Selection) {
+	if element.Length() == 0 {
+		return
+	}
+	removeCommentsFromNode(element.Get(0))
+}
+
+func removeCommentsFromNode(n *html.Node) {
+	var toRemove []*html.Node
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type == html.CommentNode {
+			toRemove = append(toRemove, c)
+		} else {
+			removeCommentsFromNode(c)
+		}
+	}
+	for _, c := range toRemove {
+		n.RemoveChild(c)
+	}
+}
+
+// unwrapBareSpans removes attribute-free <span> elements, keeping their children.
+// Processes deepest-first so nested bare spans collapse in one pass.
+func unwrapBareSpans(element *goquery.Selection) {
+	spans := element.Find("span")
+	if spans.Length() == 0 {
+		return
+	}
+
+	// Collect in reverse order (deepest first)
+	collected := make([]*html.Node, 0, spans.Length())
+	spans.Each(func(_ int, s *goquery.Selection) {
+		collected = append(collected, s.Get(0))
+	})
+	for i, j := 0, len(collected)-1; i < j; i, j = i+1, j-1 {
+		collected[i], collected[j] = collected[j], collected[i]
+	}
+
+	for _, node := range collected {
+		if node.Parent == nil {
+			continue
+		}
+		// Skip spans with attributes
+		if len(node.Attr) > 0 {
+			continue
+		}
+		// Move children before the span, then remove the span
+		parent := node.Parent
+		for node.FirstChild != nil {
+			child := node.FirstChild
+			node.RemoveChild(child)
+			parent.InsertBefore(child, node)
+		}
+		parent.RemoveChild(node)
+	}
+}
+
+// unwrapSpecialLinks fixes problematic link structures:
+// 1. Removes <a> inside <code> (markdown can't render links in backtick code)
+// 2. Unwraps javascript: links (keep text, remove the link)
+// 3. Restructures block-wrapping links containing headings into heading-wrapping links
+// 4. Unwraps anchor links that wrap headings (clickable section headers)
+func unwrapSpecialLinks(element *goquery.Selection, doc *goquery.Document) {
+	// 1. Unwrap links inside inline code
+	element.Find("code a").Each(func(_ int, a *goquery.Selection) {
+		unwrapSelection(a)
+	})
+
+	// 2. Unwrap javascript: links
+	element.Find(`a[href^="javascript:"]`).Each(func(_ int, a *goquery.Selection) {
+		unwrapSelection(a)
+	})
+
+	// 3. Restructure block-wrapping links containing headings
+	element.Find("a").Each(func(_ int, link *goquery.Selection) {
+		href, exists := link.Attr("href")
+		if !exists || href == "" || strings.HasPrefix(href, "#") {
+			return
+		}
+		// Find a heading child
+		var headingNode *html.Node
+		link.Children().Each(func(_ int, child *goquery.Selection) {
+			tag := strings.ToUpper(goquery.NodeName(child))
+			if len(tag) == 2 && tag[0] == 'H' && tag[1] >= '1' && tag[1] <= '6' {
+				headingNode = child.Get(0)
+			}
+		})
+		if headingNode == nil {
+			return
+		}
+
+		// Create inner <a> with the href, move heading's children into it
+		innerLink := &html.Node{
+			Type: html.ElementNode,
+			Data: "a",
+			Attr: []html.Attribute{{Key: "href", Val: href}},
+		}
+		for headingNode.FirstChild != nil {
+			child := headingNode.FirstChild
+			headingNode.RemoveChild(child)
+			innerLink.AppendChild(child)
+		}
+		headingNode.AppendChild(innerLink)
+
+		// Unwrap the outer <a>
+		unwrapSelection(link)
+	})
+
+	// 4. Unwrap anchor links wrapping headings
+	element.Find(`a[href^="#"]`).Each(func(_ int, link *goquery.Selection) {
+		if link.Find("h1, h2, h3, h4, h5, h6").Length() > 0 {
+			unwrapSelection(link)
+		}
+	})
+}
+
+// unwrapSelection replaces a selection with its children (equivalent to TS unwrapElement).
+func unwrapSelection(sel *goquery.Selection) {
+	if sel.Length() == 0 {
+		return
+	}
+	node := sel.Get(0)
+	parent := node.Parent
+	if parent == nil {
+		return
+	}
+	for node.FirstChild != nil {
+		child := node.FirstChild
+		node.RemoveChild(child)
+		parent.InsertBefore(child, node)
+	}
+	parent.RemoveChild(node)
+}
+
+// removeHeadingAnchors removes permalink anchors from inside heading elements.
+// Handles symbols (#, ¶, §, 🔗), empty links, and class-based anchors.
+func removeHeadingAnchors(element *goquery.Selection) {
+	element.Find("h1 a, h2 a, h3 a, h4 a, h5 a, h6 a").Each(func(_ int, link *goquery.Selection) {
+		if isPermalinkAnchor(link) {
+			link.Remove()
+		}
+	})
+}
+
+func isPermalinkAnchor(link *goquery.Selection) bool {
+	if goquery.NodeName(link) != "a" {
+		return false
+	}
+	href := link.AttrOr("href", "")
+	title := strings.ToLower(link.AttrOr("title", ""))
+	className := strings.ToLower(link.AttrOr("class", ""))
+	text := strings.TrimSpace(link.Text())
+
+	if strings.HasPrefix(href, "#") || strings.Contains(href, "#") {
+		return true
+	}
+	if strings.Contains(title, "permalink") {
+		return true
+	}
+	if strings.Contains(className, "permalink") || strings.Contains(className, "heading-anchor") || strings.Contains(className, "anchor-link") {
+		return true
+	}
+	if permalinkSymbolRe.MatchString(text) {
+		return true
+	}
+	return false
+}
+
+// removeObsoleteElements removes <object>, <embed>, and <applet> elements.
+func removeObsoleteElements(element *goquery.Selection) {
+	element.Find("object, embed, applet").Remove()
+}
+
+// removeOrphanedDividers removes leading and trailing <hr> elements,
+// skipping whitespace-only text nodes.
+func removeOrphanedDividers(element *goquery.Selection) {
+	if element.Length() == 0 {
+		return
+	}
+	node := element.Get(0)
+
+	// Remove leading <hr> elements
+	for {
+		n := node.FirstChild
+		for n != nil && n.Type == html.TextNode && strings.TrimSpace(n.Data) == "" {
+			n = n.NextSibling
+		}
+		if n != nil && n.Type == html.ElementNode && strings.EqualFold(n.Data, "hr") {
+			node.RemoveChild(n)
+		} else {
+			break
+		}
+	}
+
+	// Remove trailing <hr> elements
+	for {
+		n := node.LastChild
+		for n != nil && n.Type == html.TextNode && strings.TrimSpace(n.Data) == "" {
+			n = n.PrevSibling
+		}
+		if n != nil && n.Type == html.ElementNode && strings.EqualFold(n.Data, "hr") {
+			node.RemoveChild(n)
+		} else {
+			break
+		}
+	}
+}
+
+// wrapPreformattedCode wraps <code> elements with white-space:pre style
+// in <pre> elements if they aren't already inside one.
+func wrapPreformattedCode(element *goquery.Selection) {
+	element.Find("code").Each(func(_ int, code *goquery.Selection) {
+		// Skip if already inside a <pre>
+		if code.Closest("pre").Length() > 0 {
+			return
+		}
+		style := code.AttrOr("style", "")
+		if !whiteSpacePreRe.MatchString(style) {
+			return
+		}
+		// Wrap in <pre>
+		codeNode := code.Get(0)
+		parent := codeNode.Parent
+		if parent == nil {
+			return
+		}
+		pre := &html.Node{
+			Type: html.ElementNode,
+			Data: "pre",
+		}
+		parent.InsertBefore(pre, codeNode)
+		parent.RemoveChild(codeNode)
+		pre.AppendChild(codeNode)
+	})
 }
