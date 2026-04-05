@@ -243,7 +243,8 @@ func (c *ClaudeExtractor) ExtractMessages() []ConversationMessage {
 
 		testid, hasTestid := article.Attr("data-testid")
 
-		if hasTestid {
+		switch {
+		case hasTestid:
 			// Only handle user messages via data-testid (TS skips assistant-message testid)
 			if testid == "user-message" {
 				role = "you"
@@ -252,7 +253,7 @@ func (c *ClaudeExtractor) ExtractMessages() []ConversationMessage {
 				// Skip non-user-message testid elements
 				return
 			}
-		} else if article.HasClass("font-claude-response") {
+		case article.HasClass("font-claude-response"):
 			// Claude's response identified by class
 			role = "assistant"
 			assistantBody := article.Find(".standard-markdown").First()
@@ -261,7 +262,7 @@ func (c *ClaudeExtractor) ExtractMessages() []ConversationMessage {
 			} else {
 				content, _ = article.Html()
 			}
-		} else {
+		default:
 			return
 		}
 

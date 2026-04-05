@@ -1,4 +1,4 @@
-module github.com/kaptinlin/defuddle-go
+module github.com/dotcommander/defuddle
 
 go 1.26.1
 

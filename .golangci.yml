@@ -1,4 +1,4 @@
-version: 2
+version: "2"
 
 run:
   timeout: 5m
@@ -29,31 +29,55 @@ linters:
     - nolintlint
     - promlinter
 
+  settings:
+    exhaustive:
+      default-signifies-exhaustive: true
+    errcheck:
+      exclude-functions:
+        - (strings.Builder).WriteString
+        - (strings.Builder).Write
+        - (*strings.Builder).WriteString
+        - (*strings.Builder).Write
+        - (io.Writer).Write
+        - (net/http.ResponseWriter).Write
+        - fmt.Fprintf
+        - fmt.Sscanf
+
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - gosec
+          - noctx
+          - revive
+      - path: examples/
+        linters:
+          - revive
+          - gosec
+      - path: cmd/
+        linters:
+          - revive
+      - text: "unused-parameter"
+        linters:
+          - revive
+      - text: "var-naming"
+        linters:
+          - revive
+      - text: "redefines-builtin-id"
+        linters:
+          - revive
+      - text: "package-comments"
+        linters:
+          - revive
+      - path: internal/debug/
+        text: "var-naming"
+        linters:
+          - revive
+      - path: internal/markdown/
+        linters:
+          - errcheck
+          - gosec
+
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - gosec
-        - noctx
-        - revive
-    - path: examples/
-      linters:
-        - revive
-        - gosec
-    - path: cmd/
-      linters:
-        - revive
-    - text: "unused-parameter"
-      linters:
-        - revive
-    - text: "var-naming"
-      linters:
-        - revive
-    - text: "redefines-builtin-id"
-      linters:
-        - revive
-    - text: "package-comments"
-      linters:
-        - revive

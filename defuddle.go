@@ -14,16 +14,16 @@ import (
 	"golang.org/x/net/html/charset"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/kaptinlin/defuddle-go/extractors"
-	"github.com/kaptinlin/defuddle-go/internal/constants"
-	"github.com/kaptinlin/defuddle-go/internal/debug"
-	"github.com/kaptinlin/defuddle-go/internal/markdown"
-	"github.com/kaptinlin/defuddle-go/internal/metadata"
-	"github.com/kaptinlin/defuddle-go/internal/removals"
-	"github.com/kaptinlin/defuddle-go/internal/scoring"
-	"github.com/kaptinlin/defuddle-go/internal/standardize"
-	"github.com/kaptinlin/defuddle-go/internal/text"
-	"github.com/kaptinlin/defuddle-go/internal/urlutil"
+	"github.com/dotcommander/defuddle/extractors"
+	"github.com/dotcommander/defuddle/internal/constants"
+	"github.com/dotcommander/defuddle/internal/debug"
+	"github.com/dotcommander/defuddle/internal/markdown"
+	"github.com/dotcommander/defuddle/internal/metadata"
+	"github.com/dotcommander/defuddle/internal/removals"
+	"github.com/dotcommander/defuddle/internal/scoring"
+	"github.com/dotcommander/defuddle/internal/standardize"
+	"github.com/dotcommander/defuddle/internal/text"
+	"github.com/dotcommander/defuddle/internal/urlutil"
 	"github.com/kaptinlin/requests"
 )
 
@@ -169,7 +169,7 @@ func ParseFromURL(ctx context.Context, url string, options *Options) (*Result, e
 	client := options.Client
 	if client == nil {
 		client = requests.New(
-			requests.WithUserAgent("Mozilla/5.0 (compatible; Defuddle/1.0; +https://github.com/kaptinlin/defuddle-go)"),
+			requests.WithUserAgent("Mozilla/5.0 (compatible; Defuddle/1.0; +https://github.com/dotcommander/defuddle)"),
 			requests.WithTimeout(10*time.Second),
 		)
 	}

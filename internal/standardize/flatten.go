@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/kaptinlin/defuddle-go/internal/constants"
+	"github.com/dotcommander/defuddle/internal/constants"
 )
 
 var (

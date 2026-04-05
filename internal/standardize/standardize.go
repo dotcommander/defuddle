@@ -4,8 +4,8 @@ package standardize
 
 import (
 	"github.com/PuerkitoBio/goquery"
-	"github.com/kaptinlin/defuddle-go/internal/elements"
-	"github.com/kaptinlin/defuddle-go/internal/metadata"
+	"github.com/dotcommander/defuddle/internal/elements"
+	"github.com/dotcommander/defuddle/internal/metadata"
 )
 
 // Content standardizes and cleans up the main content element

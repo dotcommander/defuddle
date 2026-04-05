@@ -7,9 +7,9 @@ import (
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/kaptinlin/defuddle-go/internal/constants"
-	"github.com/kaptinlin/defuddle-go/internal/scoring"
-	"github.com/kaptinlin/defuddle-go/internal/text"
+	"github.com/dotcommander/defuddle/internal/constants"
+	"github.com/dotcommander/defuddle/internal/scoring"
+	"github.com/dotcommander/defuddle/internal/text"
 )
 
 // findMainContent finds the main content element

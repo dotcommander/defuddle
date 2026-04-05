@@ -236,7 +236,7 @@ func renderFigure(ctx converter.Context, w converter.Writer, n *html.Node) conve
 		caption = strings.TrimSpace(capBuf.String())
 	}
 
-	w.WriteString(fmt.Sprintf("\n![%s](%s)\n", alt, src))
+	fmt.Fprintf(w, "\n![%s](%s)\n", alt, src)
 	if caption != "" {
 		w.WriteString("\n" + caption + "\n")
 	}
@@ -532,7 +532,7 @@ func renderComplexLink(ctx converter.Context, w converter.Writer, n *html.Node) 
 		w.WriteString("\n\n")
 		w.WriteString("[View original](" + href + ")")
 		if title := getAttr(n, "title"); title != "" {
-			w.WriteString(fmt.Sprintf(` "%s"`, title))
+			fmt.Fprintf(w, ` "%s"`, title)
 		}
 	}
 	return converter.RenderSuccess

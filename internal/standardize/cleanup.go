@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/kaptinlin/defuddle-go/internal/constants"
+	"github.com/dotcommander/defuddle/internal/constants"
 	"golang.org/x/net/html"
 )
 
@@ -330,15 +330,18 @@ func removeTrailingHeadings(element *goquery.Selection) {
 		// Check all following sibling nodes (elements AND text nodes)
 		if len(el.Nodes) > 0 {
 			for sib := el.Nodes[0].NextSibling; sib != nil; sib = sib.NextSibling {
-				if sib.Type == html.ElementNode {
+				switch sib.Type {
+				case html.ElementNode:
 					sibDoc := goquery.NewDocumentFromNode(sib)
 					if strings.TrimSpace(sibDoc.Text()) != "" {
 						return true
 					}
-				} else if sib.Type == html.TextNode {
+				case html.TextNode:
 					if strings.TrimSpace(sib.Data) != "" {
 						return true
 					}
+				default:
+					// Ignore comment, doctype, and error nodes
 				}
 			}
 		}

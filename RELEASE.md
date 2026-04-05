@@ -12,7 +12,7 @@ Defuddle Go uses automated releases through GitHub Actions and GoReleaser. The p
 
 The release process consists of:
 
-1. **Testing**: Runs comprehensive tests on Go 1.25
+1. **Testing**: Runs comprehensive tests on Go 1.26
 2. **Building**: Cross-compiles binaries for multiple platforms (Linux, macOS, Windows)
 3. **Packaging**: Creates archives with appropriate formats for each platform
 4. **Publishing**: Releases to GitHub with generated changelog and assets
@@ -48,7 +48,7 @@ Defuddle Go follows [Semantic Versioning](https://semver.org/) (SemVer):
 1. **Repository Access**: Write access to the repository
 2. **Clean State**: All changes committed and pushed to main branch
 3. **Tests Passing**: All CI tests must pass
-4. **Version Updated**: Update version in `cmd/main.go` if needed
+4. **Version Updated**: Update version in `cmd/defuddle/main.go` if needed
 
 ### Release Steps
 
@@ -69,7 +69,7 @@ task build-cli
 
 #### 2. Update Version (if needed)
 
-Update the version in `cmd/main.go`:
+Update the version in `cmd/defuddle/main.go`:
 
 ```go
 var (
@@ -80,7 +80,7 @@ var (
 Commit the version change:
 
 ```bash
-git add cmd/main.go
+git add cmd/defuddle/main.go
 git commit -m "feat: bump version to v0.2.0"
 git push origin main
 ```
@@ -89,7 +89,7 @@ git push origin main
 
 ```bash
 # Create the release tag
-make tag VERSION=v0.2.0
+task tag VERSION=v0.2.0
 ```
 
 This command will:
@@ -99,8 +99,8 @@ This command will:
 
 #### 4. Monitor Release
 
-1. Check the [Actions tab](https://github.com/kaptinlin/defuddle-go/actions) for the release workflow
-2. Verify the release appears in [Releases](https://github.com/kaptinlin/defuddle-go/releases)
+1. Check the [Actions tab](https://github.com/dotcommander/defuddle/actions) for the release workflow
+2. Verify the release appears in [Releases](https://github.com/dotcommander/defuddle/releases)
 3. Test one of the pre-built binaries
 
 ### Alternative Manual Tag Creation
@@ -123,13 +123,13 @@ Test the release build locally without publishing:
 
 ```bash
 # Install GoReleaser if not already installed
-make install-goreleaser
+task install-goreleaser
 
 # Test release configuration
-make release-test
+task snapshot
 
 # Create a snapshot release
-make release-snapshot
+task snapshot
 ```
 
 ### Pre-Release Testing
@@ -150,7 +150,7 @@ GoReleaser will automatically mark versions with `-alpha`, `-beta`, `-rc` as pre
 
 - [ ] All tests passing locally (`task test`)
 - [ ] CLI builds successfully (`task build-cli`)
-- [ ] Version updated in `cmd/main.go` (if needed)
+- [ ] Version updated in `cmd/defuddle/main.go` (if needed)
 - [ ] CHANGELOG.md updated (optional, auto-generated)
 - [ ] README.md examples tested
 - [ ] No breaking changes (or properly documented)
@@ -169,7 +169,7 @@ GoReleaser will automatically mark versions with `-alpha`, `-beta`, `-rc` as pre
 ### Release Workflow Fails
 
 1. **Check Action Logs**: Review the GitHub Actions logs for errors
-2. **Test Locally**: Run `make release-test` to check GoReleaser configuration
+2. **Test Locally**: Run `task snapshot` to check GoReleaser configuration
 3. **Tag Issues**: Ensure tag follows `v*` pattern and is properly annotated
 
 ### Missing Assets

@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/kaptinlin/defuddle-go/internal/constants"
-	textutil "github.com/kaptinlin/defuddle-go/internal/text"
+	"github.com/dotcommander/defuddle/internal/constants"
+	textutil "github.com/dotcommander/defuddle/internal/text"
 )
 
 // Pre-compiled regex patterns for content scoring.

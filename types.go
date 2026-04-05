@@ -1,9 +1,9 @@
 package defuddle
 
 import (
-	"github.com/kaptinlin/defuddle-go/internal/debug"
-	"github.com/kaptinlin/defuddle-go/internal/elements"
-	"github.com/kaptinlin/defuddle-go/internal/metadata"
+	"github.com/dotcommander/defuddle/internal/debug"
+	"github.com/dotcommander/defuddle/internal/elements"
+	"github.com/dotcommander/defuddle/internal/metadata"
 	"github.com/kaptinlin/requests"
 )
 

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"log"
 
-	defuddle "github.com/kaptinlin/defuddle-go"
+	defuddle "github.com/dotcommander/defuddle"
 )
 
 func main() {

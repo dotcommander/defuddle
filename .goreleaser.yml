@@ -97,8 +97,8 @@ changelog:
 
 release:
   github:
-    owner: kaptinlin
-    name: defuddle-go
+    owner: dotcommander
+    name: defuddle
   prerelease: auto
   mode: replace
   header: |
@@ -113,12 +113,12 @@ release:
 
     #### Install with Go
     ```bash
-    go install github.com/kaptinlin/defuddle-go/cmd/defuddle@{{ .Tag }}
+    go install github.com/dotcommander/defuddle/cmd/defuddle@{{ .Tag }}
     ```
 
     #### Install from Source
     ```bash
-    git clone https://github.com/kaptinlin/defuddle-go.git
+    git clone https://github.com/dotcommander/defuddle.git
     cd defuddle-go
     make build-cli
     ```
@@ -140,7 +140,7 @@ release:
     defuddle parse https://example.com/article --property title
     ```
 
-    **Full Changelog**: https://github.com/kaptinlin/defuddle-go/compare/{{ .PreviousTag }}...{{ .Tag }}
+    **Full Changelog**: https://github.com/dotcommander/defuddle/compare/{{ .PreviousTag }}...{{ .Tag }}
 
 # modelines, feel free to remove those if you don't want/use them:
 # yaml-language-server: $schema=https://goreleaser.com/static/schema.json

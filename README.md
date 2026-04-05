@@ -6,7 +6,7 @@
 <a href="https://github.com/dotcommander/defuddle/releases"><img src="https://img.shields.io/github/v/release/dotcommander/defuddle" alt="Release"></a>
 <a href="https://github.com/dotcommander/defuddle/actions"><img src="https://github.com/dotcommander/defuddle/workflows/Test/badge.svg" alt="Tests"></a>
 <a href="https://goreportcard.com/report/github.com/dotcommander/defuddle"><img src="https://goreportcard.com/badge/github.com/dotcommander/defuddle" alt="Go Report Card"></a>
-<a href="https://pkg.go.dev/github.com/kaptinlin/defuddle-go"><img src="https://pkg.go.dev/badge/github.com/kaptinlin/defuddle-go.svg" alt="Go Reference"></a>
+<a href="https://pkg.go.dev/github.com/dotcommander/defuddle"><img src="https://pkg.go.dev/badge/github.com/dotcommander/defuddle.svg" alt="Go Reference"></a>
 </p>
 
 ## Introduction
@@ -22,7 +22,7 @@ Available as both a **Go library** and a drop-in **CLI tool** compatible with th
 Download a pre-built binary from the [releases page](https://github.com/dotcommander/defuddle/releases), or install with Go:
 
 ```bash
-go install github.com/kaptinlin/defuddle-go/cmd/defuddle@latest
+go install github.com/dotcommander/defuddle/cmd/defuddle@latest
 ```
 
 ### Library
@@ -30,7 +30,7 @@ go install github.com/kaptinlin/defuddle-go/cmd/defuddle@latest
 Require Defuddle Go using `go get`:
 
 ```bash
-go get github.com/kaptinlin/defuddle-go
+go get github.com/dotcommander/defuddle
 ```
 
 > Requires Go 1.26 or higher.
@@ -187,11 +187,13 @@ opts := &defuddle.Options{
     ContentSelector:  "",    // CSS selector override for main content
     URL:              "",    // Source URL (used for link resolution and domain detection)
 
-    // Removal controls
-    RemoveExactSelectors:   true, // Remove known clutter (ads, nav, social buttons)
-    RemovePartialSelectors: true, // Remove probable clutter (class/id pattern matching)
-    RemoveHiddenElements:   true, // Remove display:none and hidden elements
-    RemoveContentPatterns:  true, // Remove boilerplate (breadcrumbs, related posts, etc.)
+    // Removal controls — pointer bools default to true when nil.
+    // Use defuddle.PtrBool(false) to explicitly disable.
+    RemoveExactSelectors:   nil, // Remove known clutter (ads, nav, social buttons)
+    RemovePartialSelectors: nil, // Remove probable clutter (class/id pattern matching)
+    RemoveHiddenElements:   nil, // Remove display:none and hidden elements
+    RemoveContentPatterns:  nil, // Remove boilerplate (breadcrumbs, related posts, etc.)
+    RemoveLowScoring:       nil, // Remove low-scoring non-content blocks
     RemoveImages:           false,// Strip all images from output
 
     // Element processing

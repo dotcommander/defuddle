@@ -7,8 +7,8 @@ import (
 	"log"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/kaptinlin/defuddle-go"
-	"github.com/kaptinlin/defuddle-go/extractors"
+	"github.com/dotcommander/defuddle"
+	"github.com/dotcommander/defuddle/extractors"
 )
 
 // CustomBlogExtractor implements a custom extractor for blog sites

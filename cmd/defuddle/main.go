@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kaptinlin/defuddle-go"
-	"github.com/kaptinlin/defuddle-go/extractors"
+	"github.com/dotcommander/defuddle"
+	"github.com/dotcommander/defuddle/extractors"
 	"github.com/spf13/cobra"
 )
 

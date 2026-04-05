@@ -9,7 +9,7 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"golang.org/x/net/html"
 
-	textutil "github.com/kaptinlin/defuddle-go/internal/text"
+	textutil "github.com/dotcommander/defuddle/internal/text"
 )
 
 // Pre-compiled regex patterns for content-pattern removal.

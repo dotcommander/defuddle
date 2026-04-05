@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/kaptinlin/defuddle-go/extractors"
+	"github.com/dotcommander/defuddle/extractors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
