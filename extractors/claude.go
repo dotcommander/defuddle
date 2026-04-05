@@ -241,21 +241,27 @@ func (c *ClaudeExtractor) ExtractMessages() []ConversationMessage {
 		var role string
 		var content string
 
-		// Check if element has data-testid attribute
-		testid, exists := article.Attr("data-testid")
-		if !exists {
-			return
-		}
+		testid, hasTestid := article.Attr("data-testid")
 
-		switch testid {
-		case "user-message":
-			role = "you"
-			content, _ = article.Html()
-		case "assistant-message":
+		if hasTestid {
+			// Only handle user messages via data-testid (TS skips assistant-message testid)
+			if testid == "user-message" {
+				role = "you"
+				content, _ = article.Html()
+			} else {
+				// Skip non-user-message testid elements
+				return
+			}
+		} else if article.HasClass("font-claude-response") {
+			// Claude's response identified by class
 			role = "assistant"
-			content, _ = article.Html()
-		default:
-			slog.Debug("Skipping non-message element", "testid", testid, "index", i)
+			assistantBody := article.Find(".standard-markdown").First()
+			if assistantBody.Length() > 0 {
+				content, _ = assistantBody.Html()
+			} else {
+				content, _ = article.Html()
+			}
+		} else {
 			return
 		}
 

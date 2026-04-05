@@ -329,7 +329,7 @@ func (r *Registry) initializeBuiltins() {
 	r.Register(ExtractorMapping{
 		Patterns: []any{
 			"gemini.google.com",
-			regexp.MustCompile(`^https?://gemini\.google\.com/.*`),
+			regexp.MustCompile(`^https?://gemini\.google\.com/app/.*`),
 		},
 		Extractor: func(doc *goquery.Document, url string, schemaOrgData any) BaseExtractor {
 			return NewGeminiExtractor(doc, url, schemaOrgData)
