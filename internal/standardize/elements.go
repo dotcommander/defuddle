@@ -54,6 +54,35 @@ type StandardizationRule struct {
 //		}
 //	];
 var elementStandardizationRules = []StandardizationRule{
+	// Convert callout asides to blockquotes with data-callout attribute
+	{
+		Selector: `aside[class*="callout"]`,
+		Element:  "blockquote",
+		Transform: func(el *goquery.Selection, _ *goquery.Document) *goquery.Selection {
+			// Extract callout type from class (e.g., "callout-tip" → "tip")
+			calloutType := "note"
+			if class, exists := el.Attr("class"); exists {
+				for _, c := range strings.Fields(class) {
+					if strings.HasPrefix(c, "callout-") {
+						calloutType = strings.TrimPrefix(c, "callout-")
+						break
+					}
+				}
+			}
+
+			// Get content from .callout-content div, or fall back to whole aside
+			content := el.Find(".callout-content").First()
+			var inner string
+			if content.Length() > 0 {
+				inner, _ = content.Html()
+			} else {
+				inner, _ = el.Html()
+			}
+
+			el.ReplaceWithHtml(`<blockquote data-callout="` + calloutType + `">` + inner + `</blockquote>`)
+			return nil
+		},
+	},
 	// Convert divs with paragraph role to actual paragraphs
 	{
 		Selector: `div[data-testid^="paragraph"], div[role="paragraph"]`,

@@ -2,6 +2,11 @@
 // It includes CSS selectors for finding main content, removing unwanted elements, and processing footnotes.
 package constants
 
+import (
+	"regexp"
+	"strings"
+)
+
 // EntryPointElements are the elements that will be used to find the main content
 // JavaScript original code:
 // export const ENTRY_POINT_ELEMENTS = [
@@ -26,18 +31,22 @@ package constants
 var EntryPointElements = []string{
 	"#post",
 	".post-content",
+	".post-body",
 	".article-content",
 	"#article-content",
 	".article_post",
 	".article-wrapper",
 	".entry-content",
 	".content-article",
+	".instapaper_body",
 	".post",
 	".markdown-body",
 	"article",
 	`[role="article"]`,
 	"main",
 	`[role="main"]`,
+	".article-body",
+	"#content",
 	"body", // ensures there is always a match
 }
 
@@ -99,6 +108,9 @@ var ExactSelectors = []string{
 	"meta",
 	"link",
 
+	// empty media elements (src set by JS at runtime, not in raw HTML)
+	`audio:not([src])`,
+
 	// ads
 	`.ad:not([class*="gradient"])`,
 	`[class^="ad-" i]`,
@@ -116,8 +128,17 @@ var ExactSelectors = []string{
 	`[id="comments" i]`,
 	`[id="comment" i]`,
 
+	// cover images
+	`div[class*="cover-"]`,
+	`div[id*="cover-"]`,
+
+	// breadcrumbs (custom web component tag)
+	"ads-breadcrumbs",
+
 	// header, nav
-	"header",
+	// Exclude headers that contain paragraph text — some sites (e.g. Webflow blogs)
+	// use <header> as the main content wrapper rather than a navigation container.
+	"header:not(:has(p))",
 	`.header:not(.banner)`,
 	"#header",
 	"#Header",
@@ -126,13 +147,13 @@ var ExactSelectors = []string{
 	"nav",
 	".navigation",
 	"#navigation",
-	".hero",
+	// ".hero", // see issue #132 — too broad
 	`[role="navigation" i]`,
 	`[role="dialog" i]`,
 	`[role*="complementary" i]`,
 	`[class*="pagination" i]`,
 	".menu",
-	"#menu",
+	// "#menu", // see issue #106 — too broad
 	"#siteSub",
 	".previous",
 
@@ -149,6 +170,7 @@ var ExactSelectors = []string{
 	".meta",
 	".tags",
 	"#tags",
+	`[rel="tag"]`,
 	".toc",
 	".Toc",
 	"#toc",
@@ -157,12 +179,16 @@ var ExactSelectors = []string{
 	"#title",
 	"#Title",
 	"#articleTag",
-	`[href*="/category"]`,
-	`[href*="/categories"]`,
+	// "[href*=\"/category\"]", // see issue #131
+	// "[href*=\"/categories\"]", // see issue #131
 	`[href*="/tag/"]`,
 	`[href*="/tags/"]`,
-	`[href*="/topics"]`,
-	`[href*="author"]`,
+	// "[href*=\"/topics\"]", // see issue #131
+	`[href*="/author/"]`,
+	`[href*="/author?"]`,
+	`[href$="/author"]`,
+	`a[href*="copyright.com"]`,
+	`a[href*="google.com/preferences"]`,
 	`[href*="#toc"]`,
 	`[href="#top"]`,
 	`[href="#Top"]`,
@@ -178,7 +204,7 @@ var ExactSelectors = []string{
 
 	// inputs, forms, elements
 	".aside",
-	"aside",
+	`aside:not([class*="callout"])`,
 	"button",
 	"canvas",
 	"date",
@@ -189,23 +215,24 @@ var ExactSelectors = []string{
 	"label",
 	"option",
 	"select",
+	`[role="listbox"]`,
+	`[role="option"]`,
 	"textarea",
-	"time",
-	"relative-time",
+	// "time", // see issue #136 — removes all time elements
+	// "relative-time", // see issue #136
 
 	// hidden
 	"[hidden]",
 	`[aria-hidden="true"]:not([class*="math"])`,
-	`[style*="display: none"]:not([class*="math"])`,
-	`[style*="display:none"]:not([class*="math"])`,
-	`[style*="visibility: hidden"]`,
-	`[style*="visibility:hidden"]`,
+	// Note: [style*="display: none"] removed — substring match causes false positives
+	// with CSS custom properties. The removeHiddenElements step handles inline style
+	// detection with proper regex.
 	".hidden",
 	".invisible",
 
 	// iframes
 	"instaread-player",
-	`iframe:not([src*="youtube"]):not([src*="youtu.be"]):not([src*="vimeo"]):not([src*="twitter"]):not([src*="x.com"]):not([src*="datawrapper"])`,
+	`iframe:not([src])`,
 
 	// logos
 	`[class="logo" i]`,
@@ -226,7 +253,7 @@ var ExactSelectors = []string{
 	`[class*="clickable-icon" i]`,
 	`li span[class*="ltx_tag" i][class*="ltx_tag_item" i]`,
 	`a[href^="#"][class*="anchor" i]`,
-	`a[href^="#"][class*="ref" i]`,
+	`a[href^="#"][class*="ref" i]:not(.ltx_ref)`,
 
 	// link lists
 	`[data-container*="most-viewed" i]`,
@@ -236,27 +263,18 @@ var ExactSelectors = []string{
 	".Sidebar",
 	"#sidebar",
 	"#Sidebar",
+	"#side-bar",
 	"#sitesub",
 
-	// skip links - expanded based on upstream changes
+	// skip links
 	`[data-link-name*="skip" i]`,
 	`[aria-label*="skip" i]`,
-	`[aria-label*="Skip" i]`,
-	"#skip-link",
-	".skip-link",
-	".skip-to-content",
-	"#skip-to-content",
-	`[href="#content"]`,
-	`[href="#main-content"]`,
-	`[href="#main"]`,
-	`[href^="#skip"]`,
-	`a[href^="#"][class*="skip"]`,
-	`a[aria-label*="skip to"]`,
-	`a[title*="skip to"]`,
 
 	// other
 	".copyright",
 	"#copyright",
+	".licensebox",
+	"#page-info",
 	"#rss",
 	"#feed",
 	".gutter",
@@ -264,7 +282,6 @@ var ExactSelectors = []string{
 	"#NYT_ABOVE_MAIN_CONTENT_REGION",
 	`[data-testid="photoviewer-children-figure"] > span`, // New York Times
 	"table.infobox",
-	`.pencraft:not(.pc-display-contents)`,            // Substack
 	`[data-optimizely="related-articles-section" i]`, // The Economist
 	`[data-orientation="vertical"]`,
 
@@ -289,6 +306,7 @@ var ExactSelectors = []string{
 var TestAttributes = []string{
 	"class",
 	"id",
+	"data-component",
 	"data-test",
 	"data-testid",
 	"data-test-id",
@@ -930,6 +948,23 @@ func GetPartialSelectors() []string {
 	return PartialSelectors
 }
 
+// partialSelectorRegex is a pre-compiled combined regex for O(n) partial selector matching.
+// Built once at package init from all partial selectors.
+var partialSelectorRegex = compilePartialSelectorRegex()
+
+func compilePartialSelectorRegex() *regexp.Regexp {
+	escaped := make([]string, len(PartialSelectors))
+	for i, s := range PartialSelectors {
+		escaped[i] = regexp.QuoteMeta(strings.ToLower(s))
+	}
+	return regexp.MustCompile(`(?i)` + strings.Join(escaped, "|"))
+}
+
+// GetPartialSelectorRegex returns the pre-compiled combined regex for partial selector matching.
+func GetPartialSelectorRegex() *regexp.Regexp {
+	return partialSelectorRegex
+}
+
 // GetFootnoteInlineReferences returns the footnote inline reference selectors
 func GetFootnoteInlineReferences() []string {
 	return FootnoteInlineReferences
@@ -1060,7 +1095,7 @@ var AllowedEmptyElements = map[string]bool{
 var AllowedAttributes = map[string]bool{
 	"alt": true, "allow": true, "allowfullscreen": true, "aria-label": true, "checked": true,
 	"colspan": true, "controls": true, "data-latex": true, "data-src": true, "data-srcset": true,
-	"data-lang": true, "dir": true, "display": true, "frameborder": true, "headers": true,
+	"data-callout": true, "data-lang": true, "dir": true, "display": true, "frameborder": true, "headers": true,
 	"height": true, "href": true, "lang": true, "role": true, "rowspan": true, "src": true,
 	"srcset": true, "title": true, "type": true, "width": true,
 
