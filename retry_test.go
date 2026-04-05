@@ -141,28 +141,25 @@ func TestNoRetryNeeded(t *testing.T) {
 		"content-rich page should produce > 200 words without retry (got %d words)", result.WordCount)
 }
 
-// TestRetry2xThreshold verifies that Retry 1 is rejected when the improvement
-// is real but less than 2x.  The original (lower word count) result is kept.
-//
-// Setup: the article has ~120 words of clean text.  A div whose class contains
-// a partial-selector token holds ~40 additional words.  Without partial-selector
-// removal the total is ~160 words — 1.33x, below the 2x threshold.
-// Therefore Parse() must keep the original ~120-word result.
-func TestRetry2xThreshold(t *testing.T) {
+// TestRetryNoImprovement verifies that retry 1 is rejected when disabling
+// partial selectors does not change the word count. The sidebar-content div
+// is outside <article> so it is never part of mainContent in either pass.
+// Both passes produce identical word counts → retry rejected (matching TS:
+// retryResult.wordCount > result.wordCount).
+func TestRetryNoImprovement(t *testing.T) {
 	t.Parallel()
 
 	// Main article text: 24 paragraphs × 5 words = 120 words (clean, not matched by selectors).
-	mainContent := wordRepeat("main article body text here", 24)
+	mainArticle := wordRepeat("main article body text here", 24)
 
-	// Extra content in a partial-selector-matched div that is NOT inside the main
-	// article element.  Without partial-selector removal, this div survives and
-	// contributes ~40 words.  120 + 40 = 160 < 120*2 → retry rejected.
-	// "sidebar-content" matches the partial selector "sidebar-content".
-	extraContent := wordRepeat("extra sidebar text word here", 8) // 8 × 5 = 40 words
+	// Extra content in a partial-selector-matched div OUTSIDE the article.
+	// It is never part of mainContent, so removing/keeping the partial selector
+	// has no effect on the final word count.
+	extraContent := wordRepeat("extra sidebar text word here", 8)
 
 	html := `<!DOCTYPE html><html><head><title>Threshold Test</title></head><body>
 <article>
-  <h1>Threshold Test Article</h1>` + mainContent + `</article>
+  <h1>Threshold Test Article</h1>` + mainArticle + `</article>
 <div class="sidebar-content">` + extraContent + `</div>
 </body></html>`
 
@@ -173,11 +170,9 @@ func TestRetry2xThreshold(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
-	// The result should reflect the article content.  Since 160 < 120*2 the retry
-	// is rejected; the word count stays close to the original article word count.
-	// We assert it is below the retry result to confirm the 2x gate fired.
+	// Both passes return the same article content; retry is rejected.
 	assert.Less(t, result.WordCount, 200,
-		"retry should be rejected when improvement is < 2x (got %d words, expected < 200)", result.WordCount)
+		"content outside mainContent should not inflate word count (got %d words)", result.WordCount)
 	assert.Greater(t, result.WordCount, 50,
-		"original article content should still be present (got %d words)", result.WordCount)
+		"article content should still be present (got %d words)", result.WordCount)
 }
