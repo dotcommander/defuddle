@@ -302,90 +302,8 @@ func (d *Defuddle) parseInternal(ctx context.Context, overrideOptions *Options) 
 		d.removeAllImages(d.doc)
 	}
 
-	// Try site-specific extractor first, if there is one
-	url := options.URL
-	extractor := extractors.FindExtractor(d.doc, url, schemaOrgData)
-	if extractor != nil && extractor.CanExtract() {
-		// Inject secondary Defuddle pass for conversation extractors
-		if setter, ok := extractor.(extractors.ContentProcessorSetter); ok {
-			setter.SetContentProcessor(func(html string) (*extractors.ContentProcessResult, error) {
-				tempDoc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
-				if err != nil {
-					return nil, err
-				}
-				tempDefuddle := &Defuddle{rawHTML: html, doc: tempDoc, debugger: d.debugger}
-				tempResult, err := tempDefuddle.parseInternal(ctx, options)
-				if err != nil {
-					return nil, err
-				}
-				return &extractors.ContentProcessResult{
-					Content:   tempResult.Content,
-					WordCount: tempResult.WordCount,
-				}, nil
-			})
-		}
-
-		d.debugger.SetExtractorUsed(extractor.Name())
-		extracted := extractor.Extract()
-		parseTime := time.Since(startTime).Milliseconds()
-
-		// Get site name from extractor variables or use metadata
-		siteName := extractedMetadata.Site
-		if extracted.Variables != nil {
-			if site, exists := extracted.Variables["site"]; exists {
-				siteName = site
-			}
-		}
-
-		// Create extractor type name (remove "Extractor" suffix)
-		extractorType := strings.ToLower(strings.TrimSuffix(extractor.Name(), "Extractor"))
-
-		result := &Result{
-			Metadata: Metadata{
-				Title:         extractedMetadata.Title,
-				Description:   extractedMetadata.Description,
-				Domain:        extractedMetadata.Domain,
-				Favicon:       extractedMetadata.Favicon,
-				Image:         extractedMetadata.Image,
-				ParseTime:     parseTime,
-				Published:     extractedMetadata.Published,
-				Author:        extractedMetadata.Author,
-				Site:          siteName,
-				SchemaOrgData: schemaOrgData,
-				WordCount:     d.countWords(extracted.ContentHTML),
-			},
-			Content:       extracted.ContentHTML,
-			ExtractorType: &extractorType,
-			Variables:     extracted.Variables,
-			MetaTags:      metaTags,
-		}
-
-		// Override metadata from extractor if available
-		if extracted.Variables != nil {
-			if title, exists := extracted.Variables["title"]; exists && title != "" {
-				result.Title = title
-			}
-			if author, exists := extracted.Variables["author"]; exists && author != "" {
-				result.Author = author
-			}
-			if published, exists := extracted.Variables["published"]; exists && published != "" {
-				result.Published = published
-			}
-			if description, exists := extracted.Variables["description"]; exists && description != "" {
-				result.Description = description
-			}
-			if image, exists := extracted.Variables["image"]; exists && image != "" {
-				result.Image = image
-			}
-		}
-
-		// Add debug info if enabled
-		if d.debugger.IsEnabled() {
-			d.debugger.EndTimer("total_parsing")
-			d.debugger.AddProcessingStep("extractor", "Used site-specific extractor: "+extractor.Name(), 1, "")
-			result.DebugInfo = d.debugger.GetInfo()
-		}
-
+	// Try site-specific extractor first
+	if result := d.tryExtractor(ctx, options, extractedMetadata, schemaOrgData, metaTags, startTime); result != nil {
 		return result, nil
 	}
 
@@ -402,14 +320,8 @@ func (d *Defuddle) parseInternal(ctx context.Context, overrideOptions *Options) 
 	// Resolve React SSR streaming placeholders ($RC boundaries)
 	resolveReactStreaming(workingDoc)
 
-	// Evaluate mobile styles and sizes on fresh document
-	mobileStyles := d.evaluateMediaQueries()
-
 	// Find small images in fresh document, excluding lazy-loaded ones
 	smallImages := d.findSmallImages(workingDoc)
-
-	// Apply mobile styles to document
-	d.applyMobileStyles(workingDoc, mobileStyles)
 
 	// Use explicit content selector if provided
 	var mainContent *goquery.Selection
@@ -555,6 +467,100 @@ func (d *Defuddle) parseInternal(ctx context.Context, overrideOptions *Options) 
 	}
 
 	return result, nil
+}
+
+// tryExtractor attempts to use a site-specific extractor. Returns nil if no extractor matches.
+func (d *Defuddle) tryExtractor(
+	ctx context.Context,
+	options *Options,
+	extractedMetadata *metadata.Metadata,
+	schemaOrgData any,
+	metaTags []MetaTag,
+	startTime time.Time,
+) *Result {
+	ext := extractors.FindExtractor(d.doc, options.URL, schemaOrgData)
+	if ext == nil || !ext.CanExtract() {
+		return nil
+	}
+
+	// Inject secondary Defuddle pass for conversation extractors
+	if setter, ok := ext.(extractors.ContentProcessorSetter); ok {
+		setter.SetContentProcessor(func(html string) (*extractors.ContentProcessResult, error) {
+			tempDoc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
+			if err != nil {
+				return nil, err
+			}
+			tempDefuddle := &Defuddle{rawHTML: html, doc: tempDoc, debugger: d.debugger}
+			tempResult, err := tempDefuddle.parseInternal(ctx, options)
+			if err != nil {
+				return nil, err
+			}
+			return &extractors.ContentProcessResult{
+				Content:   tempResult.Content,
+				WordCount: tempResult.WordCount,
+			}, nil
+		})
+	}
+
+	d.debugger.SetExtractorUsed(ext.Name())
+	extracted := ext.Extract()
+
+	// Get site name from extractor variables or use metadata
+	siteName := extractedMetadata.Site
+	if extracted.Variables != nil {
+		if site, exists := extracted.Variables["site"]; exists {
+			siteName = site
+		}
+	}
+
+	extractorType := strings.ToLower(strings.TrimSuffix(ext.Name(), "Extractor"))
+
+	result := &Result{
+		Metadata: Metadata{
+			Title:         extractedMetadata.Title,
+			Description:   extractedMetadata.Description,
+			Domain:        extractedMetadata.Domain,
+			Favicon:       extractedMetadata.Favicon,
+			Image:         extractedMetadata.Image,
+			ParseTime:     time.Since(startTime).Milliseconds(),
+			Published:     extractedMetadata.Published,
+			Author:        extractedMetadata.Author,
+			Site:          siteName,
+			SchemaOrgData: schemaOrgData,
+			WordCount:     d.countWords(extracted.ContentHTML),
+		},
+		Content:       extracted.ContentHTML,
+		ExtractorType: &extractorType,
+		Variables:     extracted.Variables,
+		MetaTags:      metaTags,
+	}
+
+	// Override metadata from extractor variables
+	if extracted.Variables != nil {
+		if v, ok := extracted.Variables["title"]; ok && v != "" {
+			result.Title = v
+		}
+		if v, ok := extracted.Variables["author"]; ok && v != "" {
+			result.Author = v
+		}
+		if v, ok := extracted.Variables["published"]; ok && v != "" {
+			result.Published = v
+		}
+		if v, ok := extracted.Variables["description"]; ok && v != "" {
+			result.Description = v
+		}
+		if v, ok := extracted.Variables["image"]; ok && v != "" {
+			result.Image = v
+		}
+	}
+
+	if d.debugger.IsEnabled() {
+		d.debugger.EndTimer("total_parsing")
+		d.debugger.AddProcessingStep("extractor", "Used site-specific extractor: "+ext.Name(), 1, "")
+		result.DebugInfo = d.debugger.GetInfo()
+	}
+
+	return result
 }
 
 // removeBySelector removes elements by exact and partial selectors.
