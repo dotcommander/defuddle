@@ -454,36 +454,36 @@ func TestDefaultOptions(t *testing.T) {
 			name:            "Empty options should get defaults",
 			instanceOptions: &Options{},
 			overrideOptions: nil,
-			expectedExact:   false, // In Go, zero value false overrides defaults
-			expectedPartial: false, // In Go, zero value false overrides defaults
+			expectedExact:   true,  // nil *bool → default true
+			expectedPartial: true,  // nil *bool → default true
 			expectedDebug:   false, // Zero value
 			expectedURL:     "",    // Zero value
 		},
 		{
 			name: "Instance options should override defaults",
 			instanceOptions: &Options{
-				RemoveExactSelectors:   false,
-				RemovePartialSelectors: false,
+				RemoveExactSelectors:   PtrBool(false),
+				RemovePartialSelectors: PtrBool(false),
 				Debug:                  true,
 				URL:                    "https://example.com",
 			},
 			overrideOptions: nil,
-			expectedExact:   false,                 // Overridden
-			expectedPartial: false,                 // Overridden
+			expectedExact:   false,                 // Explicitly set false
+			expectedPartial: false,                 // Explicitly set false
 			expectedDebug:   true,                  // From instance
 			expectedURL:     "https://example.com", // From instance
 		},
 		{
 			name: "Override options should take precedence",
 			instanceOptions: &Options{
-				RemoveExactSelectors:   false,
-				RemovePartialSelectors: false,
+				RemoveExactSelectors:   PtrBool(false),
+				RemovePartialSelectors: PtrBool(false),
 				Debug:                  true,
 				URL:                    "https://instance.com",
 			},
 			overrideOptions: &Options{
-				RemoveExactSelectors:   true,
-				RemovePartialSelectors: true,
+				RemoveExactSelectors:   PtrBool(true),
+				RemovePartialSelectors: PtrBool(true),
 				URL:                    "https://override.com",
 			},
 			expectedExact:   true,                   // From override
@@ -492,17 +492,17 @@ func TestDefaultOptions(t *testing.T) {
 			expectedURL:     "https://override.com", // From override
 		},
 		{
-			name: "Partial override (mimics TypeScript behavior)",
+			name: "Partial override preserves unset fields (TypeScript parity)",
 			instanceOptions: &Options{
-				RemoveExactSelectors:   false,
-				RemovePartialSelectors: false,
+				RemoveExactSelectors:   PtrBool(false),
+				RemovePartialSelectors: PtrBool(false),
 				Debug:                  true,
 				URL:                    "https://instance.com",
 			},
 			overrideOptions: &Options{
-				RemovePartialSelectors: false, // Only override one boolean
+				RemovePartialSelectors: PtrBool(false), // Only override one boolean
 			},
-			expectedExact:   false,                  // From instance
+			expectedExact:   false,                  // From instance (override nil = not set)
 			expectedPartial: false,                  // From override
 			expectedDebug:   false,                  // From override (zero value in Go overwrites)
 			expectedURL:     "https://instance.com", // From instance (empty string doesn't overwrite)
@@ -521,13 +521,13 @@ func TestDefaultOptions(t *testing.T) {
 			merged := defuddle.mergeOptions(tt.overrideOptions)
 
 			// Verify results
-			if merged.RemoveExactSelectors != tt.expectedExact {
+			if BoolDefault(merged.RemoveExactSelectors, true) != tt.expectedExact {
 				t.Errorf("RemoveExactSelectors: expected %v, got %v",
-					tt.expectedExact, merged.RemoveExactSelectors)
+					tt.expectedExact, BoolDefault(merged.RemoveExactSelectors, true))
 			}
-			if merged.RemovePartialSelectors != tt.expectedPartial {
+			if BoolDefault(merged.RemovePartialSelectors, true) != tt.expectedPartial {
 				t.Errorf("RemovePartialSelectors: expected %v, got %v",
-					tt.expectedPartial, merged.RemovePartialSelectors)
+					tt.expectedPartial, BoolDefault(merged.RemovePartialSelectors, true))
 			}
 			if merged.Debug != tt.expectedDebug {
 				t.Errorf("Debug: expected %v, got %v",
@@ -550,32 +550,36 @@ func TestTypescriptCompatibility(t *testing.T) {
 	//   ...this.options,
 	//   ...overrideOptions
 	// };
+	// In TS, overrideOptions = { removePartialSelectors: false } does NOT
+	// overwrite removeExactSelectors because it was never set in the spread.
+	// Go now matches this via *bool pointers — nil means "not set".
 
-	// Scenario 1: Retry with removePartialSelectors: false
 	defuddle := &Defuddle{
 		options: &Options{
-			RemoveExactSelectors:   true,
-			RemovePartialSelectors: true,
+			RemoveExactSelectors:   PtrBool(true),
+			RemovePartialSelectors: PtrBool(true),
 			Debug:                  true,
 		},
 	}
 
-	// This simulates the retry scenario in Parse()
+	// Retry scenario: only disable partial selectors
 	retryOptions := &Options{
-		RemovePartialSelectors: false,
+		RemovePartialSelectors: PtrBool(false),
 	}
 
 	merged := defuddle.mergeOptions(retryOptions)
 
-	// Should match Go behavior (different from TypeScript due to zero values)
-	if merged.RemoveExactSelectors != false {
-		t.Errorf("Expected RemoveExactSelectors=false (from override zero value), got %v",
-			merged.RemoveExactSelectors)
+	// RemoveExactSelectors: true from instance, nil in override → preserved
+	if BoolDefault(merged.RemoveExactSelectors, true) != true {
+		t.Errorf("Expected RemoveExactSelectors=true (from instance, override nil), got %v",
+			BoolDefault(merged.RemoveExactSelectors, true))
 	}
-	if merged.RemovePartialSelectors != false {
+	// RemovePartialSelectors: explicitly false from override
+	if BoolDefault(merged.RemovePartialSelectors, true) != false {
 		t.Errorf("Expected RemovePartialSelectors=false (from override), got %v",
-			merged.RemovePartialSelectors)
+			BoolDefault(merged.RemovePartialSelectors, true))
 	}
+	// Debug is plain bool — override zero value overwrites
 	if merged.Debug != false {
 		t.Errorf("Expected Debug=false (from override zero value), got %v",
 			merged.Debug)
@@ -841,4 +845,102 @@ func TestParseIdempotent(t *testing.T) {
 	assert.Equal(t, result1.Content, result2.Content, "Second Parse() must produce identical content")
 	assert.Equal(t, result1.WordCount, result2.WordCount, "Second Parse() must produce identical word count")
 	assert.Equal(t, result1.Title, result2.Title, "Second Parse() must produce identical title")
+}
+
+// --- Content selection tests ---
+
+func TestFindMainContent_ArticleElement(t *testing.T) {
+	t.Parallel()
+	html := `<html><head><title>Test</title></head><body>
+		<nav>Navigation links here</nav>
+		<article>
+			<h2>Main Article</h2>
+			<p>This is the main content with enough words to be detected as meaningful content by the scoring algorithm.</p>
+			<p>Second paragraph adds more content for word count thresholds and ensures detection works.</p>
+		</article>
+		<aside>Sidebar content</aside>
+	</body></html>`
+
+	d, err := NewDefuddle(html, nil)
+	require.NoError(t, err)
+
+	result, err := d.Parse(context.Background())
+	require.NoError(t, err)
+
+	assert.Contains(t, result.Content, "Main Article")
+	assert.Contains(t, result.Content, "main content")
+	assert.NotContains(t, result.Content, "Navigation links")
+}
+
+func TestFindMainContent_ListingPageGuard(t *testing.T) {
+	t.Parallel()
+	// When a container has >= 3 article children, the listing-page guard
+	// prevents descending into one child. Verify all articles are present.
+	html := `<html><head><title>Blog</title></head><body>
+		<main>
+			<article>
+				<h2>Post One</h2>
+				<p>First blog post with enough content to pass word count thresholds and appear in final output for verification.</p>
+				<p>Adding extra paragraph to ensure sufficient word count for each individual article element in the listing.</p>
+			</article>
+			<article>
+				<h2>Post Two</h2>
+				<p>Second blog post with enough content to pass word count thresholds and appear in final output for verification.</p>
+				<p>Adding extra paragraph to ensure sufficient word count for each individual article element in the listing.</p>
+			</article>
+			<article>
+				<h2>Post Three</h2>
+				<p>Third blog post with enough content to pass word count thresholds and appear in final output for verification.</p>
+				<p>Adding extra paragraph to ensure sufficient word count for each individual article element in the listing.</p>
+			</article>
+		</main>
+	</body></html>`
+
+	d, err := NewDefuddle(html, nil)
+	require.NoError(t, err)
+
+	result, err := d.Parse(context.Background())
+	require.NoError(t, err)
+
+	// All three articles should be present (parent selected, not single child)
+	assert.Contains(t, result.Content, "Post One")
+	assert.Contains(t, result.Content, "Post Three")
+}
+
+func TestFindMainContent_ContentSelector(t *testing.T) {
+	t.Parallel()
+	html := `<html><head><title>Test</title></head><body>
+		<div id="noise"><p>This is noisy sidebar content that could confuse the scorer.</p></div>
+		<div id="target"><p>This is the actual target content selected by the user-specified CSS selector.</p></div>
+	</body></html>`
+
+	d, err := NewDefuddle(html, &Options{ContentSelector: "#target"})
+	require.NoError(t, err)
+
+	result, err := d.Parse(context.Background())
+	require.NoError(t, err)
+
+	assert.Contains(t, result.Content, "actual target content")
+}
+
+func TestFindMainContent_MainElement(t *testing.T) {
+	t.Parallel()
+	html := `<html><head><title>Test</title></head><body>
+		<header>Site Header</header>
+		<main>
+			<p>Primary content area with enough words to meet the scoring threshold for detection.</p>
+			<p>Additional paragraph ensures this block has sufficient text to be the winning candidate.</p>
+		</main>
+		<footer>Site Footer</footer>
+	</body></html>`
+
+	d, err := NewDefuddle(html, nil)
+	require.NoError(t, err)
+
+	result, err := d.Parse(context.Background())
+	require.NoError(t, err)
+
+	assert.Contains(t, result.Content, "Primary content area")
+	assert.NotContains(t, result.Content, "Site Header")
+	assert.NotContains(t, result.Content, "Site Footer")
 }

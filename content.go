@@ -8,6 +8,7 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"github.com/kaptinlin/defuddle-go/internal/constants"
 	"github.com/kaptinlin/defuddle-go/internal/scoring"
+	"github.com/kaptinlin/defuddle-go/internal/text"
 )
 
 // findMainContent finds the main content element
@@ -108,10 +109,17 @@ func (d *Defuddle) findMainContent(doc *goquery.Document) *goquery.Selection {
 	// just because sibling noise inflates the parent's content score.
 	top := candidates[0]
 	best := top
-	for i := 1; i < len(candidates); i++ {
-		child := candidates[i]
-		if child.selectorIndex < best.selectorIndex && scoring.NodeContains(best.element, child.element) {
-			best = child
+
+	// Don't descend into child on listing pages (multiple articles)
+	articleCount := top.element.Find("article").Length()
+	if articleCount < 3 {
+		for i := 1; i < len(candidates); i++ {
+			child := candidates[i]
+			childText := strings.TrimSpace(child.element.Text())
+			childWords := text.CountWords(childText)
+			if child.selectorIndex < best.selectorIndex && scoring.NodeContains(best.element, child.element) && childWords > 50 {
+				best = child
+			}
 		}
 	}
 

@@ -36,28 +36,28 @@ type Options struct {
 	SeparateMarkdown bool `json:"separateMarkdown,omitempty"`
 
 	// Whether to remove elements matching exact selectors like ads, social buttons, etc.
-	// Defaults to true.
-	RemoveExactSelectors bool `json:"removeExactSelectors,omitempty"`
+	// nil = true (default). Use PtrBool(false) to disable.
+	RemoveExactSelectors *bool `json:"removeExactSelectors,omitempty"`
 
 	// Whether to remove elements matching partial selectors like ads, social buttons, etc.
-	// Defaults to true.
-	RemovePartialSelectors bool `json:"removePartialSelectors,omitempty"`
+	// nil = true (default). Use PtrBool(false) to disable.
+	RemovePartialSelectors *bool `json:"removePartialSelectors,omitempty"`
 
 	// Remove images from the extracted content
 	// Defaults to false.
 	RemoveImages bool `json:"removeImages,omitempty"`
 
 	// Whether to remove hidden elements (display:none, Tailwind hidden classes).
-	// Defaults to true. Disabled during retry cascade when hidden content is needed.
-	RemoveHiddenElements bool `json:"removeHiddenElements,omitempty"`
+	// nil = true (default). Use PtrBool(false) to disable.
+	RemoveHiddenElements *bool `json:"removeHiddenElements,omitempty"`
 
 	// Whether to remove low-scoring non-content blocks.
-	// Defaults to true.
-	RemoveLowScoring bool `json:"removeLowScoring,omitempty"`
+	// nil = true (default). Use PtrBool(false) to disable.
+	RemoveLowScoring *bool `json:"removeLowScoring,omitempty"`
 
 	// Whether to remove content patterns (boilerplate, breadcrumbs, etc.).
-	// Defaults to true.
-	RemoveContentPatterns bool `json:"removeContentPatterns,omitempty"`
+	// nil = true (default). Use PtrBool(false) to disable.
+	RemoveContentPatterns *bool `json:"removeContentPatterns,omitempty"`
 
 	// CSS selector to use for content extraction instead of auto-detection.
 	ContentSelector string `json:"contentSelector,omitempty"`
@@ -100,11 +100,24 @@ type Metadata = metadata.Metadata
 //	}
 type Result struct {
 	Metadata
-	Content         string      `json:"content"`
-	ContentMarkdown *string     `json:"contentMarkdown,omitempty"`
-	ExtractorType   *string     `json:"extractorType,omitempty"`
-	MetaTags        []MetaTag   `json:"metaTags,omitempty"`
-	DebugInfo       *debug.Info `json:"debugInfo,omitempty"`
+	Content         string            `json:"content"`
+	ContentMarkdown *string           `json:"contentMarkdown,omitempty"`
+	ExtractorType   *string           `json:"extractorType,omitempty"`
+	Variables       map[string]string `json:"variables,omitempty"`
+	MetaTags        []MetaTag         `json:"metaTags,omitempty"`
+	DebugInfo       *debug.Info       `json:"debugInfo,omitempty"`
+}
+
+// PtrBool returns a pointer to the given bool value.
+// Use this to explicitly set *bool fields in Options (e.g., PtrBool(false) to disable defaults).
+func PtrBool(v bool) *bool { return &v }
+
+// BoolDefault returns the value pointed to by b, or defaultVal if b is nil.
+func BoolDefault(b *bool, defaultVal bool) bool {
+	if b == nil {
+		return defaultVal
+	}
+	return *b
 }
 
 // ExtractorVariables represents variables extracted by site-specific extractors

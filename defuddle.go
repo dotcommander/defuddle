@@ -19,6 +19,7 @@ import (
 	"github.com/kaptinlin/defuddle-go/internal/debug"
 	"github.com/kaptinlin/defuddle-go/internal/markdown"
 	"github.com/kaptinlin/defuddle-go/internal/metadata"
+	"github.com/kaptinlin/defuddle-go/internal/removals"
 	"github.com/kaptinlin/defuddle-go/internal/scoring"
 	"github.com/kaptinlin/defuddle-go/internal/standardize"
 	"github.com/kaptinlin/defuddle-go/internal/text"
@@ -93,19 +94,56 @@ func (d *Defuddle) Parse(ctx context.Context) (*Result, error) {
 		if d.options != nil {
 			*retryOptions = *d.options
 		}
-		retryOptions.RemovePartialSelectors = false
+		retryOptions.RemovePartialSelectors = PtrBool(false)
 
 		retryResult, retryErr := d.parseInternal(ctx, retryOptions)
 		if retryErr != nil {
 			return result, retryErr
 		}
 
-		// Return the result with more content
-		if retryResult.WordCount > result.WordCount {
+		// Return the result with more content (must be 2x improvement to match TS)
+		if retryResult.WordCount > result.WordCount*2 {
 			if d.debug {
 				slog.Debug("Retry produced more content", "originalWordCount", result.WordCount, "retryWordCount", retryResult.WordCount)
 			}
-			return retryResult, nil
+			result = retryResult
+		}
+	}
+
+	// Retry 2: if result still < 50 words, retry without hidden element removal
+	if result.WordCount < 50 {
+		retryOptions2 := &Options{}
+		if d.options != nil {
+			*retryOptions2 = *d.options
+		}
+		retryOptions2.RemoveHiddenElements = PtrBool(false)
+
+		hiddenRetry, err := d.parseInternal(ctx, retryOptions2)
+		if err == nil && hiddenRetry.WordCount > result.WordCount*2 {
+			if d.debug {
+				slog.Debug("Hidden-element retry produced more content", "originalWordCount", result.WordCount, "retryWordCount", hiddenRetry.WordCount)
+			}
+			result = hiddenRetry
+		}
+	}
+
+	// Retry 3: if result still < 50 words, retry in index-page mode
+	// (disable scoring, partial selectors, and content patterns)
+	if result.WordCount < 50 {
+		retryOptions3 := &Options{}
+		if d.options != nil {
+			*retryOptions3 = *d.options
+		}
+		retryOptions3.RemoveLowScoring = PtrBool(false)
+		retryOptions3.RemovePartialSelectors = PtrBool(false)
+		retryOptions3.RemoveContentPatterns = PtrBool(false)
+
+		indexRetry, err := d.parseInternal(ctx, retryOptions3)
+		if err == nil && indexRetry.WordCount > result.WordCount {
+			if d.debug {
+				slog.Debug("Index-page retry produced more content", "originalWordCount", result.WordCount, "retryWordCount", indexRetry.WordCount)
+			}
+			result = indexRetry
 		}
 	}
 
@@ -313,6 +351,7 @@ func (d *Defuddle) parseInternal(ctx context.Context, overrideOptions *Options) 
 			},
 			Content:       extracted.ContentHTML,
 			ExtractorType: &extractorType,
+			Variables:     extracted.Variables,
 			MetaTags:      metaTags,
 		}
 
@@ -367,8 +406,20 @@ func (d *Defuddle) parseInternal(ctx context.Context, overrideOptions *Options) 
 	// Apply mobile styles to document
 	d.applyMobileStyles(workingDoc, mobileStyles)
 
-	// Find main content
-	mainContent := d.findMainContent(workingDoc)
+	// Use explicit content selector if provided
+	var mainContent *goquery.Selection
+	if options.ContentSelector != "" {
+		sel := workingDoc.Find(options.ContentSelector).First()
+		if sel.Length() > 0 {
+			mainContent = sel
+		}
+	}
+
+	// Fall back to automatic content detection
+	if mainContent == nil {
+		mainContent = d.findMainContent(workingDoc)
+	}
+
 	if mainContent == nil {
 		// Fallback to body content
 		content, _ := workingDoc.Find("body").Html()
@@ -412,18 +463,25 @@ func (d *Defuddle) parseInternal(ctx context.Context, overrideOptions *Options) 
 	}
 
 	// Remove hidden elements using computed styles
-	if options.RemoveHiddenElements {
+	if BoolDefault(options.RemoveHiddenElements, true) {
 		d.removeHiddenElements(workingDoc)
 	}
 
-	// Remove non-content blocks by scoring
-	if options.RemoveLowScoring {
+	// Score and remove non-content blocks first (matches TS pipeline order: scoring before selectors)
+	if BoolDefault(options.RemoveLowScoring, true) {
 		scoring.ScoreAndRemove(workingDoc, d.debug, mainContent)
 	}
 
-	// Remove clutter using selectors (after scoring — matches TS pipeline order)
-	if options.RemoveExactSelectors || options.RemovePartialSelectors {
-		d.removeBySelector(workingDoc, options.RemoveExactSelectors, options.RemovePartialSelectors, mainContent)
+	// Then remove clutter using selectors (after scoring — matches TS pipeline order)
+	removeExact := BoolDefault(options.RemoveExactSelectors, true)
+	removePartial := BoolDefault(options.RemovePartialSelectors, true)
+	if removeExact || removePartial {
+		d.removeBySelector(workingDoc, removeExact, removePartial, mainContent)
+	}
+
+	// Remove elements by content patterns (read time, boilerplate, article cards)
+	if BoolDefault(options.RemoveContentPatterns, true) {
+		removals.RemoveByContentPattern(mainContent, workingDoc, d.debug, options.URL)
 	}
 
 	// Normalize the main content
@@ -573,24 +631,15 @@ func (d *Defuddle) removeBySelector(doc *goquery.Document, removeExact, removePa
 	}
 }
 
-// mergeOptions merges override options with instance options and defaults
-// JavaScript original code:
+// mergeOptions merges override options with instance options and defaults.
+// Mirrors the TypeScript spread pattern:
 //
-//	const options = {
-//	  removeExactSelectors: true,
-//	  removePartialSelectors: true,
-//	  ...this.options,
-//	  ...overrideOptions
-//	};
+//	const options = { removeExactSelectors: true, ...this.options, ...overrideOptions };
+//
+// Defaults for *bool fields (all true) are applied at use sites via BoolDefault(field, true).
+// nil *bool means "use default"; non-nil means "explicitly set by caller".
 func (d *Defuddle) mergeOptions(overrideOptions *Options) *Options {
-	// Start with defaults (exactly like TypeScript version)
-	options := &Options{
-		RemoveExactSelectors:   true,
-		RemovePartialSelectors: true,
-		RemoveHiddenElements:   true,
-		RemoveLowScoring:       true,
-		RemoveContentPatterns:  true,
-	}
+	options := &Options{}
 
 	// Apply instance options then override options (mirrors JS spread order)
 	applyOptions(options, d.options)
@@ -599,10 +648,10 @@ func (d *Defuddle) mergeOptions(overrideOptions *Options) *Options {
 	return options
 }
 
-// applyOptions overlays src onto dst, skipping zero-value string fields so
-// that defaults set on dst are not accidentally cleared by empty strings.
-// All boolean and pointer fields are always copied because false/nil is a
-// meaningful caller intent (e.g. RemoveExactSelectors=false disables removal).
+// applyOptions overlays src onto dst.
+// Plain bools and strings are always copied (false/empty is meaningful).
+// *bool fields are only copied when non-nil — nil means "not set, use default".
+// Empty strings for URL/ContentSelector are skipped to avoid clearing set values.
 func applyOptions(dst, src *Options) {
 	if src == nil {
 		return
@@ -613,12 +662,23 @@ func applyOptions(dst, src *Options) {
 	}
 	dst.Markdown = src.Markdown
 	dst.SeparateMarkdown = src.SeparateMarkdown
-	dst.RemoveExactSelectors = src.RemoveExactSelectors
-	dst.RemovePartialSelectors = src.RemovePartialSelectors
+	// Pointer bools: only copy when explicitly set (non-nil)
+	if src.RemoveExactSelectors != nil {
+		dst.RemoveExactSelectors = src.RemoveExactSelectors
+	}
+	if src.RemovePartialSelectors != nil {
+		dst.RemovePartialSelectors = src.RemovePartialSelectors
+	}
 	dst.RemoveImages = src.RemoveImages
-	dst.RemoveHiddenElements = src.RemoveHiddenElements
-	dst.RemoveLowScoring = src.RemoveLowScoring
-	dst.RemoveContentPatterns = src.RemoveContentPatterns
+	if src.RemoveHiddenElements != nil {
+		dst.RemoveHiddenElements = src.RemoveHiddenElements
+	}
+	if src.RemoveLowScoring != nil {
+		dst.RemoveLowScoring = src.RemoveLowScoring
+	}
+	if src.RemoveContentPatterns != nil {
+		dst.RemoveContentPatterns = src.RemoveContentPatterns
+	}
 	if src.ContentSelector != "" {
 		dst.ContentSelector = src.ContentSelector
 	}
