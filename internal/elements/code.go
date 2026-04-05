@@ -573,7 +573,14 @@ func (p *CodeBlockProcessor) extractStructuredText(s *goquery.Selection) string 
 	s.Contents().Each(func(_ int, node *goquery.Selection) {
 		// Handle text nodes
 		if goquery.NodeName(node) == "#text" {
-			builder.WriteString(node.Text())
+			text := node.Text()
+			// Skip whitespace-only text nodes between data-line spans
+			// (e.g. rehype-pretty-code / Shiki), since data-line handling
+			// already appends a newline per line.
+			if strings.TrimSpace(text) == "" && node.Parent().Find("[data-line]").Length() > 0 {
+				return
+			}
+			builder.WriteString(text)
 			return
 		}
 

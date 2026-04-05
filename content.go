@@ -3,6 +3,7 @@ package defuddle
 import (
 	"log/slog"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
@@ -153,10 +154,37 @@ func (d *Defuddle) findMainContent(doc *goquery.Document) *goquery.Selection {
 //	  return bestScore > 50 ? bestTable : null;
 //	}
 func (d *Defuddle) findTableBasedContent(doc *goquery.Document) *goquery.Selection {
+	// Pre-guard: only try table-based extraction for old-style table layouts
+	tables := doc.Find("table")
+	hasTableLayout := false
+	tables.Each(func(_ int, table *goquery.Selection) {
+		if hasTableLayout {
+			return
+		}
+		width, exists := table.Attr("width")
+		if exists {
+			if w, err := strconv.Atoi(width); err == nil && w > 400 {
+				hasTableLayout = true
+				return
+			}
+		}
+		if align, _ := table.Attr("align"); strings.EqualFold(align, "center") {
+			hasTableLayout = true
+			return
+		}
+		cls := strings.ToLower(table.AttrOr("class", ""))
+		if strings.Contains(cls, "content") || strings.Contains(cls, "article") {
+			hasTableLayout = true
+		}
+	})
+	if !hasTableLayout {
+		return nil
+	}
+
 	var bestElement *goquery.Selection
 	bestScore := 0.0
 
-	doc.Find("table").Each(func(_ int, table *goquery.Selection) {
+	tables.Each(func(_ int, table *goquery.Selection) {
 		table.Find("td").Each(func(_ int, cell *goquery.Selection) {
 			score := scoring.ScoreElement(cell)
 			if score > bestScore {
@@ -182,7 +210,7 @@ func (d *Defuddle) findTableBasedContent(doc *goquery.Document) *goquery.Selecti
 //	}
 func (d *Defuddle) findContentByScoring(doc *goquery.Document) *goquery.Selection {
 	var candidates []*goquery.Selection
-	doc.Find("div, section, article, main").Each(func(_ int, s *goquery.Selection) {
+	doc.Find("div, section, article, main, aside, header, footer, nav, content").Each(func(_ int, s *goquery.Selection) {
 		candidates = append(candidates, s)
 	})
 

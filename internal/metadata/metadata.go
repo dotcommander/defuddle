@@ -932,11 +932,12 @@ func getSchemaProperty(schemaOrgData any, property string) string {
 				return searchSchema(value, remainingProps, true)
 			}
 
-			// If not exact match, search nested objects
+			// If not exact match, search nested objects and arrays
 			if !isExactMatch {
 				var nestedResults []string
 				for _, value := range obj {
-					if _, ok := value.(map[string]any); ok {
+					switch value.(type) {
+					case map[string]any, []any:
 						results := searchSchema(value, props, false)
 						nestedResults = append(nestedResults, results...)
 					}
