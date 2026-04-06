@@ -299,7 +299,7 @@ func BenchmarkRealWorld_LargeArticle(b *testing.B) {
 
 // BenchmarkRealWorld_TechBlog benchmarks a technical blog with code blocks (~5KB)
 func BenchmarkRealWorld_TechBlog(b *testing.B) {
-	html := loadFixture(b, "rockthejvm.com:articles:kotlin-101-type-classes.html")
+	html := loadFixture(b, "rockthejvm.com!articles!kotlin-101-type-classes.html")
 	ctx := context.Background()
 	b.SetBytes(int64(len(html)))
 	b.ResetTimer()
@@ -315,7 +315,7 @@ func BenchmarkRealWorld_TechBlog(b *testing.B) {
 
 // BenchmarkRealWorld_LessWrong benchmarks a LessWrong article with footnotes (~247KB)
 func BenchmarkRealWorld_LessWrong(b *testing.B) {
-	html := loadFixture(b, "lesswrong.com:s:N7nDePaNabJdnbXeE:p:vJFdjigzmcXMhNTsx.html")
+	html := loadFixture(b, "lesswrong.com!s!N7nDePaNabJdnbXeE!p!vJFdjigzmcXMhNTsx.html")
 	ctx := context.Background()
 	b.SetBytes(int64(len(html)))
 	b.ResetTimer()
