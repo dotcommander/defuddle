@@ -69,7 +69,7 @@ func (r *RedditExtractor) CanExtract() bool {
 	}
 
 	// Fallback check: alternative selectors for Reddit content
-	fallbackSelectors := []string{
+	redditPostFallbacks := []string{
 		"[data-testid='post-content']",
 		".usertext-body",
 		".md",
@@ -79,11 +79,9 @@ func (r *RedditExtractor) CanExtract() bool {
 		".thing.link",          // Old Reddit format
 	}
 
-	for _, selector := range fallbackSelectors {
-		if r.document.Find(selector).Length() > 0 {
-			slog.Debug("Reddit extractor can extract check", "canExtract", true, "method", "fallback", "selector", selector)
-			return true
-		}
+	if sel := firstMatchingSelection(r.document, redditPostFallbacks); sel.Length() > 0 {
+		slog.Debug("Reddit extractor can extract check", "canExtract", true, "method", "fallback")
+		return true
 	}
 
 	slog.Debug("Reddit extractor can extract check", "canExtract", false)
@@ -301,7 +299,7 @@ func (r *RedditExtractor) extractComments() string {
 	if len(comments) == 0 {
 		slog.Debug("Reddit extractor: using fallback comment selectors")
 
-		alternativeSelectors := []string{
+		redditCommentFallbacks := []string{
 			"div[data-testid='comment']",
 			".comment",
 			".comment-area .comment",
@@ -311,14 +309,11 @@ func (r *RedditExtractor) extractComments() string {
 			".thing.link",          // Old Reddit format
 		}
 
-		for _, selector := range alternativeSelectors {
-			r.document.Find(selector).Each(func(_ int, s *goquery.Selection) {
+		if sel := firstMatchingSelection(r.document, redditCommentFallbacks); sel.Length() > 0 {
+			sel.Each(func(_ int, s *goquery.Selection) {
 				comments = append(comments, s)
 			})
-			if len(comments) > 0 {
-				slog.Debug("Reddit extractor: found comments with selector", "selector", selector, "count", len(comments))
-				break
-			}
+			slog.Debug("Reddit extractor: found comments with fallback", "count", len(comments))
 		}
 	}
 

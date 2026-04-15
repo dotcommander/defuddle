@@ -63,24 +63,14 @@ func NewGrokExtractor(document *goquery.Document, urlStr string, schemaOrgData a
 	// Fallback selectors if primary ones don't work
 	if messageBubbles.Length() == 0 {
 		slog.Debug("Grok extractor: trying fallback selectors")
-
-		fallbackSelectors := []string{
-			"div[data-testid*='message']",
-			".message",
-			"div[class*='message']",
-			"div[class*='chat']",
-			"div[role='article']",
-			"article",
-			"div[class*='conversation']",
-			"div[class*='bubble']",
-		}
-
-		for _, selector := range fallbackSelectors {
-			messageBubbles = document.Find(selector)
-			if messageBubbles.Length() > 0 {
-				slog.Debug("Grok extractor: found bubbles with fallback", "selector", selector, "count", messageBubbles.Length())
-				break
-			}
+		// Try generic message fallbacks first, then Grok-specific ones.
+		grokFallbacks := make([]string, len(genericMessageFallbacks)+2)
+		copy(grokFallbacks, genericMessageFallbacks)
+		grokFallbacks[len(genericMessageFallbacks)] = "div[class*='conversation']"
+		grokFallbacks[len(genericMessageFallbacks)+1] = "div[class*='bubble']"
+		messageBubbles = firstMatchingSelection(document, grokFallbacks)
+		if messageBubbles.Length() > 0 {
+			slog.Debug("Grok extractor: found bubbles with fallback", "count", messageBubbles.Length())
 		}
 	}
 
@@ -290,13 +280,18 @@ func (g *GrokExtractor) GetFootnotes() []Footnote {
 //	}
 func (g *GrokExtractor) GetMetadata() ConversationMetadata {
 	title := g.getTitle()
-	messageCount := g.messageBubbles.Length()
+	var messageCount int
+	if g.cachedMessages != nil {
+		messageCount = len(g.cachedMessages)
+	} else {
+		messageCount = g.messageBubbles.Length()
+	}
 
 	return ConversationMetadata{
 		Title:        title,
 		Site:         "Grok",
 		URL:          g.url,
-		MessageCount: messageCount, // Use estimated count
+		MessageCount: messageCount,
 		Description:  fmt.Sprintf("Grok conversation with %d messages", messageCount),
 	}
 }
@@ -344,12 +339,8 @@ func (g *GrokExtractor) getTitle() string {
 		messageBubble := firstUserContainer.Find(".message-bubble").First()
 		if messageBubble.Length() > 0 {
 			text := strings.TrimSpace(messageBubble.Text())
-			// Truncate to first 50 characters if longer
-			if len(text) > 50 {
-				return text[:50] + "..."
-			}
 			if text != "" {
-				return text
+				return TruncateTitle(text, 50)
 			}
 		}
 	}

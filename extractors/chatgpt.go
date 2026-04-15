@@ -400,7 +400,10 @@ func (c *ChatGPTExtractor) GetFootnotes() []Footnote {
 //	}
 func (c *ChatGPTExtractor) GetMetadata() ConversationMetadata {
 	title := c.getTitle()
-	messages := c.ExtractMessages()
+	messages := c.cachedMessages
+	if messages == nil {
+		messages = c.ExtractMessages()
+	}
 
 	return ConversationMetadata{
 		Title:        title,
@@ -441,12 +444,7 @@ func (c *ChatGPTExtractor) getTitle() string {
 	// Fall back to first user message
 	firstUserTurn := c.articles.First().Find(".text-message").First()
 	if firstUserTurn.Length() > 0 {
-		text := firstUserTurn.Text()
-		// Truncate to first 50 characters if longer
-		if len(text) > 50 {
-			return text[:50] + "..."
-		}
-		return text
+		return TruncateTitle(firstUserTurn.Text(), 50)
 	}
 
 	return "ChatGPT Conversation"

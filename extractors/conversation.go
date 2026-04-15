@@ -77,6 +77,7 @@ type ConversationExtractor interface {
 type ConversationExtractorBase struct {
 	*ExtractorBase
 	contentProcessor ContentProcessorFunc
+	cachedMessages   []ConversationMessage // set by ExtractWithDefuddle to avoid double extraction
 }
 
 // NewConversationExtractorBase creates a new conversation extractor base
@@ -94,6 +95,16 @@ func NewConversationExtractorBase(document *goquery.Document, url string, schema
 // SetContentProcessor sets the function used for secondary Defuddle processing.
 func (c *ConversationExtractorBase) SetContentProcessor(fn ContentProcessorFunc) {
 	c.contentProcessor = fn
+}
+
+// TruncateTitle truncates s to max runes, appending "..." if truncated.
+// Uses []rune conversion to avoid splitting multi-byte characters.
+func TruncateTitle(s string, max int) string {
+	runes := []rune(s)
+	if len(runes) <= max {
+		return s
+	}
+	return string(runes[:max]) + "..."
 }
 
 // CreateContentHTML creates formatted HTML content from messages and footnotes
@@ -253,6 +264,8 @@ func (c *ConversationExtractorBase) CreateContentHTML(messages []ConversationMes
 //	}
 func (c *ConversationExtractorBase) ExtractWithDefuddle(extractor ConversationExtractor) *ExtractorResult {
 	messages := extractor.ExtractMessages()
+	// Cache so GetMetadata implementations can read len without a second extraction pass.
+	c.cachedMessages = messages
 	metadata := extractor.GetMetadata()
 	footnotes := extractor.GetFootnotes()
 	rawContentHTML := c.CreateContentHTML(messages, footnotes)

@@ -130,22 +130,9 @@ func NewClaudeExtractor(document *goquery.Document, urlStr string, schemaOrgData
 	// Fallback selectors if primary ones don't work
 	if articles.Length() == 0 {
 		slog.Debug("Claude extractor: trying fallback selectors")
-
-		fallbackSelectors := []string{
-			`div[data-testid*="message"]`,
-			`.message`,
-			`div[class*="message"]`,
-			`div[class*="chat"]`,
-			`div[role="article"]`,
-			`article`,
-		}
-
-		for _, selector := range fallbackSelectors {
-			articles = document.Find(selector)
-			if articles.Length() > 0 {
-				slog.Debug("Claude extractor: found articles with fallback", "selector", selector, "count", articles.Length())
-				break
-			}
+		articles = firstMatchingSelection(document, genericMessageFallbacks)
+		if articles.Length() > 0 {
+			slog.Debug("Claude extractor: found articles with fallback", "count", articles.Length())
 		}
 	}
 
@@ -318,7 +305,10 @@ func (c *ClaudeExtractor) GetFootnotes() []Footnote {
 //	}
 func (c *ClaudeExtractor) GetMetadata() ConversationMetadata {
 	title := c.getTitle()
-	messages := c.ExtractMessages()
+	messages := c.cachedMessages
+	if messages == nil {
+		messages = c.ExtractMessages()
+	}
 
 	return ConversationMetadata{
 		Title:        title,
@@ -374,11 +364,7 @@ func (c *ClaudeExtractor) getTitle() string {
 	firstUserMessage := c.articles.First().Find(`[data-testid="user-message"]`)
 	if firstUserMessage.Length() > 0 {
 		text := firstUserMessage.Text()
-		// Truncate to first 50 characters if longer
-		if len(text) > 50 {
-			return text[:50] + "..."
-		}
-		return text
+		return TruncateTitle(text, 50)
 	}
 
 	// Try to fall back to any first message
@@ -386,11 +372,7 @@ func (c *ClaudeExtractor) getTitle() string {
 		firstMessage := c.articles.First()
 		text := strings.TrimSpace(firstMessage.Text())
 		if text != "" {
-			// Truncate to first 50 characters if longer
-			if len(text) > 50 {
-				return text[:50] + "..."
-			}
-			return text
+			return TruncateTitle(text, 50)
 		}
 	}
 

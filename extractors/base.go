@@ -7,6 +7,28 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
+// genericMessageFallbacks are selector patterns shared by conversation extractors
+// when their primary selectors find no elements. Ordered from most- to least-specific.
+var genericMessageFallbacks = []string{
+	`div[data-testid*="message"]`,
+	`.message`,
+	`div[class*="message"]`,
+	`div[class*="chat"]`,
+	`div[role="article"]`,
+	`article`,
+}
+
+// firstMatchingSelection tries each selector in order against doc and returns the
+// first non-empty result. Returns an empty selection if none match.
+func firstMatchingSelection(doc *goquery.Document, selectors []string) *goquery.Selection {
+	for _, sel := range selectors {
+		if found := doc.Find(sel); found.Length() > 0 {
+			return found
+		}
+	}
+	return doc.Find("__no_match__") // empty selection
+}
+
 // whitespaceRe is a shared pre-compiled regex for collapsing whitespace runs.
 var whitespaceRe = regexp.MustCompile(`\s+`)
 

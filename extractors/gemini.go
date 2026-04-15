@@ -434,11 +434,13 @@ func (g *GeminiExtractor) GetFootnotes() []Footnote {
 func (g *GeminiExtractor) GetMetadata() ConversationMetadata {
 	title := g.getTitle()
 	var messageCount int
-	if g.messageCount != nil {
+	switch {
+	case g.messageCount != nil:
 		messageCount = *g.messageCount
-	} else {
-		messages := g.ExtractMessages()
-		messageCount = len(messages)
+	case g.cachedMessages != nil:
+		messageCount = len(g.cachedMessages)
+	default:
+		messageCount = len(g.ExtractMessages())
 	}
 
 	return ConversationMetadata{
@@ -488,12 +490,7 @@ func (g *GeminiExtractor) getTitle() string {
 	// Fall back to first user query
 	firstUserQuery := g.conversationContainers.First().Find(".query-text").First()
 	if firstUserQuery.Length() > 0 {
-		text := firstUserQuery.Text()
-		// Truncate to first 50 characters if longer
-		if len(text) > 50 {
-			return text[:50] + "..."
-		}
-		return text
+		return TruncateTitle(firstUserQuery.Text(), 50)
 	}
 
 	return "Gemini Conversation"
