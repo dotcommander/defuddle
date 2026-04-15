@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -26,6 +27,12 @@ import (
 	"github.com/dotcommander/defuddle/internal/urlutil"
 	"github.com/kaptinlin/requests"
 )
+
+// headingTags lists the HTML heading tag names used for heading detection.
+var headingTags = []string{"h1", "h2", "h3", "h4", "h5", "h6"}
+
+// headingSelector is a CSS selector string derived from headingTags.
+var headingSelector = strings.Join(headingTags, ", ")
 
 // Defuddle represents a document parser instance
 type Defuddle struct {
@@ -613,11 +620,11 @@ func (d *Defuddle) removeBySelector(doc *goquery.Document, removeExact, removePa
 			}
 			// Skip heading elements — their IDs often match partial selectors
 			tag := goquery.NodeName(element)
-			if tag == "h1" || tag == "h2" || tag == "h3" || tag == "h4" || tag == "h5" || tag == "h6" {
+			if slices.Contains(headingTags, tag) {
 				return
 			}
 			// Skip anchor links inside headings
-			if element.Closest("h1, h2, h3, h4, h5, h6").Length() > 0 {
+			if element.Closest(headingSelector).Length() > 0 {
 				return
 			}
 

@@ -177,7 +177,7 @@ func runBatch(cmd *cobra.Command, _ []string) error {
 	}
 
 	var urls []string
-	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(string(data)), "\n") {
 		line = strings.TrimSpace(line)
 		if line != "" && !strings.HasPrefix(line, "#") {
 			urls = append(urls, line)
@@ -303,11 +303,11 @@ func executeParseContent(opts *ParseOptions) error {
 		ContentSelector:  opts.ContentSelector,
 	}
 	if opts.NoClutterRemoval {
-		defuddleOpts.RemoveExactSelectors = defuddle.PtrBool(false)
-		defuddleOpts.RemovePartialSelectors = defuddle.PtrBool(false)
-		defuddleOpts.RemoveHiddenElements = defuddle.PtrBool(false)
-		defuddleOpts.RemoveLowScoring = defuddle.PtrBool(false)
-		defuddleOpts.RemoveContentPatterns = defuddle.PtrBool(false)
+		defuddleOpts.RemoveExactSelectors = new(bool)
+		defuddleOpts.RemovePartialSelectors = new(bool)
+		defuddleOpts.RemoveHiddenElements = new(bool)
+		defuddleOpts.RemoveLowScoring = new(bool)
+		defuddleOpts.RemoveContentPatterns = new(bool)
 	}
 
 	ctx, cancel := buildContext(opts.Timeout)
@@ -405,7 +405,7 @@ func validateFilePath(filename string) error {
 	// "%2e%2e" or unicode variants could slip through after URL decode).
 	// filepath.Clean resolves all ".." sequences first, so the check is exact.
 	cleaned := filepath.Clean(filename)
-	for _, part := range strings.Split(cleaned, string(filepath.Separator)) {
+	for part := range strings.SplitSeq(cleaned, string(filepath.Separator)) {
 		if part == ".." {
 			return ErrDirectoryTraversal
 		}
