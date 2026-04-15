@@ -1,8 +1,4 @@
 <p align="center">
-<img src="https://raw.githubusercontent.com/kepano/defuddle/main/defuddle.png" width="120" alt="Defuddle">
-</p>
-
-<p align="center">
 <a href="https://github.com/dotcommander/defuddle/releases"><img src="https://img.shields.io/github/v/release/dotcommander/defuddle" alt="Release"></a>
 <a href="https://github.com/dotcommander/defuddle/actions"><img src="https://github.com/dotcommander/defuddle/workflows/Test/badge.svg" alt="Tests"></a>
 <a href="https://goreportcard.com/report/github.com/dotcommander/defuddle"><img src="https://goreportcard.com/badge/github.com/dotcommander/defuddle" alt="Go Report Card"></a>
