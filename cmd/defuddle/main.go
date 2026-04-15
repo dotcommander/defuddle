@@ -14,10 +14,10 @@ import (
 	"strings"
 	"time"
 
+	"encoding/json"
+
 	"github.com/dotcommander/defuddle"
 	"github.com/dotcommander/defuddle/extractors"
-	"github.com/go-json-experiment/json"
-	"github.com/go-json-experiment/json/jsontext"
 	"github.com/spf13/cobra"
 )
 
@@ -247,23 +247,21 @@ func runBatch(cmd *cobra.Command, _ []string) error {
 	ctx := context.Background()
 	results := defuddle.ParseFromURLs(ctx, urls, opts)
 
-	enc := jsontext.NewEncoder(os.Stdout)
+	enc := json.NewEncoder(os.Stdout)
 	for _, r := range results {
 		if r.Err != nil {
 			if !continueOnError {
 				return fmt.Errorf("error parsing %s: %w", r.URL, r.Err)
 			}
 			errObj := map[string]string{"url": r.URL, "error": r.Err.Error()}
-			if err := json.MarshalEncode(enc, errObj); err != nil {
+			if err := enc.Encode(errObj); err != nil {
 				return fmt.Errorf("encoding error result: %w", err)
 			}
-			fmt.Println()
 			continue
 		}
-		if err := json.MarshalEncode(enc, r.Result); err != nil {
+		if err := enc.Encode(r.Result); err != nil {
 			return fmt.Errorf("encoding result for %s: %w", r.URL, err)
 		}
-		fmt.Println()
 	}
 	return nil
 }
@@ -418,7 +416,7 @@ func renderOutput(result *defuddle.Result, opts *ParseOptions) (string, error) {
 
 	switch {
 	case opts.JSON:
-		jsonData, err := json.Marshal(result, jsontext.Multiline(true))
+		jsonData, err := json.MarshalIndent(result, "", "  ")
 		if err != nil {
 			return "", fmt.Errorf("error marshaling JSON: %w", err)
 		}
