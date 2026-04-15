@@ -508,6 +508,16 @@ func NodeContains(ancestor, descendant *goquery.Selection) bool {
 	return false
 }
 
+// IsProtectedNode returns true if el should never be removed:
+//   - el is an ancestor of mainContent (removing it would destroy the content)
+//   - el is inside a code block (pre or code)
+func IsProtectedNode(el *goquery.Selection, mainContent *goquery.Selection) bool {
+	if mainContent != nil && NodeContains(el, mainContent) {
+		return true
+	}
+	return el.Closest("pre").Length() > 0 || el.Closest("code").Length() > 0
+}
+
 // ScoreAndRemove scores blocks and removes those that are likely not content.
 // JavaScript original code:
 //
@@ -567,13 +577,7 @@ func ScoreAndRemove(doc *goquery.Document, debug bool, mainContent *goquery.Sele
 
 	// Process each block element
 	doc.Find(blockSelector).Each(func(_ int, element *goquery.Selection) {
-		// Never remove ancestors of the main content element
-		if mainContent != nil && NodeContains(element, mainContent) {
-			return
-		}
-
-		// Skip elements inside code blocks
-		if element.Closest("pre").Length() > 0 || element.Closest("code").Length() > 0 {
+		if IsProtectedNode(element, mainContent) {
 			return
 		}
 

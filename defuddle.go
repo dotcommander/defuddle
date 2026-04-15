@@ -84,6 +84,43 @@ func NewDefuddle(html string, options *Options) (*Defuddle, error) {
 //	  }
 //	  return result;
 //	}
+//
+// retryStep describes one retry pass in the Parse retry ladder.
+type retryStep struct {
+	name    string
+	trigger int                       // retry when result.WordCount < trigger
+	mutate  func(*Options)            // mutations to apply to a copy of options
+	accept  func(prev, next int) bool // accept next result if true
+}
+
+// retryLadder defines the ordered retry passes for Parse.
+// Predicates are transcribed verbatim from the original logic.
+var retryLadder = []retryStep{
+	{
+		name:    "partial-selectors",
+		trigger: 200,
+		mutate:  func(o *Options) { o.RemovePartialSelectors = new(bool) },
+		accept:  func(prev, next int) bool { return next > prev },
+	},
+	{
+		name:    "hidden-elements",
+		trigger: 50,
+		mutate:  func(o *Options) { o.RemoveHiddenElements = new(bool) },
+		accept:  func(prev, next int) bool { return next > prev*2 },
+	},
+	{
+		name:    "index-page",
+		trigger: 50,
+		mutate: func(o *Options) {
+			o.RemoveLowScoring = new(bool)
+			o.RemovePartialSelectors = new(bool)
+			o.RemoveContentPatterns = new(bool)
+		},
+		accept: func(prev, next int) bool { return next > prev },
+	},
+}
+
+// Parse parses the document and returns the extracted content.
 func (d *Defuddle) Parse(ctx context.Context) (*Result, error) {
 	// Try first with default settings
 	result, err := d.parseInternal(ctx, nil)
@@ -91,66 +128,34 @@ func (d *Defuddle) Parse(ctx context.Context) (*Result, error) {
 		return nil, err
 	}
 
-	// If result has very little content, try again without clutter removal
-	if result.WordCount < 200 {
+	for _, step := range retryLadder {
+		if result.WordCount >= step.trigger {
+			continue
+		}
 		if d.debug {
-			slog.Debug("Initial parse returned very little content, trying again")
+			slog.Debug("Parse: trying retry", "step", step.name, "wordCount", result.WordCount, "trigger", step.trigger)
 		}
 
-		retryOptions := &Options{}
+		retryOpts := &Options{}
 		if d.options != nil {
-			*retryOptions = *d.options
+			*retryOpts = *d.options
 		}
-		retryOptions.RemovePartialSelectors = PtrBool(false)
+		step.mutate(retryOpts)
 
-		retryResult, retryErr := d.parseInternal(ctx, retryOptions)
+		retryResult, retryErr := d.parseInternal(ctx, retryOpts)
 		if retryErr != nil {
-			return result, retryErr
+			// First retry propagates error; subsequent retries are best-effort.
+			if step.trigger == 200 {
+				return result, retryErr
+			}
+			continue
 		}
 
-		// Return the result with more content (any improvement, matching TS)
-		if retryResult.WordCount > result.WordCount {
+		if step.accept(result.WordCount, retryResult.WordCount) {
 			if d.debug {
-				slog.Debug("Retry produced more content", "originalWordCount", result.WordCount, "retryWordCount", retryResult.WordCount)
+				slog.Debug("Parse: retry accepted", "step", step.name, "originalWordCount", result.WordCount, "retryWordCount", retryResult.WordCount)
 			}
 			result = retryResult
-		}
-	}
-
-	// Retry 2: if result still < 50 words, retry without hidden element removal
-	if result.WordCount < 50 {
-		retryOptions2 := &Options{}
-		if d.options != nil {
-			*retryOptions2 = *d.options
-		}
-		retryOptions2.RemoveHiddenElements = PtrBool(false)
-
-		hiddenRetry, err := d.parseInternal(ctx, retryOptions2)
-		if err == nil && hiddenRetry.WordCount > result.WordCount*2 {
-			if d.debug {
-				slog.Debug("Hidden-element retry produced more content", "originalWordCount", result.WordCount, "retryWordCount", hiddenRetry.WordCount)
-			}
-			result = hiddenRetry
-		}
-	}
-
-	// Retry 3: if result still < 50 words, retry in index-page mode
-	// (disable scoring, partial selectors, and content patterns)
-	if result.WordCount < 50 {
-		retryOptions3 := &Options{}
-		if d.options != nil {
-			*retryOptions3 = *d.options
-		}
-		retryOptions3.RemoveLowScoring = PtrBool(false)
-		retryOptions3.RemovePartialSelectors = PtrBool(false)
-		retryOptions3.RemoveContentPatterns = PtrBool(false)
-
-		indexRetry, err := d.parseInternal(ctx, retryOptions3)
-		if err == nil && indexRetry.WordCount > result.WordCount {
-			if d.debug {
-				slog.Debug("Index-page retry produced more content", "originalWordCount", result.WordCount, "retryWordCount", indexRetry.WordCount)
-			}
-			result = indexRetry
 		}
 	}
 
@@ -313,18 +318,12 @@ func (d *Defuddle) parseInternal(ctx context.Context, overrideOptions *Options) 
 		return result, nil
 	}
 
-	// Re-parse from stored HTML to get a fresh document for mutation
+	// Re-parse from stored HTML to get a fresh mutable document.
 	// (goquery has no Clone method; the TypeScript version uses doc.cloneNode(true))
-	workingDoc, err := goquery.NewDocumentFromReader(strings.NewReader(d.rawHTML))
+	workingDoc, err := d.prepareWorkingDoc()
 	if err != nil {
-		return nil, fmt.Errorf("failed to re-parse HTML for processing: %w", err)
+		return nil, err
 	}
-
-	// Flatten declarative Shadow DOM templates into the main document
-	flattenShadowDOM(workingDoc)
-
-	// Resolve React SSR streaming placeholders ($RC boundaries)
-	resolveReactStreaming(workingDoc)
 
 	// Find small images in fresh document, excluding lazy-loaded ones
 	smallImages := d.findSmallImages(workingDoc)
@@ -350,19 +349,7 @@ func (d *Defuddle) parseInternal(ctx context.Context, overrideOptions *Options) 
 		parseTime := time.Since(startTime).Milliseconds()
 
 		result := &Result{
-			Metadata: Metadata{
-				Title:         extractedMetadata.Title,
-				Description:   extractedMetadata.Description,
-				Domain:        extractedMetadata.Domain,
-				Favicon:       extractedMetadata.Favicon,
-				Image:         extractedMetadata.Image,
-				ParseTime:     parseTime,
-				Published:     extractedMetadata.Published,
-				Author:        extractedMetadata.Author,
-				Site:          extractedMetadata.Site,
-				SchemaOrgData: schemaOrgData,
-				WordCount:     wordCount,
-			},
+			Metadata: buildMetadata(extractedMetadata, schemaOrgData, wordCount, parseTime),
 			Content:  content,
 			MetaTags: metaTags,
 		}
@@ -377,35 +364,7 @@ func (d *Defuddle) parseInternal(ctx context.Context, overrideOptions *Options) 
 		return result, nil
 	}
 
-	// Remove small images
-	d.removeSmallImages(workingDoc, smallImages)
-
-	// Remove all images if removeImages option is enabled
-	if options.RemoveImages {
-		d.removeAllImages(workingDoc)
-	}
-
-	// Remove hidden elements using computed styles
-	if BoolDefault(options.RemoveHiddenElements, true) {
-		d.removeHiddenElements(workingDoc)
-	}
-
-	// Score and remove non-content blocks first (matches TS pipeline order: scoring before selectors)
-	if BoolDefault(options.RemoveLowScoring, true) {
-		scoring.ScoreAndRemove(workingDoc, d.debug, mainContent)
-	}
-
-	// Then remove clutter using selectors (after scoring — matches TS pipeline order)
-	removeExact := BoolDefault(options.RemoveExactSelectors, true)
-	removePartial := BoolDefault(options.RemovePartialSelectors, true)
-	if removeExact || removePartial {
-		d.removeBySelector(workingDoc, removeExact, removePartial, mainContent)
-	}
-
-	// Remove elements by content patterns (read time, boilerplate, article cards)
-	if BoolDefault(options.RemoveContentPatterns, true) {
-		removals.RemoveByContentPattern(mainContent, workingDoc, d.debug, options.URL)
-	}
+	d.runRemovalPipeline(workingDoc, mainContent, smallImages, options)
 
 	// Normalize the main content
 	standardize.Content(mainContent, extractedMetadata, workingDoc, d.debug)
@@ -434,19 +393,7 @@ func (d *Defuddle) parseInternal(ctx context.Context, overrideOptions *Options) 
 	}
 
 	result := &Result{
-		Metadata: Metadata{
-			Title:         extractedMetadata.Title,
-			Description:   extractedMetadata.Description,
-			Domain:        extractedMetadata.Domain,
-			Favicon:       extractedMetadata.Favicon,
-			Image:         extractedMetadata.Image,
-			ParseTime:     parseTime,
-			Published:     extractedMetadata.Published,
-			Author:        extractedMetadata.Author,
-			Site:          extractedMetadata.Site,
-			SchemaOrgData: schemaOrgData,
-			WordCount:     wordCount,
-		},
+		Metadata:        buildMetadata(extractedMetadata, schemaOrgData, wordCount, parseTime),
 		Content:         content,
 		ContentMarkdown: contentMarkdown,
 		MetaTags:        metaTags,
@@ -521,20 +468,11 @@ func (d *Defuddle) tryExtractor(
 
 	extractorType := strings.ToLower(strings.TrimSuffix(ext.Name(), "Extractor"))
 
+	// buildMetadata uses extractedMetadata.Site; override with siteName after.
+	meta := buildMetadata(extractedMetadata, schemaOrgData, d.countWords(extracted.ContentHTML), time.Since(startTime).Milliseconds())
+	meta.Site = siteName
 	result := &Result{
-		Metadata: Metadata{
-			Title:         extractedMetadata.Title,
-			Description:   extractedMetadata.Description,
-			Domain:        extractedMetadata.Domain,
-			Favicon:       extractedMetadata.Favicon,
-			Image:         extractedMetadata.Image,
-			ParseTime:     time.Since(startTime).Milliseconds(),
-			Published:     extractedMetadata.Published,
-			Author:        extractedMetadata.Author,
-			Site:          siteName,
-			SchemaOrgData: schemaOrgData,
-			WordCount:     d.countWords(extracted.ContentHTML),
-		},
+		Metadata:      meta,
 		Content:       extracted.ContentHTML,
 		ExtractorType: &extractorType,
 		Variables:     extracted.Variables,
@@ -576,12 +514,7 @@ func (d *Defuddle) removeBySelector(doc *goquery.Document, removeExact, removePa
 		exactSelectors := constants.GetExactSelectors()
 		for _, selector := range exactSelectors {
 			doc.Find(selector).Each(func(_ int, el *goquery.Selection) {
-				// Never remove ancestors of main content
-				if mainContent != nil && scoring.NodeContains(el, mainContent) {
-					return
-				}
-				// Protect elements inside code blocks
-				if el.Closest("pre").Length() > 0 || el.Closest("code").Length() > 0 {
+				if scoring.IsProtectedNode(el, mainContent) {
 					return
 				}
 				el.Remove()
@@ -604,12 +537,7 @@ func (d *Defuddle) removeBySelector(doc *goquery.Document, removeExact, removePa
 		combinedSelector := strings.Join(attrSelector, ",")
 
 		doc.Find(combinedSelector).Each(func(_ int, element *goquery.Selection) {
-			// Never remove ancestors of main content
-			if mainContent != nil && scoring.NodeContains(element, mainContent) {
-				return
-			}
-			// Protect elements inside code blocks
-			if element.Closest("pre").Length() > 0 || element.Closest("code").Length() > 0 {
+			if scoring.IsProtectedNode(element, mainContent) {
 				return
 			}
 			// Protect footnote lists and their parents
@@ -722,6 +650,66 @@ func applyOptions(dst, src *Options) {
 	}
 	if src.RoleOptions != nil {
 		dst.RoleOptions = src.RoleOptions
+	}
+}
+
+// buildMetadata constructs the Metadata struct from extracted fields.
+// All three Result-building sites use identical Metadata fields — this
+// helper eliminates the duplication.
+func buildMetadata(m *metadata.Metadata, schemaOrgData any, wordCount int, parseTime int64) Metadata {
+	return Metadata{
+		Title:         m.Title,
+		Description:   m.Description,
+		Domain:        m.Domain,
+		Favicon:       m.Favicon,
+		Image:         m.Image,
+		ParseTime:     parseTime,
+		Published:     m.Published,
+		Author:        m.Author,
+		Site:          m.Site,
+		SchemaOrgData: schemaOrgData,
+		WordCount:     wordCount,
+	}
+}
+
+// prepareWorkingDoc re-parses the raw HTML into a fresh mutable document,
+// then applies shadow-DOM flattening and React SSR streaming resolution.
+func (d *Defuddle) prepareWorkingDoc() (*goquery.Document, error) {
+	workingDoc, err := goquery.NewDocumentFromReader(strings.NewReader(d.rawHTML))
+	if err != nil {
+		return nil, fmt.Errorf("failed to re-parse HTML for processing: %w", err)
+	}
+	flattenShadowDOM(workingDoc)
+	resolveReactStreaming(workingDoc)
+	return workingDoc, nil
+}
+
+// runRemovalPipeline applies the full removal pipeline to workingDoc:
+// small-image removal, hidden elements, low-scoring blocks, clutter
+// selectors, and content patterns. mainContent is protected throughout.
+func (d *Defuddle) runRemovalPipeline(workingDoc *goquery.Document, mainContent *goquery.Selection, smallImages map[string]bool, options *Options) {
+	d.removeSmallImages(workingDoc, smallImages)
+
+	if options.RemoveImages {
+		d.removeAllImages(workingDoc)
+	}
+
+	if BoolDefault(options.RemoveHiddenElements, true) {
+		d.removeHiddenElements(workingDoc)
+	}
+
+	if BoolDefault(options.RemoveLowScoring, true) {
+		scoring.ScoreAndRemove(workingDoc, d.debug, mainContent)
+	}
+
+	removeExact := BoolDefault(options.RemoveExactSelectors, true)
+	removePartial := BoolDefault(options.RemovePartialSelectors, true)
+	if removeExact || removePartial {
+		d.removeBySelector(workingDoc, removeExact, removePartial, mainContent)
+	}
+
+	if BoolDefault(options.RemoveContentPatterns, true) {
+		removals.RemoveByContentPattern(mainContent, workingDoc, d.debug, options.URL)
 	}
 }
 
