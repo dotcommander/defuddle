@@ -63,6 +63,29 @@ func compileNavigationHeadingPattern() *regexp.Regexp {
 	return regexp.MustCompile(`(?i)` + strings.Join(patterns, "|"))
 }
 
+// Scoring bonus/penalty constants for ScoreElement.
+const (
+	scoreParagraphBonus       = 10.0 // per paragraph
+	scoreImageDensityFactor   = 3.0  // multiplied by image/word density
+	scoreRightSideBonus       = 5.0  // right-aligned elements
+	scoreDateBonus            = 10.0 // element contains a recognisable date
+	scoreAuthorBonus          = 10.0 // element contains an author attribution
+	scoreContentClassBonus    = 15.0 // element class includes content/article/post
+	scoreFootnoteBonus        = 10.0 // element contains footnote references
+	scoreNestedTablePenalty   = 5.0  // per nested table
+	scoreCenterCellBonus      = 10.0 // td that is a centre cell in a layout table
+	scoreContentTableMinWidth = 400  // pixel width threshold for content-layout tables
+	scoreLinkDensityCap       = 0.5  // cap on link-text/total-text ratio
+)
+
+// Word-count thresholds used in isLikelyContent.
+const (
+	contentMinWords           = 100 // sufficient alone to signal content
+	contentMinWordsWithBlocks = 50  // sufficient with 2+ content blocks
+	contentMinWordsSmall      = 30  // sufficient with 1+ content block
+	contentMinWordsProse      = 10  // sufficient with sentence-ending punct + low link density
+)
+
 // ContentScore represents a scored element
 // JavaScript original code:
 //
@@ -339,58 +362,69 @@ var nonContentPatterns = []string{
 //		return score;
 //	}
 func ScoreElement(element *goquery.Selection) float64 {
-	score := 0.0
-
-	// Text density
 	text := strings.TrimSpace(element.Text())
 	words := textutil.CountWords(text)
-	score += float64(words)
+	className := strings.ToLower(element.AttrOr("class", ""))
 
-	// Paragraph ratio
+	score := scoreTextDensity(element, words)
+	score += scoreImagePenalty(element, words)
+	score += scorePositionBonus(element)
+	score += scoreContentSignals(element, text, className)
+	score += scoreTableCellBonus(element)
+	score = scoreLinkDensityMultiplier(element, text, score)
+	return score
+}
+
+// scoreTextDensity returns word count + paragraph bonus + comma bonus.
+func scoreTextDensity(element *goquery.Selection, words int) float64 {
 	paragraphs := element.Find("p").Length()
-	score += float64(paragraphs) * 10
-
-	// Comma counting — prose text has commas; navigation doesn't
+	text := element.Text()
 	commas := strings.Count(text, ",")
-	score += float64(commas)
+	return float64(words) + float64(paragraphs)*scoreParagraphBonus + float64(commas)
+}
 
-	// Image ratio (penalize high image density)
+// scoreImagePenalty penalises high image density relative to word count.
+func scoreImagePenalty(element *goquery.Selection, words int) float64 {
 	images := element.Find("img").Length()
 	imageDensity := float64(images) / float64(max(words, 1))
-	score -= imageDensity * 3
+	return -(imageDensity * scoreImageDensityFactor)
+}
 
-	// Position bonus (center/right elements)
+// scorePositionBonus rewards right-aligned elements.
+func scorePositionBonus(element *goquery.Selection) float64 {
 	style, _ := element.Attr("style")
 	align, _ := element.Attr("align")
 	isRightSide := strings.Contains(style, "float: right") ||
 		strings.Contains(style, "text-align: right") ||
 		align == "right"
 	if isRightSide {
-		score += 5
+		return scoreRightSideBonus
 	}
+	return 0
+}
 
-	// Content indicators
+// scoreContentSignals adds bonuses for dates, author attributions, content
+// class names, footnotes, and deducts for nested tables.
+func scoreContentSignals(element *goquery.Selection, text, className string) float64 {
+	score := 0.0
+
 	if dateRe.MatchString(text) {
-		score += 10
+		score += scoreDateBonus
 	}
-
 	if authorRe.MatchString(text) {
-		score += 10
+		score += scoreAuthorBonus
 	}
 
-	// Check for common content classes/attributes
-	className := strings.ToLower(element.AttrOr("class", ""))
 	if strings.Contains(className, "content") ||
 		strings.Contains(className, "article") ||
 		strings.Contains(className, "post") {
-		score += 15
+		score += scoreContentClassBonus
 	}
 
-	// Check for footnotes/references
 	footnoteSelectors := constants.GetFootnoteInlineReferences()
 	for _, selector := range footnoteSelectors {
 		if element.Find(selector).Length() > 0 {
-			score += 10
+			score += scoreFootnoteBonus
 			break
 		}
 	}
@@ -398,65 +432,72 @@ func ScoreElement(element *goquery.Selection) float64 {
 	footnoteListSelectors := constants.GetFootnoteListSelectors()
 	for _, selector := range footnoteListSelectors {
 		if element.Find(selector).Length() > 0 {
-			score += 10
+			score += scoreFootnoteBonus
 			break
 		}
 	}
 
-	// Check for nested tables (penalize)
 	nestedTables := element.Find("table").Length()
-	score -= float64(nestedTables) * 5
+	score -= float64(nestedTables) * scoreNestedTablePenalty
 
-	// Additional scoring for table cells
-	if goquery.NodeName(element) == "td" {
-		parentTable := element.Closest("table")
-		if parentTable.Length() > 0 {
-			// Only favor cells in tables that look like old-style content layouts
-			widthStr, _ := parentTable.Attr("width")
-			tableWidth := 0
-			if widthStr != "" {
-				if w, err := strconv.Atoi(widthStr); err == nil {
-					tableWidth = w
-				}
-			}
-			tableAlign, _ := parentTable.Attr("align")
-			tableClass := strings.ToLower(parentTable.AttrOr("class", ""))
+	return score
+}
 
-			isTableLayout := tableWidth > 400 || // Common width for main content tables
-				tableAlign == "center" ||
-				strings.Contains(tableClass, "content") ||
-				strings.Contains(tableClass, "article")
-
-			if isTableLayout {
-				// Additional checks to ensure this is likely the main content cell
-				allCells := parentTable.Find("td")
-				cellIndex := -1
-				allCells.Each(func(i int, cell *goquery.Selection) {
-					if cell.Get(0) == element.Get(0) {
-						cellIndex = i
-					}
-				})
-
-				isCenterCell := cellIndex > 0 && cellIndex < allCells.Length()-1
-				if isCenterCell {
-					score += 10
-				}
-			}
-		}
+// scoreTableCellBonus adds a bonus when the element is a centre cell of a
+// content-layout table.
+func scoreTableCellBonus(element *goquery.Selection) float64 {
+	if goquery.NodeName(element) != "td" {
+		return 0
+	}
+	parentTable := element.Closest("table")
+	if parentTable.Length() == 0 {
+		return 0
 	}
 
-	// Link density as a multiplier (must be last scoring step).
-	// Scales score proportionally based on how much text is inside links.
-	// Capped at 0.5 to avoid over-penalizing link-heavy content like blog indexes.
+	widthStr, _ := parentTable.Attr("width")
+	tableWidth := 0
+	if widthStr != "" {
+		if w, err := strconv.Atoi(widthStr); err == nil {
+			tableWidth = w
+		}
+	}
+	tableAlign, _ := parentTable.Attr("align")
+	tableClass := strings.ToLower(parentTable.AttrOr("class", ""))
+
+	isTableLayout := tableWidth > scoreContentTableMinWidth ||
+		tableAlign == "center" ||
+		strings.Contains(tableClass, "content") ||
+		strings.Contains(tableClass, "article")
+
+	if !isTableLayout {
+		return 0
+	}
+
+	allCells := parentTable.Find("td")
+	cellIndex := -1
+	allCells.Each(func(i int, cell *goquery.Selection) {
+		if cell.Get(0) == element.Get(0) {
+			cellIndex = i
+		}
+	})
+
+	isCenterCell := cellIndex > 0 && cellIndex < allCells.Length()-1
+	if isCenterCell {
+		return scoreCenterCellBonus
+	}
+	return 0
+}
+
+// scoreLinkDensityMultiplier scales score by (1 - link-text density), capped
+// at scoreLinkDensityCap. Must be the last scoring step.
+func scoreLinkDensityMultiplier(element *goquery.Selection, text string, score float64) float64 {
 	linkTextLen := 0
 	element.Find("a").Each(func(_ int, a *goquery.Selection) {
 		linkTextLen += len(strings.TrimSpace(a.Text()))
 	})
 	textLen := max(len(text), 1)
-	linkDensity := min(float64(linkTextLen)/float64(textLen), 0.5)
-	score *= (1.0 - linkDensity)
-
-	return score
+	linkDensity := min(float64(linkTextLen)/float64(textLen), scoreLinkDensityCap)
+	return score * (1.0 - linkDensity)
 }
 
 // FindBestElement finds the best scoring element from a list
@@ -729,22 +770,22 @@ func isLikelyContent(element *goquery.Selection) bool {
 	contentBlocks := paragraphs + listItems
 
 	// If the element has a significant amount of text and content blocks, it's likely content
-	if words > 50 && contentBlocks > 1 {
+	if words > contentMinWordsWithBlocks && contentBlocks > 1 {
 		return true
 	}
 
 	// Check for elements with significant text content
-	if words > 100 {
+	if words > contentMinWords {
 		return true
 	}
 
 	// Check for elements with text content and some content blocks
-	if words > 30 && contentBlocks > 0 {
+	if words > contentMinWordsSmall && contentBlocks > 0 {
 		return true
 	}
 
 	// Prose text with sentence-ending punctuation and low link density
-	if words >= 10 && sentenceEndRe.MatchString(text) {
+	if words >= contentMinWordsProse && sentenceEndRe.MatchString(text) {
 		linkCount := element.Find("a").Length()
 		if float64(linkCount)/float64(words) < 0.1 {
 			return true
