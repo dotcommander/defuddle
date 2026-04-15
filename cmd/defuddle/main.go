@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -12,8 +13,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"errors"
 
 	"github.com/dotcommander/defuddle"
 	"github.com/dotcommander/defuddle/extractors"
@@ -33,7 +32,7 @@ var (
 var (
 	ErrInvalidHeaderFormat = fmt.Errorf("invalid header format (expected 'Key: Value')")
 	ErrDirectoryTraversal  = fmt.Errorf("invalid file path: directory traversal detected")
-	errNoURLs              = errors.New("no URLs provided")
+	ErrNoURLs              = errors.New("no URLs provided")
 	ErrPropertyNotFound    = fmt.Errorf("property not found in response")
 )
 
@@ -186,7 +185,7 @@ func runBatch(cmd *cobra.Command, _ []string) error {
 	}
 
 	if len(urls) == 0 {
-		return errNoURLs
+		return ErrNoURLs
 	}
 
 	opts := &defuddle.Options{
