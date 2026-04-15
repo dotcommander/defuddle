@@ -181,7 +181,7 @@ func ParseFromURL(ctx context.Context, url string, options *Options) (*Result, e
 	client := options.Client
 	if client == nil {
 		client = requests.New(
-			requests.WithUserAgent("Mozilla/5.0 (compatible; Defuddle/1.0; +https://github.com/dotcommander/defuddle)"),
+			requests.WithUserAgent(fmt.Sprintf("Mozilla/5.0 (compatible; Defuddle/%s; +https://github.com/dotcommander/defuddle)", Version)),
 			requests.WithTimeout(10*time.Second),
 		)
 	}
