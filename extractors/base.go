@@ -103,29 +103,3 @@ func (e *ExtractorBase) GetURL() string {
 func (e *ExtractorBase) GetSchemaOrgData() any {
 	return e.schemaOrgData
 }
-
-// GetTextContent safely extracts text content from a selection
-func (e *ExtractorBase) GetTextContent(sel *goquery.Selection) string {
-	if sel.Length() == 0 {
-		return ""
-	}
-	return sel.Text()
-}
-
-// GetHTMLContent safely extracts HTML content from a selection
-func (e *ExtractorBase) GetHTMLContent(sel *goquery.Selection) string {
-	if sel.Length() == 0 {
-		return ""
-	}
-	html, _ := sel.Html()
-	return html
-}
-
-// GetAttribute safely gets an attribute value
-func (e *ExtractorBase) GetAttribute(sel *goquery.Selection, attr string) string {
-	if sel.Length() == 0 {
-		return ""
-	}
-	value, _ := sel.Attr(attr)
-	return value
-}

@@ -36,12 +36,62 @@ var (
 	ErrPropertyNotFound    = fmt.Errorf("property not found in response")
 )
 
-// knownProperties lists all valid property names for --property extraction.
-var knownProperties = []string{
-	"content", "title", "description", "domain", "favicon", "image",
-	"author", "site", "published", "wordCount", "parseTime",
-	"metaTags", "schemaOrgData", "extractorType", "contentMarkdown",
+// propertyExtractors maps lowercase property names to their Result accessor.
+// The keys also serve as the canonical list of valid --property values.
+var propertyExtractors = map[string]func(*defuddle.Result) string{
+	"content":     func(r *defuddle.Result) string { return r.Content },
+	"title":       func(r *defuddle.Result) string { return r.Title },
+	"description": func(r *defuddle.Result) string { return r.Description },
+	"domain":      func(r *defuddle.Result) string { return r.Domain },
+	"favicon":     func(r *defuddle.Result) string { return r.Favicon },
+	"image":       func(r *defuddle.Result) string { return r.Image },
+	"author":      func(r *defuddle.Result) string { return r.Author },
+	"site":        func(r *defuddle.Result) string { return r.Site },
+	"published":   func(r *defuddle.Result) string { return r.Published },
+	"wordcount":   func(r *defuddle.Result) string { return strconv.Itoa(r.WordCount) },
+	"parsetime":   func(r *defuddle.Result) string { return strconv.FormatInt(r.ParseTime, 10) },
+	"metatags": func(r *defuddle.Result) string {
+		if r.MetaTags == nil {
+			return ""
+		}
+		b, err := json.Marshal(r.MetaTags)
+		if err != nil {
+			return ""
+		}
+		return string(b)
+	},
+	"schemaorgdata": func(r *defuddle.Result) string {
+		if r.SchemaOrgData == nil {
+			return "null"
+		}
+		b, err := json.Marshal(r.SchemaOrgData)
+		if err != nil {
+			return ""
+		}
+		return string(b)
+	},
+	"extractortype": func(r *defuddle.Result) string {
+		if r.ExtractorType != nil {
+			return *r.ExtractorType
+		}
+		return ""
+	},
+	"contentmarkdown": func(r *defuddle.Result) string {
+		if r.ContentMarkdown != nil {
+			return *r.ContentMarkdown
+		}
+		return ""
+	},
 }
+
+// knownProperties is the sorted display list for error messages.
+var knownProperties = func() []string {
+	keys := make([]string, 0, len(propertyExtractors))
+	for k := range propertyExtractors {
+		keys = append(keys, k)
+	}
+	return keys
+}()
 
 var rootCmd = &cobra.Command{
 	Use:     "defuddle",
@@ -284,17 +334,33 @@ func buildContext(timeout time.Duration) (context.Context, context.CancelFunc) {
 
 func executeParseContent(opts *ParseOptions) error {
 	// Parse headers
-	headerMap := make(map[string]string)
 	for _, header := range opts.Headers {
-		key, value, err := parseHeader(header)
-		if err != nil {
+		if _, _, err := parseHeader(header); err != nil {
 			return err
 		}
-		headerMap[key] = value
 	}
 
-	// Create defuddle options
-	defuddleOpts := &defuddle.Options{
+	defuddleOpts := buildDefuddleOptions(opts)
+
+	ctx, cancel := buildContext(opts.Timeout)
+	defer cancel()
+
+	result, err := loadResult(ctx, opts, defuddleOpts)
+	if err != nil {
+		return fmt.Errorf("error loading content: %w", err)
+	}
+
+	content, err := renderOutput(result, opts)
+	if err != nil {
+		return err
+	}
+
+	return writeOutput(opts.Output, content)
+}
+
+// buildDefuddleOptions converts ParseOptions into a defuddle.Options.
+func buildDefuddleOptions(opts *ParseOptions) *defuddle.Options {
+	o := &defuddle.Options{
 		Debug:            opts.Debug,
 		URL:              opts.Source,
 		Markdown:         opts.Markdown,
@@ -303,81 +369,68 @@ func executeParseContent(opts *ParseOptions) error {
 		ContentSelector:  opts.ContentSelector,
 	}
 	if opts.NoClutterRemoval {
-		defuddleOpts.RemoveExactSelectors = new(bool)
-		defuddleOpts.RemovePartialSelectors = new(bool)
-		defuddleOpts.RemoveHiddenElements = new(bool)
-		defuddleOpts.RemoveLowScoring = new(bool)
-		defuddleOpts.RemoveContentPatterns = new(bool)
+		o.RemoveExactSelectors = new(bool)
+		o.RemovePartialSelectors = new(bool)
+		o.RemoveHiddenElements = new(bool)
+		o.RemoveLowScoring = new(bool)
+		o.RemoveContentPatterns = new(bool)
 	}
+	return o
+}
 
-	ctx, cancel := buildContext(opts.Timeout)
-	defer cancel()
-
-	var result *defuddle.Result
-	var err error
-
-	// Parse content based on source type
+// loadResult fetches and parses content from stdin, a URL, or a local file.
+func loadResult(ctx context.Context, opts *ParseOptions, defuddleOpts *defuddle.Options) (*defuddle.Result, error) {
 	switch {
 	case opts.Source == "-":
-		// Parse from stdin
-		stdinBytes, readErr := io.ReadAll(os.Stdin)
-		if readErr != nil {
-			return fmt.Errorf("reading stdin: %w", readErr)
+		stdinBytes, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			return nil, fmt.Errorf("reading stdin: %w", err)
 		}
-		defuddleInstance, createErr := defuddle.NewDefuddle(string(stdinBytes), defuddleOpts)
-		if createErr != nil {
-			return fmt.Errorf("error creating defuddle instance: %w", createErr)
+		d, err := defuddle.NewDefuddle(string(stdinBytes), defuddleOpts)
+		if err != nil {
+			return nil, fmt.Errorf("error creating defuddle instance: %w", err)
 		}
-		result, err = defuddleInstance.Parse(ctx)
+		return d.Parse(ctx)
 	case strings.HasPrefix(opts.Source, "http://") || strings.HasPrefix(opts.Source, "https://"):
-		// Parse from URL
-		result, err = defuddle.ParseFromURL(ctx, opts.Source, defuddleOpts)
+		return defuddle.ParseFromURL(ctx, opts.Source, defuddleOpts)
 	default:
-		// Parse from file
-		htmlContent, fileErr := readFile(opts.Source)
-		if fileErr != nil {
-			return fileErr
+		htmlContent, err := readFile(opts.Source)
+		if err != nil {
+			return nil, err
 		}
-		defuddleInstance, createErr := defuddle.NewDefuddle(htmlContent, defuddleOpts)
-		if createErr != nil {
-			return fmt.Errorf("error creating defuddle instance: %w", createErr)
+		d, err := defuddle.NewDefuddle(htmlContent, defuddleOpts)
+		if err != nil {
+			return nil, fmt.Errorf("error creating defuddle instance: %w", err)
 		}
-		result, err = defuddleInstance.Parse(ctx)
+		return d.Parse(ctx)
 	}
+}
 
-	if err != nil {
-		return fmt.Errorf("error loading content: %w", err)
-	}
-
-	// Handle property extraction
+// renderOutput formats result according to opts, returning the string to write.
+func renderOutput(result *defuddle.Result, opts *ParseOptions) (string, error) {
 	if opts.Property != "" {
 		value, found := getProperty(result, opts.Property)
 		if !found {
-			return fmt.Errorf("%w: %q (valid: %s)", ErrPropertyNotFound, opts.Property, strings.Join(knownProperties, ", "))
+			return "", fmt.Errorf("%w: %q (valid: %s)", ErrPropertyNotFound, opts.Property, strings.Join(knownProperties, ", "))
 		}
-		return writeOutput(opts.Output, value)
+		return value, nil
 	}
 
-	// Handle different output formats
-	var content string
 	switch {
 	case opts.JSON:
 		jsonData, err := json.Marshal(result, jsontext.Multiline(true))
 		if err != nil {
-			return fmt.Errorf("error marshaling JSON: %w", err)
+			return "", fmt.Errorf("error marshaling JSON: %w", err)
 		}
-		content = string(jsonData)
+		return string(jsonData), nil
 	case opts.Markdown:
 		if result.ContentMarkdown != nil {
-			content = *result.ContentMarkdown
-		} else {
-			content = result.Content
+			return *result.ContentMarkdown, nil
 		}
+		return result.Content, nil
 	default:
-		content = result.Content
+		return result.Content, nil
 	}
-
-	return writeOutput(opts.Output, content)
 }
 
 func parseHeader(header string) (string, string, error) {
@@ -430,60 +483,9 @@ func writeOutput(filename, content string) error {
 
 func getProperty(result *defuddle.Result, property string) (string, bool) {
 	// Convert to lowercase for case-insensitive matching (matching TypeScript behavior)
-	prop := strings.ToLower(property)
-
-	switch prop {
-	case "content":
-		return result.Content, true
-	case "title":
-		return result.Title, true
-	case "description":
-		return result.Description, true
-	case "domain":
-		return result.Domain, true
-	case "favicon":
-		return result.Favicon, true
-	case "image":
-		return result.Image, true
-	case "author":
-		return result.Author, true
-	case "site":
-		return result.Site, true
-	case "published":
-		return result.Published, true
-	case "wordcount":
-		return strconv.Itoa(result.WordCount), true
-	case "parsetime":
-		return strconv.FormatInt(result.ParseTime, 10), true
-	case "metatags":
-		if result.MetaTags != nil {
-			jsonBytes, err := json.Marshal(result.MetaTags)
-			if err != nil {
-				return "", true
-			}
-			return string(jsonBytes), true
-		}
-		return "", true
-	case "schemaorgdata":
-		if result.SchemaOrgData != nil {
-			jsonBytes, err := json.Marshal(result.SchemaOrgData)
-			if err != nil {
-				return "", true
-			}
-			return string(jsonBytes), true
-		}
-		return "null", true
-	case "extractortype":
-		if result.ExtractorType != nil {
-			return *result.ExtractorType, true
-		}
-		return "", true
-	case "contentmarkdown":
-		if result.ContentMarkdown != nil {
-			return *result.ContentMarkdown, true
-		}
-		return "", true
-	default:
+	fn, ok := propertyExtractors[strings.ToLower(property)]
+	if !ok {
 		return "", false
 	}
+	return fn(result), true
 }
