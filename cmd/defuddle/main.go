@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"errors"
+
 	"github.com/dotcommander/defuddle"
 	"github.com/dotcommander/defuddle/extractors"
 	"github.com/go-json-experiment/json"
@@ -31,6 +33,7 @@ var (
 var (
 	ErrInvalidHeaderFormat = fmt.Errorf("invalid header format (expected 'Key: Value')")
 	ErrDirectoryTraversal  = fmt.Errorf("invalid file path: directory traversal detected")
+	errNoURLs              = errors.New("no URLs provided")
 	ErrPropertyNotFound    = fmt.Errorf("property not found in response")
 )
 
@@ -165,7 +168,7 @@ func runBatch(cmd *cobra.Command, _ []string) error {
 		if err != nil {
 			return fmt.Errorf("opening input file: %w", err)
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 		reader = f
 	}
 
@@ -183,7 +186,7 @@ func runBatch(cmd *cobra.Command, _ []string) error {
 	}
 
 	if len(urls) == 0 {
-		return fmt.Errorf("no URLs provided")
+		return errNoURLs
 	}
 
 	opts := &defuddle.Options{
