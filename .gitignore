@@ -88,3 +88,9 @@ tmp/
 
 # Root binary build artifact
 /defuddle
+
+# AI development files (keep local, not published)
+CLAUDE.md
+AGENTS.md
+.cursor/
+.agents/
