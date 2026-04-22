@@ -204,7 +204,7 @@ func TestInitializeBuiltins_RegistersBuiltinExtractors(t *testing.T) {
 	r.initializeBuiltins()
 
 	mappings := r.GetMappings()
-	assert.Len(t, mappings, 13, "should register exactly 13 built-in extractors")
+	assert.Len(t, mappings, 16, "should register exactly 16 built-in extractors")
 }
 
 func TestInitializeBuiltins_EachExtractorRoutes(t *testing.T) {
@@ -238,4 +238,44 @@ func TestInitializeBuiltins_EachExtractorRoutes(t *testing.T) {
 			assert.NotNil(t, extractor, "expected extractor for %s URL %s", tc.name, tc.url)
 		})
 	}
+}
+
+func TestInitializeBuiltins_NewExtractorPatterns(t *testing.T) {
+	t.Parallel()
+
+	r := NewRegistry()
+	r.initializeBuiltins()
+
+	// Wikipedia: constructor always returns an extractor (CanExtract gates elsewhere).
+	t.Run("Wikipedia en", func(t *testing.T) {
+		t.Parallel()
+		doc := newTestDoc(t, `<html><body><div id="mw-content-text"></div></body></html>`)
+		ext := r.FindExtractor(doc, "https://en.wikipedia.org/wiki/Go_(programming_language)", nil)
+		assert.NotNil(t, ext)
+		assert.Equal(t, "WikipediaExtractor", ext.Name())
+	})
+
+	t.Run("Wikipedia de subdomain", func(t *testing.T) {
+		t.Parallel()
+		doc := newTestDoc(t, `<html><body><div id="mw-content-text"></div></body></html>`)
+		ext := r.FindExtractor(doc, "https://de.wikipedia.org/wiki/Go", nil)
+		assert.NotNil(t, ext)
+	})
+
+	t.Run("Medium custom domain CanExtract gates", func(t *testing.T) {
+		t.Parallel()
+		// No Medium signals in the DOM → CanExtract false → registry returns nil.
+		doc := newTestDoc(t, `<html><body><article><p>text</p></article></body></html>`)
+		ext := r.FindExtractor(doc, "https://medium.com/p/abc123", nil)
+		assert.Nil(t, ext)
+	})
+
+	t.Run("NYTimes routes to NytimesExtractor", func(t *testing.T) {
+		t.Parallel()
+		doc := newTestDoc(t, "<html><body></body></html>")
+		ext := r.FindExtractor(doc, "https://www.nytimes.com/2026/04/22/tech/article.html", nil)
+		// NYTimes constructor always returns an extractor; CanExtract gates on JSON.
+		assert.NotNil(t, ext)
+		assert.Equal(t, "NytimesExtractor", ext.Name())
+	})
 }

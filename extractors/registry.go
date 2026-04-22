@@ -392,6 +392,41 @@ func (r *Registry) initializeBuiltins() {
 			return NewThreadsExtractor(doc, url, schemaOrgData)
 		},
 	})
+	// Wikipedia — all language subdomains (en, de, zh, simple, etc.).
+	r.Register(ExtractorMapping{
+		Patterns: []any{
+			regexp.MustCompile(`(?i)[a-z-]+\.wikipedia\.org`),
+		},
+		Extractor: func(doc *goquery.Document, url string, schemaOrgData any) BaseExtractor {
+			return NewWikipediaExtractor(doc, url, schemaOrgData)
+		},
+	})
+
+	// Medium — medium.com, *.medium.com, and custom-domain publications that
+	// identify themselves via the og:site_name or al:android:app_name meta tags.
+	r.Register(ExtractorMapping{
+		Patterns: []any{
+			"medium.com",
+			regexp.MustCompile(`\.medium\.com`),
+		},
+		Extractor: func(doc *goquery.Document, url string, schemaOrgData any) BaseExtractor {
+			m := NewMediumExtractor(doc, url, schemaOrgData)
+			if m.CanExtract() {
+				return m
+			}
+			return nil
+		},
+	})
+
+	// NYTimes — www.nytimes.com and nytimes.com.
+	r.Register(ExtractorMapping{
+		Patterns: []any{
+			"nytimes.com",
+		},
+		Extractor: func(doc *goquery.Document, url string, schemaOrgData any) BaseExtractor {
+			return NewNytimesExtractor(doc, url, schemaOrgData)
+		},
+	})
 
 	// Mastodon — catch-all registered LAST so all specific extractors above take
 	// priority. CanExtract() gates on Mastodon-specific DOM signals, so non-Mastodon
