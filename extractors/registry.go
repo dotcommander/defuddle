@@ -375,6 +375,15 @@ func (r *Registry) initializeBuiltins() {
 		},
 	})
 
+	// Bluesky — registered before the Mastodon catch-all so bsky.app URLs are
+	// handled by the specific extractor without triggering the DOM scan.
+	r.Register(ExtractorMapping{
+		Patterns: []any{"bsky.app"},
+		Extractor: func(doc *goquery.Document, url string, schemaOrgData any) BaseExtractor {
+			return NewBlueskyExtractor(doc, url, schemaOrgData)
+		},
+	})
+
 	// Mastodon — catch-all registered LAST so all specific extractors above take
 	// priority. CanExtract() gates on Mastodon-specific DOM signals, so non-Mastodon
 	// pages that fall through to this entry will return nil from FindExtractor.
