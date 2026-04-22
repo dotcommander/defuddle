@@ -384,6 +384,15 @@ func (r *Registry) initializeBuiltins() {
 		},
 	})
 
+	// Threads — registered before the Mastodon catch-all; CanExtract() gates on
+	// Threads-specific DOM signals so non-Threads pages fall through cleanly.
+	r.Register(ExtractorMapping{
+		Patterns: []any{"threads.com", "threads.net"},
+		Extractor: func(doc *goquery.Document, url string, schemaOrgData any) BaseExtractor {
+			return NewThreadsExtractor(doc, url, schemaOrgData)
+		},
+	})
+
 	// Mastodon — catch-all registered LAST so all specific extractors above take
 	// priority. CanExtract() gates on Mastodon-specific DOM signals, so non-Mastodon
 	// pages that fall through to this entry will return nil from FindExtractor.

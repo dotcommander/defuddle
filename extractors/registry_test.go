@@ -196,7 +196,7 @@ func TestRegistry_ClearCache_NegativeEntry(t *testing.T) {
 	r.ClearCache()
 }
 
-func TestInitializeBuiltins_RegistersNineExtractors(t *testing.T) {
+func TestInitializeBuiltins_RegistersBuiltinExtractors(t *testing.T) {
 	t.Parallel()
 
 	// Use a fresh registry to avoid coupling to the sync.Once global state.
@@ -204,7 +204,7 @@ func TestInitializeBuiltins_RegistersNineExtractors(t *testing.T) {
 	r.initializeBuiltins()
 
 	mappings := r.GetMappings()
-	assert.Len(t, mappings, 12, "should register exactly 12 built-in extractors")
+	assert.Len(t, mappings, 13, "should register exactly 13 built-in extractors")
 }
 
 func TestInitializeBuiltins_EachExtractorRoutes(t *testing.T) {
