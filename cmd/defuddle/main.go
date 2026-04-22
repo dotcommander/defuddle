@@ -102,12 +102,19 @@ It can parse HTML, extract metadata, and convert content to various formats.`,
 }
 
 var parseCmd = &cobra.Command{
-	Use:     "parse <source>",
+	Use:     "parse [source]",
 	Aliases: []string{"p"},
-	Short:   "Parse and extract content from a URL or HTML file",
-	Long: `Parse content from a URL or local HTML file and extract structured information.
+	Short:   "Parse and extract content from a URL, HTML file, or stdin",
+	Long: `Parse content from a URL, local HTML file, or HTML piped via stdin
+and extract structured information.
+
+Examples:
+  defuddle parse https://example.com/article
+  defuddle parse article.html
+  curl -s https://example.com/article | defuddle parse --markdown
+
 You can output the content in different formats and extract specific properties.`,
-	Args: cobra.ExactArgs(1),
+	Args: cobra.MaximumNArgs(1),
 	RunE: parseContent,
 }
 
@@ -276,7 +283,18 @@ func main() {
 
 func parseContent(cmd *cobra.Command, args []string) error {
 	cmd.SilenceUsage = true
-	source := args[0]
+
+	// Resolve source: positional arg, or "-" sentinel when stdin is piped.
+	// loadResult (below) already handles the "-" → os.Stdin branch.
+	var source string
+	switch {
+	case len(args) == 1:
+		source = args[0]
+	case isStdinPiped():
+		source = "-"
+	default:
+		return fmt.Errorf("usage: defuddle parse <url|file> (or pipe HTML via stdin)")
+	}
 
 	jsonOutput, _ := cmd.Flags().GetBool("json")
 	markdown, _ := cmd.Flags().GetBool("markdown")
@@ -486,4 +504,15 @@ func getProperty(result *defuddle.Result, property string) (string, bool) {
 		return "", false
 	}
 	return fn(result), true
+}
+
+// isStdinPiped reports whether os.Stdin is connected to a pipe or file,
+// rather than a terminal. Used to decide whether bare `defuddle parse`
+// should consume piped HTML or print a usage error.
+func isStdinPiped() bool {
+	fi, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return fi.Mode()&os.ModeCharDevice == 0
 }
