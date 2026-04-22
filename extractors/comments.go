@@ -2,6 +2,7 @@ package extractors
 
 import (
 	"fmt"
+	"html"
 	"strings"
 )
 
@@ -80,5 +81,38 @@ func renderCommentThread(comments []CommentData) string {
 		blockquoteStack = blockquoteStack[:len(blockquoteStack)-1]
 	}
 
+	return b.String()
+}
+
+// buildContentHtml wraps a post body and optional comment thread into a
+// site-keyed container div. Both postContent and comments are already-built
+// HTML; site is used only as a CSS class suffix (not escaped further).
+func buildContentHtml(site, postContent, comments string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, `<div class="extractor-content extractor-%s">`, site)
+	fmt.Fprintf(&b, `<div class="post-content">%s</div>`, postContent)
+	if comments != "" {
+		fmt.Fprintf(&b, `<div class="comments">%s</div>`, comments)
+	}
+	b.WriteString(`</div>`)
+	return b.String()
+}
+
+// buildQuotedPost renders a quoted-post blockquote card. author, date, and url
+// are escaped; content is already-built HTML and is not escaped.
+func buildQuotedPost(author, content, date, url string) string {
+	var b strings.Builder
+	b.WriteString(`<blockquote class="quoted-post">`)
+	b.WriteString(`<div class="quoted-post-header">`)
+	fmt.Fprintf(&b, `<span class="quoted-post-author">%s</span>`, html.EscapeString(author))
+	if date != "" {
+		fmt.Fprintf(&b, ` <span class="quoted-post-date">%s</span>`, html.EscapeString(date))
+	}
+	if url != "" {
+		fmt.Fprintf(&b, ` <a href="%s" class="quoted-post-link">source</a>`, html.EscapeString(url))
+	}
+	b.WriteString(`</div>`)
+	fmt.Fprintf(&b, `<div class="quoted-post-content">%s</div>`, content)
+	b.WriteString(`</blockquote>`)
 	return b.String()
 }

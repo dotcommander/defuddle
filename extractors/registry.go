@@ -374,6 +374,22 @@ func (r *Registry) initializeBuiltins() {
 			return NewSubstackExtractor(doc, url, schemaOrgData)
 		},
 	})
+
+	// Mastodon — catch-all registered LAST so all specific extractors above take
+	// priority. CanExtract() gates on Mastodon-specific DOM signals, so non-Mastodon
+	// pages that fall through to this entry will return nil from FindExtractor.
+	r.Register(ExtractorMapping{
+		Patterns: []any{
+			regexp.MustCompile(`.*`),
+		},
+		Extractor: func(doc *goquery.Document, url string, schemaOrgData any) BaseExtractor {
+			m := NewMastodonExtractor(doc, url, schemaOrgData)
+			if m.CanExtract() {
+				return m
+			}
+			return nil
+		},
+	})
 }
 
 // Convenience functions for working with the default registry
