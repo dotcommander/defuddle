@@ -428,6 +428,48 @@ func (r *Registry) initializeBuiltins() {
 		},
 	})
 
+	// LWN — lwn.net and *.lwn.net (technical news site).
+	r.Register(ExtractorMapping{
+		Patterns: []any{
+			"lwn.net",
+			regexp.MustCompile(`(?i)\.lwn\.net`),
+		},
+		Extractor: func(doc *goquery.Document, url string, schemaOrgData any) BaseExtractor {
+			return NewLWNExtractor(doc, url, schemaOrgData)
+		},
+	})
+
+	// C2 Wiki — c2.com/cgi/wiki (Ward Cunningham's original wiki).
+	r.Register(ExtractorMapping{
+		Patterns: []any{
+			regexp.MustCompile(`(?i)c2\.com/(cgi/wiki|wiki/)`),
+		},
+		Extractor: func(doc *goquery.Document, url string, schemaOrgData any) BaseExtractor {
+			e := NewC2WikiExtractor(doc, url, schemaOrgData)
+			if e.CanExtract() {
+				return e
+			}
+			return nil
+		},
+	})
+
+	// XOEmbed — oEmbed API endpoint hosts for X (Twitter).
+	// URL patterns are disjoint from the twitter.com/x.com entry above which
+	// handles the main site HTML; these match only the publish.* API hosts.
+	r.Register(ExtractorMapping{
+		Patterns: []any{
+			"publish.twitter.com",
+			"publish.x.com",
+		},
+		Extractor: func(doc *goquery.Document, url string, schemaOrgData any) BaseExtractor {
+			e := NewXOEmbedExtractor(doc, url, schemaOrgData)
+			if e.CanExtract() {
+				return e
+			}
+			return nil
+		},
+	})
+
 	// Mastodon — catch-all registered LAST so all specific extractors above take
 	// priority. CanExtract() gates on Mastodon-specific DOM signals, so non-Mastodon
 	// pages that fall through to this entry will return nil from FindExtractor.
