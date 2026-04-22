@@ -1,0 +1,1 @@
+![A photo](photo.jpg "My photo")
