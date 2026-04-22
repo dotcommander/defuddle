@@ -470,16 +470,42 @@ func (r *Registry) initializeBuiltins() {
 		},
 	})
 
-	// Mastodon — catch-all registered LAST so all specific extractors above take
-	// priority. CanExtract() gates on Mastodon-specific DOM signals, so non-Mastodon
-	// pages that fall through to this entry will return nil from FindExtractor.
+	// LeetCode — problem pages identified by data-track-load="description_content".
 	r.Register(ExtractorMapping{
-		Patterns: []any{
-			regexp.MustCompile(`.*`),
-		},
+		Patterns: []any{"leetcode.com"},
 		Extractor: func(doc *goquery.Document, url string, schemaOrgData any) BaseExtractor {
-			m := NewMastodonExtractor(doc, url, schemaOrgData)
-			if m.CanExtract() {
+			e := NewLeetCodeExtractor(doc, url, schemaOrgData)
+			if e.CanExtract() {
+				return e
+			}
+			return nil
+		},
+	})
+
+	// LinkedIn — publicly-accessible feed posts; login-walled pages return nil.
+	r.Register(ExtractorMapping{
+		Patterns: []any{"linkedin.com"},
+		Extractor: func(doc *goquery.Document, url string, schemaOrgData any) BaseExtractor {
+			e := NewLinkedInExtractor(doc, url, schemaOrgData)
+			if e.CanExtract() {
+				return e
+			}
+			return nil
+		},
+	})
+
+	// DOM-gated catch-all — registered LAST. Tries Discourse first (meta generator
+	// signal), then Mastodon (DOM structure signal). Both CanExtract() gate strictly,
+	// so non-matching pages return nil. Discourse must precede Mastodon here because
+	// some Discourse instances also serve ActivityPub endpoints that contain Mastodon
+	// structural selectors.
+	r.Register(ExtractorMapping{
+		Patterns: []any{regexp.MustCompile(`.*`)},
+		Extractor: func(doc *goquery.Document, url string, schemaOrgData any) BaseExtractor {
+			if d := NewDiscourseExtractor(doc, url, schemaOrgData); d.CanExtract() {
+				return d
+			}
+			if m := NewMastodonExtractor(doc, url, schemaOrgData); m.CanExtract() {
 				return m
 			}
 			return nil

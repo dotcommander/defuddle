@@ -204,7 +204,7 @@ func TestInitializeBuiltins_RegistersBuiltinExtractors(t *testing.T) {
 	r.initializeBuiltins()
 
 	mappings := r.GetMappings()
-	assert.Len(t, mappings, 19, "should register exactly 19 built-in extractors")
+	assert.Len(t, mappings, 21, "should register exactly 21 built-in extractors")
 }
 
 func TestInitializeBuiltins_EachExtractorRoutes(t *testing.T) {
