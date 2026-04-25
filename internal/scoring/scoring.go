@@ -421,20 +421,12 @@ func scoreContentSignals(element *goquery.Selection, text, className string) flo
 		score += scoreContentClassBonus
 	}
 
-	footnoteSelectors := constants.GetFootnoteInlineReferences()
-	for _, selector := range footnoteSelectors {
-		if element.Find(selector).Length() > 0 {
-			score += scoreFootnoteBonus
-			break
-		}
+	if element.FindMatcher(constants.FootnoteInlineMatcher).Length() > 0 {
+		score += scoreFootnoteBonus
 	}
 
-	footnoteListSelectors := constants.GetFootnoteListSelectors()
-	for _, selector := range footnoteListSelectors {
-		if element.Find(selector).Length() > 0 {
-			score += scoreFootnoteBonus
-			break
-		}
+	if element.FindMatcher(constants.FootnoteListMatcher).Length() > 0 {
+		score += scoreFootnoteBonus
 	}
 
 	nestedTables := element.Find("table").Length()
@@ -847,14 +839,14 @@ func isLikelyContent(element *goquery.Selection) bool {
 //		return score;
 //	}
 func scoreNonContentBlock(element *goquery.Selection) float64 {
-	// Skip footnote list elements and their descendants
-	footnoteListSelectors := constants.GetFootnoteListSelectors()
-	for _, selector := range footnoteListSelectors {
-		if element.Find(selector).Length() > 0 ||
-			element.Is(selector) ||
-			element.Closest(selector).Length() > 0 {
-			return 0
-		}
+	// Skip footnote list elements and their descendants.
+	// FindMatcher: element contains a footnote list (descendant check).
+	// ClosestMatcher: element is inside a footnote list (ancestor check).
+	// Both guards are needed: a footnote-list parent must score 0, and so
+	// must its child block elements that happen to be visited first.
+	if element.FindMatcher(constants.FootnoteListMatcher).Length() > 0 ||
+		element.ClosestMatcher(constants.FootnoteListMatcher).Length() > 0 {
+		return 0
 	}
 
 	score := 0.0
@@ -872,12 +864,18 @@ func scoreNonContentBlock(element *goquery.Selection) float64 {
 	commas := strings.Count(text, ",")
 	score += float64(commas)
 
-	// Check for navigation indicators using word-boundary regexes
+	// Check for navigation indicators using word-boundary regexes.
+	// Fast path: combined alternation is O(1) rejection — most real text has no
+	// indicators, so we skip the per-regex loop entirely in the common case.
+	// Slow path preserves the count-per-distinct-indicator semantics: each matching
+	// regex contributes -10 independently (a block with 3 indicators scores -30, not -10).
 	lowerText := strings.ToLower(text)
 	indicatorMatches := 0
-	for _, re := range navigationIndicatorRegexes {
-		if re.MatchString(lowerText) {
-			indicatorMatches++
+	if navigationHeadingPattern.MatchString(lowerText) {
+		for _, re := range navigationIndicatorRegexes {
+			if re.MatchString(lowerText) {
+				indicatorMatches++
+			}
 		}
 	}
 	score -= float64(indicatorMatches) * 10

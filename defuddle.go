@@ -344,8 +344,9 @@ func (d *Defuddle) parseInternal(ctx context.Context, overrideOptions *Options) 
 
 	if mainContent == nil {
 		// Fallback to body content
-		content, _ := workingDoc.Find("body").Html()
-		wordCount := d.countWords(content)
+		body := workingDoc.Find("body")
+		content, _ := body.Html()
+		wordCount := d.countWordsInSelection(body)
 		parseTime := time.Since(startTime).Milliseconds()
 
 		result := &Result{
@@ -379,7 +380,7 @@ func (d *Defuddle) parseInternal(ctx context.Context, overrideOptions *Options) 
 	urlutil.SanitizeUnsafe(mainContent)
 
 	content, _ := goquery.OuterHtml(mainContent)
-	wordCount := d.countWords(content)
+	wordCount := d.countWordsInSelection(mainContent)
 	parseTime := time.Since(startTime).Milliseconds()
 
 	// Convert to Markdown if requested
@@ -508,7 +509,9 @@ func (d *Defuddle) tryExtractor(
 }
 
 // removeBySelector removes elements by exact and partial selectors.
-// mainContent is used to protect the main content element and its ancestors from removal.
+// mainContent, footnote lists, and heading elements/anchors are protected from removal.
+// mainContent protection applies in both branches via scoring.IsProtectedNode; footnote-list
+// and heading protections apply only in the removePartial branch.
 func (d *Defuddle) removeBySelector(doc *goquery.Document, removeExact, removePartial bool, mainContent *goquery.Selection) {
 	if removeExact {
 		exactSelectors := constants.GetExactSelectors()
@@ -526,9 +529,6 @@ func (d *Defuddle) removeBySelector(doc *goquery.Document, removeExact, removePa
 		testAttributes := constants.GetTestAttributes()
 		partialRegex := constants.GetPartialSelectorRegex()
 
-		// Pre-compute footnote list selectors for protection
-		footnoteListSelectors := constants.GetFootnoteListSelectors()
-
 		// Only query elements that have at least one test attribute
 		attrSelector := make([]string, len(testAttributes))
 		for i, attr := range testAttributes {
@@ -540,11 +540,10 @@ func (d *Defuddle) removeBySelector(doc *goquery.Document, removeExact, removePa
 			if scoring.IsProtectedNode(element, mainContent) {
 				return
 			}
-			// Protect footnote lists and their parents
-			for _, sel := range footnoteListSelectors {
-				if element.Is(sel) || element.Find(sel).Length() > 0 {
-					return
-				}
+			// Protect footnote lists and their parents (element itself or any descendant matches)
+			if element.IsMatcher(constants.FootnoteListMatcher) ||
+				element.FindMatcher(constants.FootnoteListMatcher).Length() > 0 {
+				return
 			}
 			// Skip heading elements — their IDs often match partial selectors
 			tag := goquery.NodeName(element)
@@ -713,7 +712,18 @@ func (d *Defuddle) runRemovalPipeline(workingDoc *goquery.Document, mainContent 
 	}
 }
 
+// countWordsInSelection counts words in a goquery Selection's text content,
+// with CJK-aware counting. This avoids the HTML serialize → re-parse round-trip
+// of countWords when the caller already holds a Selection.
+func (d *Defuddle) countWordsInSelection(sel *goquery.Selection) int {
+	if sel == nil || sel.Length() == 0 {
+		return 0
+	}
+	return text.CountWords(strings.TrimSpace(sel.Text()))
+}
+
 // countWords counts words in HTML content, with CJK-aware counting.
+// Prefer countWordsInSelection when a *goquery.Selection is already in scope.
 func (d *Defuddle) countWords(content string) int {
 	// Parse HTML content to extract text
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(content))

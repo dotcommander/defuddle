@@ -5,6 +5,8 @@ package constants
 import (
 	"regexp"
 	"strings"
+
+	"github.com/andybalholm/cascadia"
 )
 
 // EntryPointElements are the elements that will be used to find the main content
@@ -961,6 +963,22 @@ var FootnoteListSelectors = []string{
 	"div.footnotes-footer",                              // Wikidot
 	"div.footnote-definitions",
 	"#footnotes", // standardizeFootnotes output container
+}
+
+// FootnoteInlineMatcher is a single pre-compiled cascadia matcher equivalent to
+// cascadia.MustCompile(strings.Join(FootnoteInlineReferences, ",")). Compiled
+// once at package init to avoid per-element recompilation in the scoring hot path.
+var FootnoteInlineMatcher = compileCombined(FootnoteInlineReferences)
+
+// FootnoteListMatcher is a single pre-compiled cascadia matcher equivalent to
+// cascadia.MustCompile(strings.Join(FootnoteListSelectors, ",")). Same rationale.
+var FootnoteListMatcher = compileCombined(FootnoteListSelectors)
+
+// compileCombined joins selectors with "," and compiles via cascadia.MustCompile.
+// Panics at package init on invalid selectors — fails fast on typos.
+// Returns cascadia.Selector (implements goquery.Matcher) for use with FindMatcher/IsMatcher.
+func compileCombined(selectors []string) cascadia.Selector {
+	return cascadia.MustCompile(strings.Join(selectors, ","))
 }
 
 // GetEntryPointElements returns the entry point elements slice

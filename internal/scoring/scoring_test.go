@@ -151,3 +151,35 @@ func TestFindBestElement_EmptySlice(t *testing.T) {
 	best := FindBestElement(nil, 0)
 	assert.Nil(t, best)
 }
+
+// TestScoreNonContentBlock_MultipleIndicatorsCountPreserved pins the
+// count-preservation invariant: each matching navigation indicator contributes
+// -10 independently. A naive single-alternation MatchString would return at
+// most -10 regardless of how many indicators are present, silently raising the
+// score of blocks that should be heavily penalised.
+func TestScoreNonContentBlock_MultipleIndicatorsCountPreserved(t *testing.T) {
+	t.Parallel()
+
+	// Three distinct navigation indicators, each matched by a separate compiled
+	// regex in navigationIndicatorRegexes. The fast-path filter must not collapse
+	// them into a single boolean match.
+	html := `<div>advertisement cookie login extra words here to exceed minimum word count threshold</div>`
+	doc := parseHTML(t, html)
+	el := doc.Find("div")
+
+	// Score with all three indicators present.
+	threeScore := scoreNonContentBlock(el)
+
+	// Score with only one indicator — remove the other two.
+	htmlOne := `<div>advertisement extra words here to exceed minimum word count threshold padding padding</div>`
+	docOne := parseHTML(t, htmlOne)
+	elOne := docOne.Find("div")
+	oneScore := scoreNonContentBlock(elOne)
+
+	// The three-indicator element must score at least 20 points lower than the
+	// one-indicator element, confirming that each indicator contributes -10.
+	diff := oneScore - threeScore
+	assert.GreaterOrEqual(t, diff, 20.0,
+		"three navigation indicators must each contribute -10 (expected diff ≥20, got %.1f); "+
+			"a naive alternation collapse would produce diff≈0", diff)
+}
