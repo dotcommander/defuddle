@@ -4,18 +4,53 @@ Defuddle includes site-specific extractors that understand the DOM structure of 
 
 ## Supported Sites
 
+### Conversation
+
+| Extractor | Sites | What It Extracts |
+|-----------|-------|------------------|
+| ChatGPT | `chatgpt.com` | Conversation messages with role attribution |
+| Claude | `claude.ai` | Conversation messages with role attribution |
+| Grok | `grok.com`, `grok.x.ai`, `x.ai` | Conversation messages with role attribution |
+| Gemini | `gemini.google.com` | Conversation messages with role attribution |
+
+### News
+
+| Extractor | Sites | What It Extracts |
+|-----------|-------|------------------|
+| Substack | `substack.com` | Newsletter articles with author metadata |
+| Medium | `medium.com` | Articles with author and publication metadata |
+| NYTimes | `nytimes.com` | News articles with author and section metadata |
+| LWN | `lwn.net` | Articles and subscriber content |
+
+### Social
+
+| Extractor | Sites | What It Extracts |
+|-----------|-------|------------------|
+| X / Twitter (article) | `x.com`, `twitter.com` | Long-form articles (Draft.js format) |
+| Twitter (legacy) | `x.com`, `twitter.com` | Tweets and threads |
+| Bluesky | `bsky.app` | Posts and threads |
+| Threads | `threads.com`, `threads.net` | Posts and threads |
+| LinkedIn | `linkedin.com` | Posts and articles |
+| X oEmbed | `publish.twitter.com`, `publish.x.com` | Embedded tweet markup |
+
+### Tech
+
 | Extractor | Sites | What It Extracts |
 |-----------|-------|------------------|
 | YouTube | `youtube.com`, `youtu.be` | Video title, description, channel, transcript |
-| Reddit | `reddit.com` | Post content, comments, subreddit context |
-| GitHub | `github.com` | Issues, pull requests, repository content |
+| Reddit | `reddit.com`, `old.reddit.com`, `new.reddit.com` | Post content, comments, subreddit context |
 | Hacker News | `news.ycombinator.com` | Story content and comment threads |
-| Substack | `*.substack.com` | Newsletter articles with author metadata |
-| X/Twitter | `x.com`, `twitter.com` | Tweets, threads, and articles |
-| ChatGPT | `chatgpt.com` | Conversation messages with role attribution |
-| Claude | `claude.ai` | Conversation messages with role attribution |
-| Grok | `grok.com`, `x.ai` | Conversation messages with role attribution |
-| Gemini | `gemini.google.com` | Conversation messages with role attribution |
+| GitHub | `github.com` | Issues, pull requests, repository content |
+| Wikipedia | `*.wikipedia.org` | Article body with section structure |
+| C2 Wiki | `c2.com` | Wiki pages |
+| LeetCode | `leetcode.com` | Problem statements and editorial content |
+
+### Catchall (DOM-signature)
+
+| Extractor | Sites | What It Extracts |
+|-----------|-------|------------------|
+| Discourse | Any Discourse instance | Forum topics and reply threads |
+| Mastodon | Any Mastodon instance | Posts and threads |
 
 ## Listing Extractors
 
@@ -43,6 +78,8 @@ type BaseExtractor interface {
 
 Extractors are registered with URL patterns (domain strings or regex) and checked in priority order. The first extractor where `CanExtract()` returns `true` handles the page.
 
+The registry is organized across `registry_conversation.go`, `registry_news.go`, `registry_social.go`, `registry_tech.go`, and `registry_catchall.go`; catchall extractors register last so domain-specific matches win.
+
 ### Extractor Result
 
 ```go
@@ -58,7 +95,7 @@ When an extractor runs, its `Variables` map populates the `Result.Variables` fie
 
 ## Conversation Extractors
 
-The ChatGPT, Claude, Grok, and Gemini extractors are conversation extractors. They parse structured message exchanges and produce output with clear role attribution (user/assistant).
+The ChatGPT, Claude, Grok, and Gemini extractors parse structured message exchanges and produce output with clear role attribution (user/assistant).
 
 Conversation extractors return structured data:
 
