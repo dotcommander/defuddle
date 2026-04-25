@@ -182,7 +182,7 @@ func ParseFromURL(ctx context.Context, url string, options *Options) (*Result, e
 	if client == nil {
 		client = requests.New(
 			requests.WithUserAgent(fmt.Sprintf("Mozilla/5.0 (compatible; Defuddle/%s; +https://github.com/dotcommander/defuddle)", Version)),
-			requests.WithTimeout(10*time.Second),
+			requests.WithTimeout(30*time.Second),
 		)
 	}
 	resp, err := client.Get(url).Send(ctx)
@@ -659,6 +659,7 @@ func buildMetadata(m *metadata.Metadata, schemaOrgData any, wordCount int, parse
 		Domain:        m.Domain,
 		Favicon:       m.Favicon,
 		Image:         m.Image,
+		Language:      m.Language,
 		ParseTime:     parseTime,
 		Published:     m.Published,
 		Author:        m.Author,

@@ -234,5 +234,5 @@ Debug output includes:
 | All removal flags | true (when nil) |
 | All process flags | false |
 | MaxConcurrency | 5 |
-| HTTP timeout | 10s (library), 30s (CLI) |
+| HTTP timeout | 30s (library and CLI) |
 | Max response size | 5 MB |
