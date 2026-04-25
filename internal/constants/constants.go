@@ -3,7 +3,9 @@
 package constants
 
 import (
+	"maps"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/andybalholm/cascadia"
@@ -1210,20 +1212,16 @@ func IsAllowedAttributeDebug(attrName string) bool {
 	return AllowedAttributesDebug[attrName]
 }
 
-// GetInlineElements returns a slice of inline element names
+// GetInlineElements returns a sorted slice of inline element names.
 func GetInlineElements() []string {
-	elements := make([]string, 0, len(InlineElements))
-	for element := range InlineElements {
-		elements = append(elements, element)
-	}
-	return elements
+	s := slices.Collect(maps.Keys(InlineElements))
+	slices.Sort(s)
+	return s
 }
 
-// GetAllowedEmptyElements returns a slice of allowed empty element names
+// GetAllowedEmptyElements returns a sorted slice of allowed empty element names.
 func GetAllowedEmptyElements() []string {
-	elements := make([]string, 0, len(AllowedEmptyElements))
-	for element := range AllowedEmptyElements {
-		elements = append(elements, element)
-	}
-	return elements
+	s := slices.Collect(maps.Keys(AllowedEmptyElements))
+	slices.Sort(s)
+	return s
 }

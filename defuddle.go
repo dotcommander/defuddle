@@ -9,10 +9,10 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 
 	"golang.org/x/net/html/charset"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/dotcommander/defuddle/extractors"
@@ -260,24 +260,21 @@ func ParseFromURLs(ctx context.Context, urls []string, options *Options) []URLRe
 	}
 
 	results := make([]URLResult, len(urls))
-	sem := make(chan struct{}, limit)
 
-	var wg sync.WaitGroup
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(limit)
 	for i, u := range urls {
-		wg.Add(1)
-		go func(idx int, url string) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-
+		// each slot owns its own error; never short-circuit the group
+		g.Go(func() error {
 			// Copy options per URL so URL field doesn't collide
 			opts := *options
-			opts.URL = url
-			result, err := ParseFromURL(ctx, url, &opts)
-			results[idx] = URLResult{URL: url, Result: result, Err: err}
-		}(i, u)
+			opts.URL = u
+			result, err := ParseFromURL(gctx, u, &opts)
+			results[i] = URLResult{URL: u, Result: result, Err: err}
+			return nil
+		})
 	}
-	wg.Wait()
+	_ = g.Wait()
 	return results
 }
 

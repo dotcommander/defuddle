@@ -14,7 +14,6 @@ import (
 
 var (
 	nbspRe             = regexp.MustCompile(`\xA0+`)
-	wordCharRe         = regexp.MustCompile(`\w`)
 	emptyTextRe        = regexp.MustCompile(`^[\x{200C}\x{200B}\x{200D}\x{200E}\x{200F}\x{FEFF}\x{A0}\s]*$`)
 	threeNewlinesRe    = regexp.MustCompile(`\n{3,}`)
 	leadingNewlinesRe  = regexp.MustCompile(`^[\n\r\t]+`)
@@ -30,6 +29,16 @@ var (
 	startsWithPunctRe  = regexp.MustCompile(`^[,.!?:;)\]]`)
 	endsWithPunctRe    = regexp.MustCompile(`[,.!?:;(\[]\s*$`)
 )
+
+// isWordChar reports whether s (a single-character string) is an ASCII word
+// character, matching Go regex \w semantics: [0-9A-Za-z_].
+func isWordChar(s string) bool {
+	if len(s) == 0 {
+		return false
+	}
+	b := s[0]
+	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9') || b == '_'
+}
 
 // standardizeSpaces normalizes whitespace in text content
 // JavaScript original code:
@@ -110,7 +119,7 @@ func standardizeSpaces(element *goquery.Selection) {
 					}
 
 					// If between word characters, preserve the &nbsp;
-					if wordCharRe.MatchString(prev) && wordCharRe.MatchString(next) {
+					if isWordChar(prev) && isWordChar(next) {
 						return "\xA0"
 					}
 				}
@@ -163,7 +172,6 @@ func standardizeSpaces(element *goquery.Selection) {
 //				// If it's completely empty or just special characters/whitespace, remove it
 //				if (!text || text.match(/^[\u200C\u200B\u200D\u200E\u200F\uFEFF\xA0\s]*$/)) {
 //					node.parentNode?.removeChild(node);
-//					removedCount++;
 //				} else {
 //					// Clean up the text content while preserving important spaces
 //					const newText = text
@@ -180,7 +188,6 @@ func standardizeSpaces(element *goquery.Selection) {
 //
 //					if (newText !== text) {
 //						node.textContent = newText;
-//						removedCount += text.length - newText.length;
 //					}
 //				}
 //			}
@@ -216,14 +223,12 @@ func standardizeSpaces(element *goquery.Selection) {
 //				   isTextNode(node.firstChild) &&
 //				   (node.firstChild.textContent || '').match(startPattern)) {
 //				node.removeChild(node.firstChild);
-//				removedCount++;
 //			}
 //
 //			while (node.lastChild &&
 //				   isTextNode(node.lastChild) &&
 //				   (node.lastChild.textContent || '').match(endPattern)) {
 //				node.removeChild(node.lastChild);
-//				removedCount++;
 //			}
 //
 //			// Ensure there's a space between inline elements if needed
