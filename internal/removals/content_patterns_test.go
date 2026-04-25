@@ -294,3 +294,96 @@ func TestIsBreadcrumbList(t *testing.T) {
 		})
 	}
 }
+
+// ---- subdomain-aware external link list removal ----
+
+func TestRemoveTrailingExternalLinkListPreservesSubdomain(t *testing.T) {
+	t.Parallel()
+
+	// Article on example.com with a trailing list of blog.example.com links.
+	// sameRegisteredDomain("blog.example.com", "example.com") → true, so the
+	// list must NOT be classified as external and must be preserved.
+	html := `<body>
+<h1>Main Article</h1>
+<p>First paragraph of the article with enough content to be considered real prose.</p>
+<p>Second paragraph continuing the discussion with additional substantive content.</p>
+<p>Third paragraph providing more depth to the subject matter under consideration.</p>
+<p>Fourth paragraph rounding out the main body of this lengthy article text here.</p>
+<h3>Further Reading</h3>
+<ul>
+  <li><a href="https://blog.example.com/post-one">How we built the distributed caching layer for our platform</a></li>
+  <li><a href="https://blog.example.com/post-two">Deep dive into our approach to database schema migrations</a></li>
+  <li><a href="https://blog.example.com/post-three">Understanding the tradeoffs between consistency and availability</a></li>
+</ul>
+</body>`
+
+	main, doc := parseMain(t, html)
+	RemoveByContentPattern(main, doc, false, "https://example.com/article")
+
+	assert.Equal(t, 1, main.Find("ul").Length(), "subdomain link list must NOT be removed as external")
+	assert.Contains(t, text(main), "Further Reading", "heading must survive")
+}
+
+func TestRemoveTrailingExternalLinkListRemovesOffSite(t *testing.T) {
+	t.Parallel()
+
+	// Article on example.com with a trailing list of other-site.com links.
+	// sameRegisteredDomain("other-site.com", "example.com") → false, so the
+	// list must be removed.
+	html := `<body>
+<h1>Main Article</h1>
+<p>First paragraph of the article with enough content to be considered real prose.</p>
+<p>Second paragraph continuing the discussion with additional substantive content.</p>
+<p>Third paragraph providing more depth to the subject matter under consideration.</p>
+<p>Fourth paragraph rounding out the main body of this lengthy article text here.</p>
+<h3>External Links</h3>
+<ul>
+  <li><a href="https://other-site.com/page-one">How other-site approaches distributed systems at scale</a></li>
+  <li><a href="https://other-site.com/page-two">A thorough analysis of database indexing strategies and tradeoffs</a></li>
+  <li><a href="https://other-site.com/page-three">Understanding CAP theorem implications for modern web services</a></li>
+</ul>
+</body>`
+
+	main, doc := parseMain(t, html)
+	RemoveByContentPattern(main, doc, false, "https://example.com/article")
+
+	assert.Equal(t, 0, main.Find("ul").Length(), "off-site trailing link list must be removed")
+	assert.Equal(t, 0, main.Find("h3").Length(), "accompanying heading must also be removed")
+}
+
+func TestSameRegisteredDomain(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		a    string
+		b    string
+		want bool
+	}{
+		{"identical", "example.com", "example.com", true},
+		{"www vs bare", "www.example.com", "example.com", true},
+		{"subdomain vs bare", "blog.example.com", "example.com", true},
+		{"deep subdomain", "a.b.example.com", "example.com", true},
+		{"different domain", "example.com", "example.org", false},
+		{"different TLD", "example.com", "example.net", false},
+		{"multi-segment TLD .co.uk", "example.co.uk", "blog.example.co.uk", true},
+		{"empty a", "", "example.com", false},
+		{"empty b", "example.com", "", false},
+		{"both empty", "", "", false},
+		{"case insensitive", "Example.COM", "example.com", true},
+		{"IP literal same", "192.168.1.1", "192.168.1.1", true},
+		{"IP literal different", "192.168.1.1", "192.168.1.2", false},
+		{"localhost same", "localhost", "localhost", true},
+		{"localhost vs other", "localhost", "example.com", false},
+		{"trailing dot", "example.com.", "example.com", true},
+		{"subdomain cross-TLD", "blog.example.com", "blog.example.org", false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := sameRegisteredDomain(tc.a, tc.b)
+			assert.Equal(t, tc.want, got, "sameRegisteredDomain(%q, %q)", tc.a, tc.b)
+		})
+	}
+}

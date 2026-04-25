@@ -8,6 +8,7 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 	"golang.org/x/net/html"
+	"golang.org/x/net/publicsuffix"
 
 	textutil "github.com/dotcommander/defuddle/internal/text"
 )
@@ -497,7 +498,7 @@ func removeTrailingExternalLinkLists(mainContent *goquery.Selection, pageURL str
 	if err != nil {
 		return
 	}
-	pageHost := strings.TrimPrefix(parsed.Hostname(), "www.")
+	pageHost := parsed.Hostname()
 	if pageHost == "" {
 		return
 	}
@@ -561,8 +562,7 @@ func removeTrailingExternalLinkLists(mainContent *goquery.Selection, pageURL str
 				href, _ := a.Attr("href")
 				lp, e := url.Parse(href)
 				if e == nil && lp.IsAbs() {
-					lh := strings.TrimPrefix(lp.Hostname(), "www.")
-					if lh == pageHost {
+					if sameRegisteredDomain(lp.Hostname(), pageHost) {
 						allExternal = false
 					}
 				}
@@ -933,4 +933,30 @@ func removeNewsletterSections(mainContent *goquery.Selection, mainNode *html.Nod
 		}
 		el.Remove()
 	})
+}
+
+// registeredDomain returns the effective-TLD-plus-one for host, falling back to
+// the trimmed host on errors (IP literals, single-label hosts like "localhost",
+// empty input). The returned value is lowercased for case-insensitive comparison.
+func registeredDomain(host string) string {
+	host = strings.TrimSpace(strings.ToLower(host))
+	if host == "" {
+		return ""
+	}
+	host = strings.TrimSuffix(host, ".")
+	etld1, err := publicsuffix.EffectiveTLDPlusOne(host)
+	if err != nil {
+		return host
+	}
+	return etld1
+}
+
+// sameRegisteredDomain reports whether a and b share the same effective-TLD-plus-one
+// (e.g. blog.example.com and www.example.com both resolve to example.com).
+// Empty hostnames never match.
+func sameRegisteredDomain(a, b string) bool {
+	if a == "" || b == "" {
+		return false
+	}
+	return registeredDomain(a) == registeredDomain(b)
 }
