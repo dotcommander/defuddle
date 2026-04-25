@@ -18,7 +18,6 @@ func TestSentinelErrors(t *testing.T) {
 		{"ErrNotHTML", ErrNotHTML},
 		{"ErrTooLarge", ErrTooLarge},
 		{"ErrTimeout", ErrTimeout},
-		{"ErrNoContent", ErrNoContent},
 	}
 
 	for _, tt := range tests {

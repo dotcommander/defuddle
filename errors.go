@@ -12,7 +12,4 @@ var (
 
 	// ErrTimeout is returned when a fetch operation times out.
 	ErrTimeout = errors.New("defuddle: request timed out")
-
-	// ErrNoContent is returned when no main content could be extracted.
-	ErrNoContent = errors.New("defuddle: no content extracted")
 )
