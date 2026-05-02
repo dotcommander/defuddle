@@ -951,3 +951,85 @@ func TestFindMainContent_MainElement(t *testing.T) {
 	assert.NotContains(t, result.Content, "Site Header")
 	assert.NotContains(t, result.Content, "Site Footer")
 }
+
+// TestExtractorPath_Markdown is a regression test for the bug where tryExtractor
+// built a Result but never converted HTML to markdown, leaving ContentMarkdown nil
+// even when Markdown or SeparateMarkdown options were set.
+func TestExtractorPath_Markdown(t *testing.T) {
+	t.Parallel()
+
+	// Minimal HN-shaped HTML that satisfies HackerNewsExtractor.CanExtract():
+	// requires .fatitem (mainPost). Also includes tr.athing and .titleline for
+	// getPostContent(), and tr.comtr for extractComments().
+	html := `<!DOCTYPE html>
+<html>
+<head><title>Ask HN: Test Post | Hacker News</title></head>
+<body>
+  <table id="hnmain">
+    <tr><td>
+      <table class="fatitem">
+        <tr class="athing" id="12345">
+          <td class="title">
+            <span class="titleline">
+              <a href="https://example.com/article">Test Article Title</a>
+            </span>
+          </td>
+        </tr>
+        <tr>
+          <td class="subtext">
+            <span class="score" id="score_12345">42 points</span>
+            by <a href="user?id=testuser" class="hnuser">testuser</a>
+            <span class="age" title="2024-01-15T10:00:00">3 hours ago</span>
+          </td>
+        </tr>
+        <tr>
+          <td class="toptext">
+            <p>This is the body text of the Ask HN post with enough content to be meaningful.</p>
+          </td>
+        </tr>
+      </table>
+      <table class="comment-tree">
+        <tr class="comtr" id="99001">
+          <td>
+            <table>
+              <tr>
+                <td class="ind"><img width="0" src="s.gif"></td>
+                <td class="votelinks"></td>
+                <td class="default">
+                  <div class="comment">
+                    <span class="commtext">
+                      <p>This is a top-level comment with some content.</p>
+                    </span>
+                  </div>
+                  <div class="reply"></div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`
+
+	d, err := NewDefuddle(html, &Options{
+		URL:              "https://news.ycombinator.com/item?id=12345",
+		Markdown:         true,
+		SeparateMarkdown: true,
+	})
+	require.NoError(t, err)
+
+	result, err := d.Parse(context.Background())
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Confirm the extractor path was taken, not the standard path.
+	require.NotNil(t, result.ExtractorType, "expected ExtractorType to be set (extractor path taken)")
+	assert.Equal(t, "hackernews", *result.ExtractorType)
+
+	// The bug: ContentMarkdown was nil because tryExtractor never called
+	// convertHTMLToMarkdown. After the fix it must be non-nil and non-empty.
+	require.NotNil(t, result.ContentMarkdown, "ContentMarkdown must not be nil when Markdown option is set")
+	assert.NotEmpty(t, *result.ContentMarkdown, "ContentMarkdown must not be empty")
+}

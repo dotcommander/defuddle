@@ -496,6 +496,14 @@ func (d *Defuddle) tryExtractor(
 		}
 	}
 
+	if options.Markdown || options.SeparateMarkdown {
+		if md, err := d.convertHTMLToMarkdown(extracted.ContentHTML); err == nil {
+			result.ContentMarkdown = &md
+		} else if d.debug {
+			slog.Debug("Failed to convert extractor output to Markdown", "error", err)
+		}
+	}
+
 	if d.debugger.IsEnabled() {
 		d.debugger.EndTimer("total_parsing")
 		d.debugger.AddProcessingStep("extractor", "Used site-specific extractor: "+ext.Name(), 1, "")
