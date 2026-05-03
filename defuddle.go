@@ -382,8 +382,8 @@ func (d *Defuddle) parseInternal(ctx context.Context, overrideOptions *Options) 
 
 	// Convert to Markdown if requested
 	var contentMarkdown *string
-	if options.Markdown || options.SeparateMarkdown {
-		if markdownContent, err := d.convertHTMLToMarkdown(content); err == nil {
+	if options.wantsMarkdown() {
+		if markdownContent, err := markdown.ConvertHTML(content); err == nil {
 			contentMarkdown = &markdownContent
 		} else if d.debug {
 			slog.Debug("Failed to convert to Markdown", "error", err)
@@ -496,8 +496,8 @@ func (d *Defuddle) tryExtractor(
 		}
 	}
 
-	if options.Markdown || options.SeparateMarkdown {
-		if md, err := d.convertHTMLToMarkdown(extracted.ContentHTML); err == nil {
+	if options.wantsMarkdown() {
+		if md, err := markdown.ConvertHTML(extracted.ContentHTML); err == nil {
 			result.ContentMarkdown = &md
 		} else if d.debug {
 			slog.Debug("Failed to convert extractor output to Markdown", "error", err)
@@ -655,6 +655,12 @@ func applyOptions(dst, src *Options) {
 	if src.RoleOptions != nil {
 		dst.RoleOptions = src.RoleOptions
 	}
+	if src.Client != nil {
+		dst.Client = src.Client
+	}
+	if src.MaxConcurrency > 0 {
+		dst.MaxConcurrency = src.MaxConcurrency
+	}
 }
 
 // buildMetadata constructs the Metadata struct from extracted fields.
@@ -765,11 +771,6 @@ func (d *Defuddle) collectMetaTags() []MetaTag {
 	})
 
 	return metaTags
-}
-
-// convertHTMLToMarkdown converts HTML content to Markdown
-func (d *Defuddle) convertHTMLToMarkdown(htmlContent string) (string, error) {
-	return markdown.ConvertHTML(htmlContent)
 }
 
 // toUTF8 converts raw bytes to a UTF-8 string using charset detection.

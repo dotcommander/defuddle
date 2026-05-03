@@ -108,6 +108,10 @@ type Result struct {
 	DebugInfo       *debug.Info       `json:"debugInfo,omitempty"`
 }
 
+func (o *Options) wantsMarkdown() bool {
+	return o.Markdown || o.SeparateMarkdown
+}
+
 // PtrBool returns a pointer to the given bool value.
 // Use this to explicitly set *bool fields in Options (e.g., PtrBool(false) to disable defaults).
 func PtrBool(v bool) *bool { return &v }
