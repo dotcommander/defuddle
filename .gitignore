@@ -95,3 +95,4 @@ AGENTS.md
 .cursor/
 .agents/
 .claude/
+.reference/
