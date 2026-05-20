@@ -74,7 +74,7 @@ const blueskyBidiHTML = "<html><body>\n" +
 	`  <div data-testid="postThreadScreen">` + "\n" +
 	`    <div data-testid="postThreadItem-by-user1.bsky.social">` + "\n" +
 	"      <div></div>\n" +
-	"      <div data-word-wrap=\"1\">Hello ‎@friend‏ world.</div>\n" +
+	"      <div data-word-wrap=\"1\">Hello \u200e@friend\u200f world.</div>\n" +
 	"    </div>\n" +
 	"  </div>\n" +
 	"</body></html>"
@@ -200,9 +200,9 @@ func TestBlueskyExtractor_BidiStrip(t *testing.T) {
 	require.NotNil(t, result)
 
 	// Bidi markers U+200E and U+200F must not appear in any output.
-	assert.NotContains(t, result.ContentHTML, "‎")
-	assert.NotContains(t, result.ContentHTML, "‏")
-	assert.NotContains(t, result.ContentHTML, "​")
+	assert.NotContains(t, result.ContentHTML, "\u200e")
+	assert.NotContains(t, result.ContentHTML, "\u200f")
+	assert.NotContains(t, result.ContentHTML, "\u200b")
 }
 
 func TestBlueskyExtractor_Name(t *testing.T) {

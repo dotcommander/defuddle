@@ -111,6 +111,55 @@ func TestRegistry_FindExtractor_ByRegex(t *testing.T) {
 	assert.True(t, called, "extractor constructor should be called for matching regex")
 }
 
+func TestRegistry_FindExtractor_DomainMatching(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name      string
+		pattern   string
+		url       string
+		wantMatch bool
+	}{
+		// Exact host
+		{"exact host", "reddit.com", "https://reddit.com/r/golang", true},
+		{"exact host with path", "github.com", "https://github.com/owner/repo", true},
+
+		// Legitimate subdomains
+		{"www subdomain", "reddit.com", "https://www.reddit.com/r/golang", true},
+		{"old subdomain", "reddit.com", "https://old.reddit.com/r/golang", true},
+		{"deep subdomain", "github.com", "https://api.gist.github.com/x", true},
+
+		// Deceptive suffixes (must NOT match — these were the leak in the old Contains fallback)
+		{"deceptive prefix not-", "reddit.com", "https://notreddit.com/page", false},
+		{"deceptive prefix fake-", "github.com", "https://fakegithub.com/page", false},
+		{"pattern as substring inside host", "reddit.com", "https://evil.com/reddit.com/x", false},
+		{"pattern as parent suffix only", "reddit.com", "https://reddit.com.evil.example/page", false},
+		{"unrelated domain", "github.com", "https://gitlab.com/owner/repo", false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			r := NewRegistry()
+			called := false
+			r.Register(ExtractorMapping{
+				Patterns: []any{tc.pattern},
+				Extractor: func(_ *goquery.Document, _ string, _ any) BaseExtractor {
+					called = true
+					return nil
+				},
+			})
+
+			doc := newTestDoc(t, "<html><body></body></html>")
+			r.FindExtractor(doc, tc.url, nil)
+
+			assert.Equal(t, tc.wantMatch, called,
+				"pattern %q vs url %q: want match=%v", tc.pattern, tc.url, tc.wantMatch)
+		})
+	}
+}
+
 func TestRegistry_FindExtractor_NilForUnknown(t *testing.T) {
 	t.Parallel()
 

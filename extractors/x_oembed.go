@@ -10,9 +10,6 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
-// xOembedStatusRe matches twitter.com / x.com status and article paths.
-var xOembedStatusRe = regexp.MustCompile(`/(status|article)/\d+`)
-
 // xOembedDescRe strips HTML tags for plain-text description extraction.
 var xOembedDescRe = regexp.MustCompile(`<[^>]+>`)
 

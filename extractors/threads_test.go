@@ -134,6 +134,20 @@ func TestThreadsExtractor_Extract_RegionPath(t *testing.T) {
 	assert.Equal(t, "carol", result.ExtractedContent["postAuthor"])
 }
 
+func TestThreadsExtractor_Extract_QuotedPost(t *testing.T) {
+	t.Parallel()
+
+	doc := parseThreadsDoc(t, threadsQuotedPostHTML)
+	ext := NewThreadsExtractor(doc, "https://www.threads.com/@dave/post/ghi", nil)
+	require.True(t, ext.CanExtract())
+
+	result := ext.Extract()
+	require.NotNil(t, result)
+
+	assert.Contains(t, result.ContentHTML, "quoted-post")
+	assert.Contains(t, result.ContentHTML, "Original post text from eve")
+}
+
 func TestThreadsExtractor_Name(t *testing.T) {
 	t.Parallel()
 	doc := parseThreadsDoc(t, threadsPageletHTML)

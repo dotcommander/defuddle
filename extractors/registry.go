@@ -35,6 +35,7 @@ type ExtractorMapping struct {
 //	  private static domainCache: Map<string, ExtractorConstructor | null> = new Map();
 //	}
 type Registry struct {
+	mu          sync.RWMutex
 	mappings    []ExtractorMapping
 	domainCache sync.Map // Cache for domain -> constructor mappings
 }
@@ -57,6 +58,8 @@ func NewRegistry() *Registry {
 //	  this.mappings.push(mapping);
 //	}
 func (r *Registry) Register(mapping ExtractorMapping) *Registry {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.mappings = append(r.mappings, mapping)
 	return r // Enable method chaining
 }
@@ -119,7 +122,10 @@ func (r *Registry) FindExtractor(document *goquery.Document, urlStr string, sche
 	}
 
 	// Find matching extractor
-	for _, mapping := range r.mappings {
+	r.mu.RLock()
+	mappings := r.mappings
+	r.mu.RUnlock()
+	for _, mapping := range mappings {
 		if r.matchesPatterns(urlStr, domain, mapping.Patterns) {
 			// Cache the result
 			r.domainCache.Store(domain, mapping.Extractor)
@@ -132,19 +138,17 @@ func (r *Registry) FindExtractor(document *goquery.Document, urlStr string, sche
 	return nil
 }
 
-// matchesPatterns checks if the URL matches any of the patterns
-// TypeScript original code: pattern matching logic in findExtractor
+// matchesPatterns checks if the URL matches any of the patterns.
+// String patterns match the host exactly or as a parent domain (subdomain match):
+// pattern "reddit.com" matches "reddit.com" and "old.reddit.com" but not
+// "notreddit.com" or "reddit.com.evil.example". Regex patterns match the full URL.
 func (r *Registry) matchesPatterns(urlStr, domain string, patterns []any) bool {
 	for _, pattern := range patterns {
 		switch p := pattern.(type) {
 		case string:
-			// Simple domain matching - check if domain ends with the pattern
-			// This handles cases like "reddit.com" matching "www.reddit.com"
+			// Exact host or proper subdomain match. The "."+p guard prevents
+			// deceptive suffixes like "notreddit.com" from matching "reddit.com".
 			if domain == p || strings.HasSuffix(domain, "."+p) {
-				return true
-			}
-			// Also check if the pattern is contained in the domain for backwards compatibility
-			if strings.Contains(domain, p) {
 				return true
 			}
 		case *regexp.Regexp:
@@ -180,6 +184,8 @@ func (r *Registry) MatchesURL(urlStr string, mapping ExtractorMapping) bool {
 // GetMappings returns a copy of current mappings (read-only access)
 // This is a Go-specific method for introspection
 func (r *Registry) GetMappings() []ExtractorMapping {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	mappings := make([]ExtractorMapping, len(r.mappings))
 	copy(mappings, r.mappings)
 	return mappings

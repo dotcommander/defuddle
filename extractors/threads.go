@@ -234,7 +234,7 @@ func (e *ThreadsExtractor) extractCommentsFromJSON(mainAuthor string) string {
 				continue
 			}
 			seen[key] = true
-			allPosts = append(allPosts, jsonPost{username: p.username, text: p.text})
+			allPosts = append(allPosts, jsonPost(p))
 		}
 	})
 
@@ -242,12 +242,10 @@ func (e *ThreadsExtractor) extractCommentsFromJSON(mainAuthor string) string {
 		return ""
 	}
 
-	// Skip the first entry by the main author (it's the post itself, not a reply).
+	// Skip the main author's posts — they are the thread itself, not replies.
 	var comments []CommentData
-	skippedMain := false
 	for _, p := range allPosts {
-		if !skippedMain && p.username == mainAuthor {
-			skippedMain = true
+		if p.username == mainAuthor {
 			continue
 		}
 		comments = append(comments, CommentData{
