@@ -383,6 +383,9 @@ defuddle batch < urls.txt > articles.jsonl
 
 # From a file, with markdown, 10 parallel fetches
 defuddle batch --input urls.txt --markdown --concurrency 10 > articles.jsonl
+
+# Bound total batch duration; --continue-on-error emits per-line error objects
+defuddle batch --input urls.txt --timeout 2m --continue-on-error > articles.jsonl
 ```
 
 ### Saving Output
@@ -431,7 +434,7 @@ Defuddle works best on static, article-style HTML. Several categories of pages w
 
 **PDFs and binary content.** Any response whose `Content-Type` is not HTML, XML, or text returns `ErrNotHTML`. Sniff the content type before calling defuddle.
 
-**Large responses.** Responses over 5 MB return `ErrTooLarge`. This is intentional — defuddle is an article extractor, not a bulk downloader.
+**Large responses.** Responses over 5 MB return `ErrTooLarge`. This is intentional — defuddle is an article extractor, not a bulk downloader. The CLI applies the same 5 MiB cap to stdin and local HTML files, so all input paths share one ceiling.
 
 **CAPTCHA and bot-detection pages.** Defuddle returns whatever HTML the server sent. It does not solve CAPTCHAs or bypass bot-detection.
 

@@ -59,6 +59,14 @@ defuddle parse https://example.com --proxy http://localhost:8080
 defuddle parse https://example.com --proxy socks5://localhost:1080
 ```
 
+Headers must use the `Key: Value` form. Invalid headers are rejected before any HTTP request is issued.
+
+Proxy URLs accept `http://`, `https://`, and `socks5://` schemes.
+
+### Input Size Limit
+
+`defuddle parse` caps local input (stdin and HTML files) at **5 MiB**. Anything larger returns an error wrapping `defuddle.ErrTooLarge` with the source path or `stdin` in the message. The cap matches the library's URL fetch cap so all input paths share one ceiling. URL parsing has its own internal cap enforced by the library.
+
 ### Content Control Flags
 
 ```bash
@@ -112,9 +120,24 @@ defuddle batch --input urls.txt --markdown
 # Skip failures instead of stopping
 defuddle batch --input urls.txt --continue-on-error
 
+# Bound total batch duration (0 = no overall deadline)
+defuddle batch --input urls.txt --timeout 2m
+
 # Save results
 defuddle batch --input urls.txt > results.jsonl
 ```
+
+Blank lines and lines beginning with `#` in the input are skipped. Each input line is bounded at 64 KiB; longer lines are surfaced as an error rather than silently truncated.
+
+### Output Format
+
+`defuddle batch` writes one JSON object per line (JSONL) to stdout. With `--continue-on-error`, failed URLs emit a per-line error object instead of aborting:
+
+```json
+{"url":"https://example.com/broken","error":"<message>"}
+```
+
+Successful results emit the full `defuddle.Result` JSON on their own line. Without `--continue-on-error`, the first failure terminates the batch with a non-zero exit.
 
 ### Flag Reference
 
@@ -124,6 +147,7 @@ defuddle batch --input urls.txt > results.jsonl
 | `--concurrency` | `-c` | int | 5 | Max concurrent requests |
 | `--markdown` | `-m` | bool | false | Include markdown in output |
 | `--continue-on-error` | | bool | false | Continue processing on individual URL failures |
+| `--timeout` | | duration | 0 | Overall batch deadline (e.g. `30s`, `2m`); `0` disables |
 
 ## extractors
 

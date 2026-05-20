@@ -122,17 +122,13 @@ opts := &defuddle.Options{MaxConcurrency: 10} // default: 5
 
 ## Element Processing
 
-Enable specialized processors for specific content types. Each processor has its own options struct:
+Enable specialized processors for specific content types via the public boolean flags. The per-processor option structs (`CodeOptions`, `ImageOptions`, `MathOptions`, `FootnoteOptions`, `HeadingOptions`, `RoleOptions`) reference types in an internal package and are not part of the public external API — external modules cannot import them. The boolean flags below enable each processor with sensible defaults and are the supported external surface.
 
 ### Code Blocks
 
 ```go
 opts := &defuddle.Options{
-    ProcessCode: true,
-    CodeOptions: &elements.CodeBlockProcessingOptions{
-        DetectLanguage: true, // detect language from class names
-        FormatCode:     true, // normalize whitespace
-    },
+    ProcessCode: true, // detect language and normalize code block whitespace
 }
 ```
 
@@ -140,12 +136,7 @@ opts := &defuddle.Options{
 
 ```go
 opts := &defuddle.Options{
-    ProcessImages: true,
-    ImageOptions: &elements.ImageProcessingOptions{
-        RemoveSmallImages: true,
-        MinImageWidth:     50,  // pixels
-        MinImageHeight:    50,
-    },
+    ProcessImages: true, // normalize images and drop very small images
 }
 ```
 
@@ -153,13 +144,7 @@ opts := &defuddle.Options{
 
 ```go
 opts := &defuddle.Options{
-    ProcessMath: true,
-    MathOptions: &elements.MathProcessingOptions{
-        ExtractMathML:   true,
-        ExtractLaTeX:    true,
-        CleanupScripts:  true,
-        PreserveDisplay: true,
-    },
+    ProcessMath: true, // extract MathML/LaTeX and clean up math scripts
 }
 ```
 
@@ -167,16 +152,7 @@ opts := &defuddle.Options{
 
 ```go
 opts := &defuddle.Options{
-    ProcessFootnotes: true,
-    FootnoteOptions: &elements.FootnoteProcessingOptions{
-        DetectFootnotes:      true,
-        LinkFootnotes:        true,
-        NumberFootnotes:      true,
-        ImproveAccessibility: true,
-        GenerateSection:      true,
-        SectionTitle:         "Footnotes",
-        SectionLocation:      "end", // "end", "after-content", or "custom"
-    },
+    ProcessFootnotes: true, // detect, link, number, and group footnotes into a section
 }
 ```
 
@@ -192,13 +168,7 @@ opts := &defuddle.Options{
 
 ```go
 opts := &defuddle.Options{
-    ProcessRoles: true,
-    RoleOptions: &elements.RoleProcessingOptions{
-        ConvertParagraphs: true, // role="paragraph" -> <p>
-        ConvertLists:      true, // role="list" -> <ul>/<ol>
-        ConvertButtons:    true, // role="button" -> <button>
-        ConvertLinks:      true, // role="link" -> <a>
-    },
+    ProcessRoles: true, // convert role="paragraph"/"list"/"button"/"link" to native elements
 }
 ```
 

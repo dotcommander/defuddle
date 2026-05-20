@@ -77,7 +77,7 @@ Default concurrency is 5. Set `MaxConcurrency` in `Options` to override.
 
 ## Get Markdown Output
 
-Set `Markdown: true` to receive the cleaned content as Markdown (replaces HTML in `Content`):
+Set `Markdown: true` to populate `ContentMarkdown` with the cleaned content converted to Markdown. `Content` always holds cleaned HTML:
 
 ```go
 result, err := defuddle.ParseFromURL(ctx, url, &defuddle.Options{
@@ -86,17 +86,22 @@ result, err := defuddle.ParseFromURL(ctx, url, &defuddle.Options{
 if err != nil {
     log.Fatal(err)
 }
-fmt.Println(result.Content) // Markdown string
+fmt.Println(result.Content) // cleaned HTML
+if result.ContentMarkdown != nil {
+    fmt.Println(*result.ContentMarkdown) // Markdown
+}
 ```
 
-Set `SeparateMarkdown: true` to get both formats simultaneously:
+`SeparateMarkdown: true` behaves the same way — both flags cause `ContentMarkdown` to be populated alongside the HTML in `Content`:
 
 ```go
 result, err := defuddle.ParseFromURL(ctx, url, &defuddle.Options{
     SeparateMarkdown: true,
 })
-fmt.Println(result.Content)          // HTML
-fmt.Println(*result.ContentMarkdown) // Markdown (check for nil first)
+fmt.Println(result.Content) // cleaned HTML
+if result.ContentMarkdown != nil {
+    fmt.Println(*result.ContentMarkdown) // Markdown
+}
 ```
 
 ## Custom HTTP Client
@@ -124,8 +129,8 @@ Default HTTP client timeout: 30 seconds (both library and CLI). Override by pass
 ```go
 type Result struct {
     Metadata                         // embedded struct (see below)
-    Content         string           // cleaned HTML (or Markdown when Markdown: true)
-    ContentMarkdown *string          // Markdown version (when SeparateMarkdown: true)
+    Content         string           // cleaned HTML
+    ContentMarkdown *string          // Markdown version (when Markdown or SeparateMarkdown is set)
     ExtractorType   *string          // name of site extractor used, if any
     Variables       map[string]string // extractor-specific metadata
     MetaTags        []MetaTag        // all collected meta tags
@@ -186,28 +191,20 @@ result, err := defuddle.ParseFromURL(ctx, url, &defuddle.Options{
 
 ## Element Processing
 
-Enable specialized processing for specific element types:
+Enable specialized processing for specific element types using the public boolean flags:
 
 ```go
-import "github.com/dotcommander/defuddle/internal/elements"
-
 result, err := defuddle.ParseFromURL(ctx, url, &defuddle.Options{
     ProcessCode:      true,
     ProcessMath:      true,
     ProcessFootnotes: true,
     ProcessImages:    true,
-    CodeOptions: &elements.CodeBlockProcessingOptions{
-        DetectLanguage: true,
-        FormatCode:     true,
-    },
-    MathOptions: &elements.MathProcessingOptions{
-        ExtractMathML:   true,
-        ExtractLaTeX:    true,
-        CleanupScripts:  true,
-        PreserveDisplay: true,
-    },
+    ProcessHeadings:  true,
+    ProcessRoles:     true,
 })
 ```
+
+The boolean flags above enable each processor with sensible defaults and are the supported external API. The fine-grained per-processor option structs (`CodeOptions`, `MathOptions`, `FootnoteOptions`, `ImageOptions`, `HeadingOptions`, `RoleOptions`) live in an internal package and are not part of the public external API — external modules cannot import them and their shape may change without notice.
 
 ## Debug Mode
 

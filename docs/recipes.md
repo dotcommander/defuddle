@@ -162,7 +162,13 @@ func ingestURL(ctx context.Context, url string, store VectorStore) error {
         return err
     }
 
-    text := result.Content // Markdown when Markdown: true
+    // ContentMarkdown is populated when the Markdown option is set; Content always holds HTML.
+    var text string
+    if result.ContentMarkdown != nil {
+        text = *result.ContentMarkdown
+    } else {
+        text = result.Content
+    }
     chunks := Chunk(text, 1500)
 
     for i, chunk := range chunks {
