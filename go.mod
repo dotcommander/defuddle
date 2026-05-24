@@ -3,7 +3,7 @@ module github.com/dotcommander/defuddle
 go 1.26.2
 
 require (
-	github.com/JohannesKaufmann/html-to-markdown/v2 v2.5.0
+	github.com/JohannesKaufmann/html-to-markdown/v2 v2.5.1
 	github.com/PuerkitoBio/goquery v1.12.0
 	github.com/andybalholm/cascadia v1.3.3
 	github.com/kaptinlin/requests v0.4.2
