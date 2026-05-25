@@ -94,7 +94,7 @@ func (e *ThreadsExtractor) extractFromPagelets() *ExtractorResult {
 		}
 	}
 
-	var postParts []string
+	postParts := make([]string, 0, len(threadPosts))
 	for _, p := range threadPosts {
 		postParts = append(postParts, p.content)
 	}

@@ -57,7 +57,7 @@ func (e *BlueskyExtractor) Extract() *ExtractorResult {
 		}
 	}
 
-	var postParts []string
+	postParts := make([]string, 0, len(threadItems))
 	for _, item := range threadItems {
 		postParts = append(postParts, e.extractPostContent(item))
 	}

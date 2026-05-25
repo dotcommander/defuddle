@@ -5,6 +5,7 @@ import (
 	"html"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
@@ -138,9 +139,8 @@ func (e *ThreadsExtractor) extractImages(container *goquery.Selection) string {
 			return
 		}
 		if w := img.AttrOr("width", ""); w != "" {
-			var width int
-			fmt.Sscanf(w, "%d", &width)
-			if width > 0 && width <= 48 {
+			width, err := strconv.Atoi(w)
+			if err == nil && width > 0 && width <= 48 {
 				return
 			}
 		}

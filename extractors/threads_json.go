@@ -48,7 +48,7 @@ func walkJSONObject(obj map[string]any, depth int) []threadsJSONPost {
 
 // walkJSONArray recurses into each element of a JSON array.
 func walkJSONArray(arr []any, depth int) []threadsJSONPost {
-	var results []threadsJSONPost
+	results := make([]threadsJSONPost, 0, len(arr))
 	for _, item := range arr {
 		results = append(results, findPostsInJSON(item, depth+1)...)
 	}

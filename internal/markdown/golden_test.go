@@ -45,7 +45,6 @@ func TestGoldenRenderers(t *testing.T) {
 		}
 
 		for _, inPath := range inputs {
-			inPath := inPath
 			name := tag + "/" + strings.TrimSuffix(filepath.Base(inPath), ".in.html")
 
 			t.Run(name, func(t *testing.T) {

@@ -189,7 +189,7 @@ func TestParseFromURLs_PerURLIsolation(t *testing.T) {
 		// but this assertion is the load-bearing per-URL identity check:
 		// titles must form a 1:1 map with input URLs.
 		expected := "page-/iso-" + fmt.Sprint(i)
-		assert.Equal(t, expected, r.Result.Metadata.Title,
+		assert.Equal(t, expected, r.Result.Title,
 			"result[%d] title mismatch — possible per-URL Options.URL bleed", i)
 	}
 }
