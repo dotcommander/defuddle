@@ -17,6 +17,14 @@ func newTestDoc(t *testing.T, html string) *goquery.Document {
 	return doc
 }
 
+type testExtractor struct {
+	name string
+}
+
+func (e testExtractor) CanExtract() bool          { return true }
+func (e testExtractor) Extract() *ExtractorResult { return &ExtractorResult{} }
+func (e testExtractor) Name() string              { return e.name }
+
 func TestNewRegistry(t *testing.T) {
 	t.Parallel()
 	r := NewRegistry()
@@ -186,7 +194,7 @@ func TestRegistry_FindExtractor_EmptyURLReturnsNil(t *testing.T) {
 	assert.Nil(t, extractor)
 }
 
-func TestRegistry_DomainCache(t *testing.T) {
+func TestRegistry_URLCache(t *testing.T) {
 	t.Parallel()
 
 	r := NewRegistry()
@@ -202,12 +210,59 @@ func TestRegistry_DomainCache(t *testing.T) {
 	doc := newTestDoc(t, "<html><body></body></html>")
 
 	// First lookup — traverses mappings and populates cache.
-	r.FindExtractor(doc, "https://cached.com/first", nil)
+	r.FindExtractor(doc, "https://cached.com/page", nil)
 	assert.Equal(t, 1, callCount)
 
 	// Second lookup — cache hit, constructor called again to produce new instance.
-	r.FindExtractor(doc, "https://cached.com/second", nil)
+	r.FindExtractor(doc, "https://cached.com/page", nil)
 	assert.Equal(t, 2, callCount, "constructor is called on each lookup even when cache holds the constructor")
+}
+
+func TestRegistry_URLCacheKeepsPathSpecificLookupsIndependent(t *testing.T) {
+	t.Parallel()
+
+	r := NewRegistry()
+	calls := 0
+	r.Register(ExtractorMapping{
+		Patterns: []any{regexp.MustCompile(`news\.ycombinator\.com/item\?id=.*`)},
+		Extractor: func(_ *goquery.Document, _ string, _ any) BaseExtractor {
+			calls++
+			return testExtractor{name: "HackerNewsExtractor"}
+		},
+	})
+
+	doc := newTestDoc(t, "<html><body></body></html>")
+
+	assert.Nil(t, r.FindExtractor(doc, "https://news.ycombinator.com/news", nil))
+
+	ext := r.FindExtractor(doc, "https://news.ycombinator.com/item?id=123", nil)
+	require.NotNil(t, ext)
+	assert.Equal(t, "HackerNewsExtractor", ext.Name())
+	assert.Equal(t, 1, calls)
+
+	assert.Nil(t, r.FindExtractor(doc, "https://news.ycombinator.com/front", nil))
+	assert.Equal(t, 1, calls, "non-matching paths on the same host must not reuse a prior matching constructor")
+}
+
+func TestRegistry_RegisterClearsCachedMisses(t *testing.T) {
+	t.Parallel()
+
+	r := NewRegistry()
+	doc := newTestDoc(t, "<html><body></body></html>")
+	const targetURL = "https://late.example.com/page"
+
+	assert.Nil(t, r.FindExtractor(doc, targetURL, nil))
+
+	r.Register(ExtractorMapping{
+		Patterns: []any{"late.example.com"},
+		Extractor: func(_ *goquery.Document, _ string, _ any) BaseExtractor {
+			return testExtractor{name: "LateExtractor"}
+		},
+	})
+
+	ext := r.FindExtractor(doc, targetURL, nil)
+	require.NotNil(t, ext)
+	assert.Equal(t, "LateExtractor", ext.Name())
 }
 
 func TestRegistry_ClearCache(t *testing.T) {
@@ -243,6 +298,61 @@ func TestRegistry_ClearCache_NegativeEntry(t *testing.T) {
 
 	// Clear should remove the negative entry without panicking.
 	r.ClearCache()
+}
+
+func TestRegistry_GetMappingsDeepCopiesPatterns(t *testing.T) {
+	t.Parallel()
+
+	r := NewRegistry()
+	r.Register(ExtractorMapping{
+		Patterns:  []any{"example.com"},
+		Extractor: func(_ *goquery.Document, _ string, _ any) BaseExtractor { return nil },
+	})
+
+	mappings := r.GetMappings()
+	require.Len(t, mappings, 1)
+	require.Len(t, mappings[0].Patterns, 1)
+	mappings[0].Patterns[0] = "mutated.example.com"
+
+	next := r.GetMappings()
+	require.Len(t, next, 1)
+	require.Len(t, next[0].Patterns, 1)
+	assert.Equal(t, "example.com", next[0].Patterns[0])
+}
+
+func TestRegistry_MatchesURLRequiresAbsoluteURL(t *testing.T) {
+	t.Parallel()
+
+	r := NewRegistry()
+	catchall := ExtractorMapping{Patterns: []any{regexp.MustCompile(`.*`)}}
+
+	for _, urlStr := range []string{"", "example.com/path", "/relative/path", ":bad-url"} {
+		t.Run(urlStr, func(t *testing.T) {
+			t.Parallel()
+			assert.False(t, r.MatchesURL(urlStr, catchall))
+		})
+	}
+}
+
+func TestRegistry_FindExtractorSkipsNilConstructors(t *testing.T) {
+	t.Parallel()
+
+	r := NewRegistry()
+	r.Register(ExtractorMapping{
+		Patterns:  []any{"example.com"},
+		Extractor: nil,
+	})
+	r.Register(ExtractorMapping{
+		Patterns: []any{"example.com"},
+		Extractor: func(_ *goquery.Document, _ string, _ any) BaseExtractor {
+			return testExtractor{name: "FallbackExtractor"}
+		},
+	})
+
+	doc := newTestDoc(t, "<html><body></body></html>")
+	ext := r.FindExtractor(doc, "https://example.com/page", nil)
+	require.NotNil(t, ext)
+	assert.Equal(t, "FallbackExtractor", ext.Name())
 }
 
 func TestInitializeBuiltins_RegistersBuiltinExtractors(t *testing.T) {

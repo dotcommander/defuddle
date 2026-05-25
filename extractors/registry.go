@@ -3,6 +3,7 @@ package extractors
 import (
 	"net/url"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 
@@ -35,9 +36,9 @@ type ExtractorMapping struct {
 //	  private static domainCache: Map<string, ExtractorConstructor | null> = new Map();
 //	}
 type Registry struct {
-	mu          sync.RWMutex
-	mappings    []ExtractorMapping
-	domainCache sync.Map // Cache for domain -> constructor mappings
+	mu       sync.RWMutex
+	mappings []ExtractorMapping
+	urlCache sync.Map // Cache for URL -> constructor mappings
 }
 
 // NewRegistry creates a new extractor registry
@@ -61,6 +62,7 @@ func (r *Registry) Register(mapping ExtractorMapping) *Registry {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.mappings = append(r.mappings, mapping)
+	r.urlCache.Clear()
 	return r // Enable method chaining
 }
 
@@ -112,9 +114,12 @@ func (r *Registry) FindExtractor(document *goquery.Document, urlStr string, sche
 	}
 
 	domain := parsedURL.Hostname()
+	if parsedURL.Scheme == "" || domain == "" {
+		return nil
+	}
 
 	// Check cache first
-	if cached, ok := r.domainCache.Load(domain); ok {
+	if cached, ok := r.urlCache.Load(urlStr); ok {
 		if constructor, ok := cached.(ExtractorConstructor); ok && constructor != nil {
 			return constructor(document, urlStr, schemaOrgData)
 		}
@@ -126,15 +131,15 @@ func (r *Registry) FindExtractor(document *goquery.Document, urlStr string, sche
 	mappings := r.mappings
 	r.mu.RUnlock()
 	for _, mapping := range mappings {
-		if r.matchesPatterns(urlStr, domain, mapping.Patterns) {
+		if mapping.Extractor != nil && r.matchesPatterns(urlStr, domain, mapping.Patterns) {
 			// Cache the result
-			r.domainCache.Store(domain, mapping.Extractor)
+			r.urlCache.Store(urlStr, mapping.Extractor)
 			return mapping.Extractor(document, urlStr, schemaOrgData)
 		}
 	}
 
 	// Cache the negative result
-	r.domainCache.Store(domain, nil)
+	r.urlCache.Store(urlStr, nil)
 	return nil
 }
 
@@ -168,14 +173,14 @@ func (r *Registry) matchesPatterns(urlStr, domain string, patterns []any) bool {
 //	  this.domainCache.clear();
 //	}
 func (r *Registry) ClearCache() *Registry {
-	r.domainCache.Clear()
+	r.urlCache.Clear()
 	return r // Enable method chaining
 }
 
 // MatchesURL checks if a URL matches any pattern in the given mapping.
 func (r *Registry) MatchesURL(urlStr string, mapping ExtractorMapping) bool {
 	parsedURL, err := url.Parse(urlStr)
-	if err != nil {
+	if err != nil || parsedURL.Scheme == "" || parsedURL.Hostname() == "" {
 		return false
 	}
 	return r.matchesPatterns(urlStr, parsedURL.Hostname(), mapping.Patterns)
@@ -188,6 +193,9 @@ func (r *Registry) GetMappings() []ExtractorMapping {
 	defer r.mu.RUnlock()
 	mappings := make([]ExtractorMapping, len(r.mappings))
 	copy(mappings, r.mappings)
+	for i := range mappings {
+		mappings[i].Patterns = slices.Clone(mappings[i].Patterns)
+	}
 	return mappings
 }
 
