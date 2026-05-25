@@ -23,6 +23,10 @@ var (
 	ErrDirectoryTraversal  = fmt.Errorf("invalid file path: directory traversal detected")
 	ErrNoURLs              = errors.New("no URLs provided")
 	ErrPropertyNotFound    = fmt.Errorf("property not found in response")
+	ErrHTTPClientBuild     = errors.New("failed to construct HTTP client")
+	ErrParseUsage          = errors.New("usage: defuddle parse <url|file> (or pipe HTML via stdin)")
+	ErrInvalidMatchURL     = errors.New("invalid match URL")
+	ErrInvalidConcurrency  = errors.New("concurrency must be at least 1")
 )
 
 var rootCmd = &cobra.Command{

@@ -71,6 +71,10 @@ func runBatch(cmd *cobra.Command, _ []string) error {
 	continueOnError, _ := cmd.Flags().GetBool("continue-on-error")
 	timeout, _ := cmd.Flags().GetDuration("timeout")
 
+	if err := validateConcurrency(concurrency); err != nil {
+		return err
+	}
+
 	var reader io.Reader = os.Stdin
 	if inputFile != "" {
 		f, err := os.Open(inputFile) // #nosec G304 - user-provided input file
@@ -127,4 +131,11 @@ func batchContext(timeout time.Duration) (context.Context, context.CancelFunc) {
 		return context.WithTimeout(context.Background(), timeout)
 	}
 	return context.WithCancel(context.Background())
+}
+
+func validateConcurrency(concurrency int) error {
+	if concurrency < 1 {
+		return fmt.Errorf("%w: got %d", ErrInvalidConcurrency, concurrency)
+	}
+	return nil
 }

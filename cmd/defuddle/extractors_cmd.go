@@ -4,6 +4,7 @@ package main
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"regexp"
 	"strings"
@@ -16,22 +17,26 @@ var extractorsCmd = &cobra.Command{
 	Use:   "extractors",
 	Short: "List registered site-specific extractors",
 	RunE: func(cmd *cobra.Command, _ []string) error {
+		cmd.SilenceUsage = true
+
 		matchURL, _ := cmd.Flags().GetString("match")
 		mappings := extractors.DefaultRegistry.GetMappings()
 
-		for _, m := range mappings {
-			if matchURL != "" {
-				if !extractors.DefaultRegistry.MatchesURL(matchURL, m) {
-					continue
-				}
-				fmt.Println("MATCH:", mappingLabel(m))
-				return nil
+		if matchURL != "" {
+			label, ok, err := findMatchingExtractorLabel(matchURL, mappings)
+			if err != nil {
+				return err
 			}
-			fmt.Println(mappingLabel(m))
+			if ok {
+				fmt.Println("MATCH:", label)
+			} else {
+				fmt.Fprintln(os.Stderr, "no URL-specific extractor matches the given URL")
+			}
+			return nil
 		}
 
-		if matchURL != "" {
-			fmt.Fprintln(os.Stderr, "no extractor matches the given URL")
+		for _, m := range mappings {
+			fmt.Println(mappingLabel(m))
 		}
 		return nil
 	},
@@ -44,6 +49,10 @@ func registerExtractorsCmd() {
 
 // mappingLabel returns a human-readable string listing the patterns for an extractor mapping.
 func mappingLabel(m extractors.ExtractorMapping) string {
+	if isDOMGatedCatchall(m) {
+		return "DOM-gated catchall (Discourse, Mastodon)"
+	}
+
 	patterns := make([]string, 0, len(m.Patterns))
 	for _, p := range m.Patterns {
 		switch v := p.(type) {
@@ -54,4 +63,29 @@ func mappingLabel(m extractors.ExtractorMapping) string {
 		}
 	}
 	return strings.Join(patterns, ", ")
+}
+
+func findMatchingExtractorLabel(matchURL string, mappings []extractors.ExtractorMapping) (string, bool, error) {
+	parsed, err := url.Parse(matchURL)
+	if err != nil || parsed.Scheme == "" || parsed.Hostname() == "" {
+		return "", false, fmt.Errorf("%w: %q", ErrInvalidMatchURL, matchURL)
+	}
+
+	for _, m := range mappings {
+		if isDOMGatedCatchall(m) {
+			continue
+		}
+		if extractors.DefaultRegistry.MatchesURL(matchURL, m) {
+			return mappingLabel(m), true, nil
+		}
+	}
+	return "", false, nil
+}
+
+func isDOMGatedCatchall(m extractors.ExtractorMapping) bool {
+	if len(m.Patterns) != 1 {
+		return false
+	}
+	re, ok := m.Patterns[0].(*regexp.Regexp)
+	return ok && re.String() == ".*"
 }

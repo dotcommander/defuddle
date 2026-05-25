@@ -7,7 +7,6 @@
 package main
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/kaptinlin/requests"
@@ -54,7 +53,7 @@ func buildHTTPClient(userAgent string, headers []string, proxy string, timeout t
 
 	client := requests.New(opts...)
 	if client == nil {
-		return nil, fmt.Errorf("failed to construct HTTP client")
+		return nil, ErrHTTPClientBuild
 	}
 	return client, nil
 }

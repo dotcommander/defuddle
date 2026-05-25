@@ -123,6 +123,38 @@ func TestBatchCmd_TimeoutFlagRegistered(t *testing.T) {
 	}
 }
 
+func TestValidateConcurrency(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		value   int
+		wantErr bool
+	}{
+		{name: "positive", value: 1},
+		{name: "default", value: 5},
+		{name: "zero", value: 0, wantErr: true},
+		{name: "negative", value: -2, wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := validateConcurrency(tt.value)
+			if tt.wantErr {
+				if !errors.Is(err, ErrInvalidConcurrency) {
+					t.Fatalf("validateConcurrency(%d): want ErrInvalidConcurrency, got %v", tt.value, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("validateConcurrency(%d): unexpected error: %v", tt.value, err)
+			}
+		})
+	}
+}
+
 // TestBatchContext_NoTimeout verifies that a zero duration returns a plain
 // cancellable context with no deadline.
 func TestBatchContext_NoTimeout(t *testing.T) {

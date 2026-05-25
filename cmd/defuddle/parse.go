@@ -82,7 +82,7 @@ func parseContent(cmd *cobra.Command, args []string) error {
 	case isStdinPiped():
 		source = "-"
 	default:
-		return fmt.Errorf("usage: defuddle parse <url|file> (or pipe HTML via stdin)")
+		return ErrParseUsage
 	}
 
 	jsonOutput, _ := cmd.Flags().GetBool("json")
@@ -244,7 +244,11 @@ func parseHeader(header string) (string, string, error) {
 	if len(parts) != 2 {
 		return "", "", fmt.Errorf("%w: %s", ErrInvalidHeaderFormat, header)
 	}
-	return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1]), nil
+	key := strings.TrimSpace(parts[0])
+	if key == "" {
+		return "", "", fmt.Errorf("%w: empty header name", ErrInvalidHeaderFormat)
+	}
+	return key, strings.TrimSpace(parts[1]), nil
 }
 
 // isStdinPiped reports whether os.Stdin is connected to a pipe or file,

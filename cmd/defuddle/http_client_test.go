@@ -26,6 +26,8 @@ func TestParseHeader(t *testing.T) {
 		{"value with colon", "X-Url: https://example.com/p", "X-Url", "https://example.com/p", false},
 		{"empty value allowed", "X-Empty:", "X-Empty", "", false},
 		{"missing colon", "no-colon-here", "", "", true},
+		{"empty header name", ": value", "", "", true},
+		{"blank header name", "   : value", "", "", true},
 		{"empty string", "", "", "", true},
 	}
 
