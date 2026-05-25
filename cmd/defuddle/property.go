@@ -62,11 +62,29 @@ var propertyExtractors = map[string]func(*defuddle.Result) string{
 	},
 }
 
+var propertyDisplayNames = map[string]string{
+	"content":         "content",
+	"title":           "title",
+	"description":     "description",
+	"domain":          "domain",
+	"favicon":         "favicon",
+	"image":           "image",
+	"author":          "author",
+	"site":            "site",
+	"published":       "published",
+	"wordcount":       "wordCount",
+	"parsetime":       "parseTime",
+	"metatags":        "metaTags",
+	"schemaorgdata":   "schemaOrgData",
+	"extractortype":   "extractorType",
+	"contentmarkdown": "contentMarkdown",
+}
+
 // knownProperties is the sorted display list for error messages.
 var knownProperties = func() []string {
 	keys := make([]string, 0, len(propertyExtractors))
 	for k := range propertyExtractors {
-		keys = append(keys, k)
+		keys = append(keys, propertyDisplayNames[k])
 	}
 	slices.Sort(keys)
 	return keys

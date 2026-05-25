@@ -39,7 +39,7 @@ defuddle parse https://example.com --output article.html
 defuddle parse https://example.com --markdown --output article.md
 ```
 
-Available `--property` values: `title`, `description`, `domain`, `favicon`, `image`, `author`, `site`, `published`, `wordCount`, `parseTime`, `metaTags`, `schemaOrgData`, `extractorType`, `contentMarkdown`.
+Available `--property` values: `content`, `title`, `description`, `domain`, `favicon`, `image`, `author`, `site`, `published`, `wordCount`, `parseTime`, `metaTags`, `schemaOrgData`, `extractorType`, `contentMarkdown`.
 
 ### HTTP Flags
 
