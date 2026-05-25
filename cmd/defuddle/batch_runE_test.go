@@ -38,7 +38,7 @@ func captureBatchOutput(t *testing.T, fn func() error) (stdout string, err error
 
 	err = fn()
 
-	wOut.Close()
+	_ = wOut.Close()
 
 	outBytes, _ := io.ReadAll(rOut)
 	return string(outBytes), err

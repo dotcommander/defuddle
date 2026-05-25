@@ -51,8 +51,8 @@ func captureParseOutput(t *testing.T, fn func() error) (stdout, stderr string, e
 
 	err = fn()
 
-	wOut.Close()
-	wErr.Close()
+	_ = wOut.Close()
+	_ = wErr.Close()
 
 	outBytes, _ := io.ReadAll(rOut)
 	errBytes, _ := io.ReadAll(rErr)
@@ -233,7 +233,7 @@ func TestParseCmd_FileInput_OutputFile(t *testing.T) {
 func TestParseCmd_URLInput_HTTPTestServer(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		fmt.Fprint(w, fixtureHTML)
+		_, _ = fmt.Fprint(w, fixtureHTML)
 	}))
 	defer ts.Close()
 
