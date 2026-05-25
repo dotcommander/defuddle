@@ -199,6 +199,8 @@ tasks:
 
   tag:
     desc: Create and push a new tag (usage - task tag VERSION=v0.1.0)
+    deps:
+      - verify
     cmds:
       - |
         if [ -z "{{.VERSION}}" ]; then
