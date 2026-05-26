@@ -36,12 +36,17 @@ var (
 //			this.footnoteCounter = 0;
 //		}
 //	}
+//
+// grokMessageContainerSelector is the primary CSS selector for Grok message
+// bubbles. Relies on Grok's utility-class chain and may break if Grok's UI
+// changes. Held as a package-level const because it never varies per-instance.
+const grokMessageContainerSelector = ".relative.group.flex.flex-col.justify-center.w-full"
+
 type GrokExtractor struct {
 	*ConversationExtractorBase
-	messageContainerSelector string
-	messageBubbles           *goquery.Selection
-	footnotes                []Footnote
-	footnoteCounter          int
+	messageBubbles  *goquery.Selection
+	footnotes       []Footnote
+	footnoteCounter int
 }
 
 // NewGrokExtractor creates a new Grok extractor
@@ -56,9 +61,7 @@ type GrokExtractor struct {
 //		this.footnoteCounter = 0;
 //	}
 func NewGrokExtractor(document *goquery.Document, urlStr string, schemaOrgData any) *GrokExtractor {
-	// Note: This selector relies heavily on CSS utility classes and may break if Grok's UI changes.
-	messageContainerSelector := ".relative.group.flex.flex-col.justify-center.w-full"
-	messageBubbles := document.Find(messageContainerSelector)
+	messageBubbles := document.Find(grokMessageContainerSelector)
 
 	// Fallback selectors if primary ones don't work
 	if messageBubbles.Length() == 0 {
@@ -77,11 +80,10 @@ func NewGrokExtractor(document *goquery.Document, urlStr string, schemaOrgData a
 	slog.Debug("Grok extractor initialized",
 		"messageBubblesFound", messageBubbles.Length(),
 		"url", urlStr,
-		"selector", messageContainerSelector)
+		"selector", grokMessageContainerSelector)
 
 	return &GrokExtractor{
 		ConversationExtractorBase: NewConversationExtractorBase(document, urlStr, schemaOrgData),
-		messageContainerSelector:  messageContainerSelector,
 		messageBubbles:            messageBubbles,
 		footnotes:                 make([]Footnote, 0),
 		footnoteCounter:           0,
@@ -228,7 +230,7 @@ func (g *GrokExtractor) ExtractMessages() []ConversationMessage {
 			clonedDoc.Find(".relative.border.border-border-l1.bg-surface-base").Remove()
 			// Add selectors here for any other known elements to remove (e.g., buttons, toolbars within the bubble)
 
-			clonedContent, _ := clonedDoc.Html()
+			clonedContent, _ := clonedDoc.Find("body").Html()
 			content = clonedContent
 
 			// Process footnotes/links in the cleaned content
@@ -334,7 +336,7 @@ func (g *GrokExtractor) getTitle() string {
 
 	// Fallback: Find the first user message bubble and use its text content
 	// Note: Still relies on 'items-end' class.
-	firstUserContainer := g.document.Find(fmt.Sprintf("%s.items-end", g.messageContainerSelector)).First()
+	firstUserContainer := g.document.Find(fmt.Sprintf("%s.items-end", grokMessageContainerSelector)).First()
 	if firstUserContainer.Length() > 0 {
 		messageBubble := firstUserContainer.Find(".message-bubble").First()
 		if messageBubble.Length() > 0 {
