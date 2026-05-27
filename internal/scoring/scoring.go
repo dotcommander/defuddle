@@ -3,6 +3,7 @@
 package scoring
 
 import (
+	"context"
 	"log/slog"
 	"regexp"
 	"slices"
@@ -597,7 +598,7 @@ func IsProtectedNode(el *goquery.Selection, mainContent *goquery.Selection) bool
 //			});
 //		}
 //	}
-func ScoreAndRemove(doc *goquery.Document, debug bool, mainContent *goquery.Selection) {
+func ScoreAndRemove(ctx context.Context, doc *goquery.Document, debug bool, mainContent *goquery.Selection) {
 	startTime := time.Now()
 	removedCount := 0
 
@@ -608,25 +609,29 @@ func ScoreAndRemove(doc *goquery.Document, debug bool, mainContent *goquery.Sele
 	blockElements := constants.GetBlockElements()
 	blockSelector := strings.Join(blockElements, ",")
 
-	// Process each block element
-	doc.Find(blockSelector).Each(func(_ int, element *goquery.Selection) {
+	// Process each block element. Honor ctx cancellation at the loop head.
+	doc.Find(blockSelector).EachWithBreak(func(_ int, element *goquery.Selection) bool {
+		if ctx.Err() != nil {
+			return false
+		}
 		if IsProtectedNode(element, mainContent) {
-			return
+			return true
 		}
 
 		// Skip elements that are likely to be content
-		if isLikelyContent(element) {
-			return
+		if isLikelyContent(ctx, element) {
+			return true
 		}
 
 		// Score the element based on various criteria
-		score := scoreNonContentBlock(element)
+		score := scoreNonContentBlock(ctx, element)
 
 		// If the score is below the threshold, mark for removal
 		if score < 0 {
 			elementsToRemove = append(elementsToRemove, element)
 			removedCount++
 		}
+		return true
 	})
 
 	// Remove all collected elements in a single pass
@@ -685,7 +690,7 @@ func ScoreAndRemove(doc *goquery.Document, debug bool, mainContent *goquery.Sele
 //
 //		return false;
 //	}
-func isLikelyContent(element *goquery.Selection) bool {
+func isLikelyContent(_ context.Context, element *goquery.Selection) bool {
 	// Check if the element has a role that indicates content
 	role, _ := element.Attr("role")
 	if role != "" {
@@ -838,7 +843,7 @@ func isLikelyContent(element *goquery.Selection) bool {
 //
 //		return score;
 //	}
-func scoreNonContentBlock(element *goquery.Selection) float64 {
+func scoreNonContentBlock(_ context.Context, element *goquery.Selection) float64 {
 	// Skip footnote list elements and their descendants.
 	// FindMatcher: element contains a footnote list (descendant check).
 	// ClosestMatcher: element is inside a footnote list (ancestor check).
@@ -880,8 +885,15 @@ func scoreNonContentBlock(element *goquery.Selection) float64 {
 	}
 	score -= float64(indicatorMatches) * 10
 
+	// Collect link count and aggregate link-text length in one pass.
+	links := 0
+	linkTextLen := 0
+	element.Find("a").Each(func(_ int, a *goquery.Selection) {
+		links++
+		linkTextLen += len(a.Text())
+	})
+
 	// Check for high link density (navigation)
-	links := element.Find("a").Length()
 	linkDensity := float64(links) / float64(max(words, 1))
 	if linkDensity > 0.5 {
 		score -= 15
@@ -891,10 +903,6 @@ func scoreNonContentBlock(element *goquery.Selection) float64 {
 	// Requires multiple links to avoid penalizing content paragraphs
 	// that happen to be wrapped in a single link.
 	if links > 1 && words < 80 {
-		linkTextLen := 0
-		element.Find("a").Each(func(_ int, a *goquery.Selection) {
-			linkTextLen += len(a.Text())
-		})
 		totalTextLen := len(text)
 		if totalTextLen > 0 && float64(linkTextLen)/float64(totalTextLen) > 0.8 {
 			score -= 15

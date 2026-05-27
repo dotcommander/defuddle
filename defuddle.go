@@ -362,7 +362,7 @@ func (d *Defuddle) parseInternal(ctx context.Context, overrideOptions *Options) 
 		return result, nil
 	}
 
-	d.runRemovalPipeline(workingDoc, mainContent, smallImages, options)
+	d.runRemovalPipeline(ctx, workingDoc, mainContent, smallImages, options)
 
 	// Normalize the main content
 	standardize.Content(mainContent, extractedMetadata, workingDoc, d.debug)
@@ -698,7 +698,7 @@ func (d *Defuddle) prepareWorkingDoc() (*goquery.Document, error) {
 // runRemovalPipeline applies the full removal pipeline to workingDoc:
 // small-image removal, hidden elements, low-scoring blocks, clutter
 // selectors, and content patterns. mainContent is protected throughout.
-func (d *Defuddle) runRemovalPipeline(workingDoc *goquery.Document, mainContent *goquery.Selection, smallImages map[string]bool, options *Options) {
+func (d *Defuddle) runRemovalPipeline(ctx context.Context, workingDoc *goquery.Document, mainContent *goquery.Selection, smallImages map[string]bool, options *Options) {
 	d.removeSmallImages(workingDoc, smallImages)
 
 	if options.RemoveImages {
@@ -710,7 +710,7 @@ func (d *Defuddle) runRemovalPipeline(workingDoc *goquery.Document, mainContent 
 	}
 
 	if BoolDefault(options.RemoveLowScoring, true) {
-		scoring.ScoreAndRemove(workingDoc, d.debug, mainContent)
+		scoring.ScoreAndRemove(ctx, workingDoc, d.debug, mainContent)
 	}
 
 	removeExact := BoolDefault(options.RemoveExactSelectors, true)

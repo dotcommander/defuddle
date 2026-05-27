@@ -1,6 +1,7 @@
 package scoring
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -168,13 +169,13 @@ func TestScoreNonContentBlock_MultipleIndicatorsCountPreserved(t *testing.T) {
 	el := doc.Find("div")
 
 	// Score with all three indicators present.
-	threeScore := scoreNonContentBlock(el)
+	threeScore := scoreNonContentBlock(context.Background(), el)
 
 	// Score with only one indicator — remove the other two.
 	htmlOne := `<div>advertisement extra words here to exceed minimum word count threshold padding padding</div>`
 	docOne := parseHTML(t, htmlOne)
 	elOne := docOne.Find("div")
-	oneScore := scoreNonContentBlock(elOne)
+	oneScore := scoreNonContentBlock(context.Background(), elOne)
 
 	// The three-indicator element must score at least 20 points lower than the
 	// one-indicator element, confirming that each indicator contributes -10.
