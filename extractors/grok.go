@@ -17,7 +17,6 @@ var (
 	grokHTTPRe        = regexp.MustCompile(`(?i)^https?://`)
 )
 
-// GrokExtractor handles Grok (X.AI) conversation content extraction
 // TypeScript original code:
 // import { ConversationExtractor } from './_conversation';
 // import { ConversationMessage, ConversationMetadata, Footnote } from '../types/extractors';
@@ -42,6 +41,7 @@ var (
 // changes. Held as a package-level const because it never varies per-instance.
 const grokMessageContainerSelector = ".relative.group.flex.flex-col.justify-center.w-full"
 
+// GrokExtractor handles Grok (X.AI) conversation content extraction.
 type GrokExtractor struct {
 	*ConversationExtractorBase
 	messageBubbles  *goquery.Selection

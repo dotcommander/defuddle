@@ -8,6 +8,20 @@ All notable changes to this project will be documented in this file. The format 
 
 ## [Unreleased]
 
+---
+
+## [v0.7.2] — 2026-05-29
+
+### Fixed
+
+- `fix(extractors/grok): extract body inner HTML instead of full document wrapper`
+
+### Changed
+
+- `refactor(scoring): single-pass anchor metrics in scoreNonContentBlock`
+
+---
+
 ### Fixed
 
 - `fix(metadata): Language field now populated in buildMetadata` — `getLanguage` was called in `metadata.Extract` but the result was not forwarded through `buildMetadata`, causing `Result.Language` to always be empty. The field now correctly reflects the page's `<html lang>`, `content-language` meta, `og:locale`, or Schema.org `inLanguage`.
