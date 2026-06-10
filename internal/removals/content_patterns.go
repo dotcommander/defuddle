@@ -19,6 +19,7 @@ var (
 	contentReadTimePattern = regexp.MustCompile(`(?i)\d+\s*min(?:ute)?s?\s+read\b`)
 	bylineUppercasePattern = regexp.MustCompile(`^\p{Lu}`)
 	startsByPattern        = regexp.MustCompile(`(?i)^by\s+\S`)
+	metadataLabelPattern   = regexp.MustCompile(`(?i)^(?:date|published|updated|posted|from|to|subject)\s*:`)
 
 	boilerplatePatterns = []*regexp.Regexp{
 		regexp.MustCompile(`(?i)^This (?:article|story|piece) (?:appeared|was published|originally appeared) in\b`),
@@ -43,8 +44,9 @@ var (
 	camelBoundary         = regexp.MustCompile(`([a-z])([A-Z])`)
 
 	// Metadata strip patterns — date/number components.
-	metadataStripMonth  = regexp.MustCompile(`(?i)\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\b`)
-	metadataStripNumber = regexp.MustCompile(`\b\d+(?:st|nd|rd|th)?\b`)
+	metadataStripMonth   = regexp.MustCompile(`(?i)\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\b`)
+	metadataStripWeekday = regexp.MustCompile(`(?i)\b(?:Mon(?:day)?|Tue(?:s(?:day)?)?|Wed(?:nesday)?|Thu(?:rs(?:day)?)?|Fri(?:day)?|Sat(?:urday)?|Sun(?:day)?)\b`)
+	metadataStripNumber  = regexp.MustCompile(`\b\d+(?:st|nd|rd|th)?\b`)
 
 	// Read-time strip patterns (expect empty residual after applying all).
 	readTimeStripMin   = regexp.MustCompile(`(?i)\bmin(?:ute)?s?\b`)
@@ -219,7 +221,7 @@ func removeSinglePassMetadata(mainContent *goquery.Selection, mainNode *html.Nod
 		}
 
 		// DIV metadata blocks near top (date but no sentence punctuation).
-		if tag == "DIV" && words >= 1 && words <= 10 && hasDate && !sentencePunctRe.MatchString(text) && getPos() <= 400 {
+		if tag == "DIV" && words >= 1 && words <= 10 && hasDate && !metadataLabelPattern.MatchString(text) && !sentencePunctRe.MatchString(text) && getPos() <= 400 {
 			hasBigPara := false
 			el.Find("p, h1, h2, h3, h4, h5, h6").Each(func(_ int, sub *goquery.Selection) {
 				if textutil.CountWords(sub.Text()) > 8 {
@@ -249,6 +251,7 @@ func removeSinglePassMetadata(mainContent *goquery.Selection, mainNode *html.Nod
 		// Read-time metadata (e.g. "Mar 4th | 3 min read").
 		if hasDate && contentReadTimePattern.MatchString(text) && el.Find("p, div, section, article").Length() == 0 {
 			cleaned := metadataStripMonth.ReplaceAllString(text, "")
+			cleaned = metadataStripWeekday.ReplaceAllString(cleaned, "")
 			cleaned = metadataStripNumber.ReplaceAllString(cleaned, "")
 			cleaned = readTimeStripMin.ReplaceAllString(cleaned, "")
 			cleaned = readTimeStripRead.ReplaceAllString(cleaned, "")
@@ -263,8 +266,9 @@ func removeSinglePassMetadata(mainContent *goquery.Selection, mainNode *html.Nod
 		}
 
 		// Author + date combo near start.
-		if !authorDateFound && words >= 2 && words <= 10 && hasDate && getPos() <= 500 {
+		if !authorDateFound && words >= 2 && words <= 10 && hasDate && !metadataLabelPattern.MatchString(text) && getPos() <= 500 {
 			residual := metadataStripMonth.ReplaceAllString(text, "")
+			residual = metadataStripWeekday.ReplaceAllString(residual, "")
 			residual = metadataStripNumber.ReplaceAllString(residual, "")
 			residual = bylineStripBy.ReplaceAllString(residual, "")
 			residual = bylineStripPunct.ReplaceAllString(residual, "")

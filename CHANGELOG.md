@@ -6,6 +6,23 @@ All notable changes to this project will be documented in this file. The format 
 
 ---
 
+## [v0.7.3] — 2026-06-10
+
+### Fixed
+
+- Sanitize site-specific extractor output before returning `Result.Content`, matching the generic parser sanitizer path.
+- Honor `ProcessCode`, `ProcessImages`, `ProcessHeadings`, `ProcessMath`, `ProcessFootnotes`, and `ProcessRoles` options during standardization.
+- Cap `ParseFromURL` response reads before buffering the body, returning `ErrTooLarge` for oversized responses.
+- Return structured `ErrHTTPStatus` / `HTTPStatusError` for non-2xx URL fetches instead of parsing error pages.
+- Resolve implicit metadata URLs against the final redirect target while preserving an explicit caller-supplied `Options.URL`.
+- Sync selected upstream parser fixes from `kepano/defuddle`: ChatGPT split assistant messages, YouTube JSON-LD video metadata selection, markdown link destinations with spaces, and weekday-aware byline cleanup.
+
+### Changed
+
+- `task verify` now runs `govulncheck ./...` through the new `task vuln` gate.
+
+---
+
 ## [Unreleased]
 
 ---

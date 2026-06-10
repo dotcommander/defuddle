@@ -116,6 +116,40 @@ func TestRemoveByline(t *testing.T) {
 	assert.Contains(t, text(main), "first real paragraph", "body must survive")
 }
 
+func TestAuthorDateBylineStripsWeekday(t *testing.T) {
+	t.Parallel()
+
+	html := `<body>
+<h1>Article Title</h1>
+<p>Jane Smith Monday January 1 2024</p>
+<p>This is the first real paragraph of the article with enough words to qualify as prose content.</p>
+<p>Second paragraph with additional substantive content about the subject.</p>
+</body>`
+
+	main, doc := parseMain(t, html)
+	RemoveByContentPattern(main, doc, false, "https://example.com/article")
+
+	assert.NotContains(t, text(main), "Jane Smith Monday", "weekday byline must be removed")
+	assert.Contains(t, text(main), "first real paragraph", "body must survive")
+}
+
+func TestMetadataLabelsArePreserved(t *testing.T) {
+	t.Parallel()
+
+	html := `<body>
+<div>From: Jane Smith Jan 1</div>
+<div>Subject: Quarterly update Jan 2</div>
+<p>This is the first real paragraph of the article with enough words to qualify as prose content.</p>
+<p>Second paragraph with additional substantive content about the subject.</p>
+</body>`
+
+	main, doc := parseMain(t, html)
+	RemoveByContentPattern(main, doc, false, "https://example.com/article")
+
+	assert.Contains(t, text(main), "From: Jane Smith Jan 1", "email-style from label must survive")
+	assert.Contains(t, text(main), "Subject: Quarterly update Jan 2", "email-style subject label must survive")
+}
+
 // ---- boilerplate removal ----
 
 func TestRemoveBoilerplate(t *testing.T) {

@@ -136,8 +136,13 @@ tasks:
       - echo "Running go vet..."
       - go vet ./...
 
+  vuln:
+    desc: Run govulncheck
+    cmds:
+      - govulncheck ./...
+
   verify:
-    desc: Run all verification steps (submodules, deps, format, vet, lint, test)
+    desc: Run all verification steps (submodules, deps, format, vet, lint, test, vuln)
     cmds:
       - task: submodules
       - task: deps
@@ -145,6 +150,7 @@ tasks:
       - task: vet
       - task: lint
       - task: test
+      - task: vuln
       - echo "All verification steps completed successfully ✅"
 
   dev:

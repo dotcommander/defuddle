@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
+	"golang.org/x/net/html"
 )
 
 // Pre-compiled regex patterns for ChatGPT extraction.
@@ -304,14 +305,25 @@ func (c *ChatGPTExtractor) ExtractMessages() []ConversationMessage {
 		// Remove colon and any trailing whitespace
 		authorText = strings.TrimSuffix(strings.TrimSpace(authorText), ":")
 
-		// Get author role from data attribute
-		currentAuthorRole, _ := article.Attr("data-message-author-role")
+		messageEls := c.messageElementsForTurn(article)
+
+		// Get author role from the first message element, falling back to the
+		// article for older ChatGPT markup.
+		currentAuthorRole := ""
+		if len(messageEls) > 0 {
+			currentAuthorRole, _ = messageEls[0].Attr("data-message-author-role")
+		}
+		if currentAuthorRole == "" {
+			currentAuthorRole, _ = article.Attr("data-message-author-role")
+		}
 		if currentAuthorRole == "" {
 			currentAuthorRole = "unknown"
 		}
 
-		// Get message content
-		messageContent, _ := article.Html()
+		// Get message content. ChatGPT can split one assistant turn into
+		// multiple message fragments around Thought sections; merge only the
+		// direct fragments for this turn.
+		messageContent := c.messageContentHTML(article, messageEls)
 		if messageContent == "" {
 			slog.Debug("Empty message content found", "index", i)
 			return
@@ -342,6 +354,95 @@ func (c *ChatGPTExtractor) ExtractMessages() []ConversationMessage {
 
 	slog.Debug("ChatGPT messages extracted", "messageCount", len(messages), "footnoteCount", len(c.footnotes))
 	return messages
+}
+
+func (c *ChatGPTExtractor) messageElementsForTurn(article *goquery.Selection) []*goquery.Selection {
+	var messageEls []*goquery.Selection
+	articleNode := article.Get(0)
+	if articleNode == nil {
+		return messageEls
+	}
+
+	if article.Is(`[data-message-author-role]`) {
+		messageEls = append(messageEls, article)
+	}
+
+	article.Find(`[data-message-author-role]`).Each(func(_ int, s *goquery.Selection) {
+		if closest := s.Closest(`[data-testid^="conversation-turn-"]`); closest.Length() > 0 && closest.Get(0) != articleNode {
+			return
+		}
+		messageEls = append(messageEls, s)
+	})
+
+	return messageEls
+}
+
+func (c *ChatGPTExtractor) messageContentHTML(article *goquery.Selection, messageEls []*goquery.Selection) string {
+	if len(messageEls) == 0 {
+		htmlContent, _ := article.Html()
+		return htmlContent
+	}
+
+	parts := make([]string, 0, len(messageEls))
+	for _, messageEl := range messageEls {
+		contentEls := c.messageContentElements(messageEl)
+		if len(contentEls) == 0 {
+			if htmlContent, err := goquery.OuterHtml(messageEl); err == nil && strings.TrimSpace(htmlContent) != "" {
+				parts = append(parts, htmlContent)
+			}
+			continue
+		}
+		for _, contentEl := range contentEls {
+			if htmlContent, err := goquery.OuterHtml(contentEl); err == nil && strings.TrimSpace(htmlContent) != "" {
+				parts = append(parts, htmlContent)
+			}
+		}
+	}
+
+	if len(parts) == 0 {
+		htmlContent, _ := article.Html()
+		return htmlContent
+	}
+	return strings.Join(parts, "\n")
+}
+
+func (c *ChatGPTExtractor) messageContentElements(messageEl *goquery.Selection) []*goquery.Selection {
+	var candidates []*goquery.Selection
+	if messageEl.Is(".markdown, .whitespace-pre-wrap") {
+		candidates = append(candidates, messageEl)
+	}
+	messageEl.Find(".markdown, .whitespace-pre-wrap").Each(func(_ int, s *goquery.Selection) {
+		candidates = append(candidates, s)
+	})
+
+	filtered := candidates[:0]
+	for _, candidate := range candidates {
+		nested := false
+		for _, other := range candidates {
+			if candidate == other {
+				continue
+			}
+			candidateNode := candidate.Get(0)
+			otherNode := other.Get(0)
+			if candidateNode != nil && otherNode != nil && nodeContains(otherNode, candidateNode) {
+				nested = true
+				break
+			}
+		}
+		if !nested {
+			filtered = append(filtered, candidate)
+		}
+	}
+	return filtered
+}
+
+func nodeContains(parent, child *html.Node) bool {
+	for n := child.Parent; n != nil; n = n.Parent {
+		if n == parent {
+			return true
+		}
+	}
+	return false
 }
 
 // cleanMessageContent removes specific elements from message content

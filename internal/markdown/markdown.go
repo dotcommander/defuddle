@@ -28,6 +28,8 @@ var (
 	widthDescriptorRe   = regexp.MustCompile(`^(\d+)w,?$`)
 	densityDescriptorRe = regexp.MustCompile(`^\d+(?:\.\d+)?x,?$`)
 	backLinkRe          = regexp.MustCompile(`\s*↩︎\s*$`)
+	linkWhitespaceRe    = regexp.MustCompile(`\s`)
+	linkTitleNewlineRe  = regexp.MustCompile(`(\n+\s*)+`)
 )
 
 // ConvertHTML converts HTML content to Markdown with custom rules
@@ -474,8 +476,40 @@ func renderLink(ctx converter.Context, w converter.Writer, n *html.Node) convert
 		return renderComplexLink(ctx, w, n)
 	}
 
-	// Let the default link handler take care of normal links
-	return converter.RenderTryNext
+	if href == "" {
+		return converter.RenderTryNext
+	}
+
+	var buf bytes.Buffer
+	ctx.RenderChildNodes(ctx, &buf, n)
+	content := strings.TrimSpace(buf.String())
+	if content == "" {
+		return converter.RenderTryNext
+	}
+
+	w.WriteString("[")
+	w.WriteString(content)
+	w.WriteString("](")
+	w.WriteString(formatMarkdownLinkDestination(href))
+	w.WriteString(formatMarkdownLinkTitle(getAttr(n, "title")))
+	w.WriteString(")")
+	return converter.RenderSuccess
+}
+
+func formatMarkdownLinkDestination(href string) string {
+	if !linkWhitespaceRe.MatchString(href) {
+		return strings.NewReplacer("(", `\(`, ")", `\)`).Replace(href)
+	}
+	return "<" + strings.ReplaceAll(href, ">", `\>`) + ">"
+}
+
+func formatMarkdownLinkTitle(title string) string {
+	if title == "" {
+		return ""
+	}
+	title = linkTitleNewlineRe.ReplaceAllString(title, "\n")
+	title = strings.ReplaceAll(title, `"`, `\"`)
+	return ` "` + title + `"`
 }
 
 func hasChildHeading(n *html.Node) bool {
@@ -530,10 +564,7 @@ func renderComplexLink(ctx converter.Context, w converter.Writer, n *html.Node) 
 	}
 	if href != "" {
 		w.WriteString("\n\n")
-		w.WriteString("[View original](" + href + ")")
-		if title := getAttr(n, "title"); title != "" {
-			fmt.Fprintf(w, ` "%s"`, title)
-		}
+		w.WriteString("[View original](" + formatMarkdownLinkDestination(href) + formatMarkdownLinkTitle(getAttr(n, "title")) + ")")
 	}
 	return converter.RenderSuccess
 }

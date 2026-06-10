@@ -1,7 +1,9 @@
 package defuddle
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -50,6 +52,129 @@ func testClient() *requests.Client {
 		requests.WithUserAgent("defuddle-test"),
 		requests.WithTimeout(10*time.Second),
 	)
+}
+
+func TestParseFromURL_RejectsOversizedResponse(t *testing.T) {
+	t.Parallel()
+
+	payload := bytes.Repeat([]byte("a"), maxResponseSize+1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write(payload)
+	}))
+	t.Cleanup(srv.Close)
+
+	_, err := ParseFromURL(context.Background(), srv.URL, &Options{Client: testClient()})
+	require.Error(t, err)
+	require.True(t, errors.Is(err, ErrTooLarge), "got %v, want ErrTooLarge", err)
+}
+
+func TestParseFromURL_ReturnsHTTPStatusError(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(`<html><body><article><p>Temporary outage page.</p></article></body></html>`))
+	}))
+	t.Cleanup(srv.Close)
+
+	result, err := ParseFromURL(context.Background(), srv.URL, &Options{Client: testClient()})
+
+	require.ErrorIs(t, err, ErrHTTPStatus)
+	assert.Nil(t, result)
+
+	var statusErr *HTTPStatusError
+	require.ErrorAs(t, err, &statusErr)
+	assert.Equal(t, srv.URL, statusErr.URL)
+	assert.Equal(t, http.StatusServiceUnavailable, statusErr.StatusCode)
+	assert.Equal(t, "503 Service Unavailable", statusErr.Status)
+}
+
+func TestParseFromURL_UsesRedirectTargetForImplicitMetadataURL(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/start":
+			http.Redirect(w, r, "/articles/story/", http.StatusFound)
+		case "/articles/story/":
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = w.Write([]byte(`<!doctype html><html><head>
+<title>Redirected Article</title>
+<link rel="icon" href="icon.svg">
+</head><body><main><article><h1>Redirected Article</h1>` + wordRepeat("redirected article body", 40) + `</article></main></body></html>`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	options := &Options{Client: testClient()}
+	result, err := ParseFromURL(context.Background(), srv.URL+"/start", options)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, srv.URL+"/articles/story/", options.URL)
+	assert.Equal(t, srv.URL+"/articles/story/icon.svg", result.Favicon)
+}
+
+func TestParseFromURL_PreservesExplicitMetadataURLAfterRedirect(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/start":
+			http.Redirect(w, r, "/articles/story/", http.StatusFound)
+		case "/articles/story/":
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = w.Write([]byte(`<!doctype html><html><head>
+<title>Logical Article</title>
+<link rel="icon" href="/logical-icon.svg">
+</head><body><main><article><h1>Logical Article</h1>` + wordRepeat("logical article body", 40) + `</article></main></body></html>`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	options := &Options{
+		Client: testClient(),
+		URL:    "https://example.com/logical/story",
+	}
+	result, err := ParseFromURL(context.Background(), srv.URL+"/start", options)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "https://example.com/logical/story", options.URL)
+	assert.Equal(t, "https://example.com/logical-icon.svg", result.Favicon)
+}
+
+func TestParseFromURL_HTTPStatusErrorUsesRedirectTarget(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/start":
+			http.Redirect(w, r, "/unavailable", http.StatusFound)
+		case "/unavailable":
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte(`<html><body><p>Temporary outage page.</p></body></html>`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	result, err := ParseFromURL(context.Background(), srv.URL+"/start", &Options{Client: testClient()})
+
+	require.ErrorIs(t, err, ErrHTTPStatus)
+	assert.Nil(t, result)
+
+	var statusErr *HTTPStatusError
+	require.ErrorAs(t, err, &statusErr)
+	assert.Equal(t, srv.URL+"/unavailable", statusErr.URL)
 }
 
 // TestParseFromURLs_OrderPreserved verifies the returned slice index matches

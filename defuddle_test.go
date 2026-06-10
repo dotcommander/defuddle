@@ -952,6 +952,54 @@ func TestFindMainContent_MainElement(t *testing.T) {
 	assert.NotContains(t, result.Content, "Site Footer")
 }
 
+func TestExtractorPath_SanitizesUnsafeHTML(t *testing.T) {
+	t.Parallel()
+
+	html := `<html><head>
+		<title>owner/repo issue</title>
+		<meta name="expected-hostname" content="github.com">
+	</head><body>
+		<div data-testid="issue-title">Issue title</div>
+		<div data-testid="issue-viewer-issue-container">
+			<a data-testid="issue-body-header-author" href="/attacker">attacker</a>
+			<relative-time datetime="2026-01-02T03:04:05Z"></relative-time>
+			<div data-testid="issue-body-viewer"><div class="markdown-body">
+				<p><img src="x" onerror="alert(1)"></p>
+				<a href="javascript:alert(2)">bad link</a>
+			</div></div>
+		</div>
+	</body></html>`
+
+	d, err := NewDefuddle(html, &Options{URL: "https://github.com/owner/repo/issues/1"})
+	require.NoError(t, err)
+
+	result, err := d.Parse(context.Background())
+	require.NoError(t, err)
+
+	assert.NotContains(t, result.Content, "onerror")
+	assert.NotContains(t, result.Content, "javascript:alert")
+	assert.Contains(t, result.Content, "bad link")
+}
+
+func TestProcessImagesOptionGatesImageProcessing(t *testing.T) {
+	t.Parallel()
+
+	html := `<html><body><article>
+		<p>Article body with enough words to make this article the selected content for option testing.</p>
+		<img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" data-src="photo.jpg" width="640" height="480" alt="Photo">
+	</article></body></html>`
+
+	withoutProcessing, err := ParseFromString(context.Background(), html, &Options{})
+	require.NoError(t, err)
+	assert.Contains(t, withoutProcessing.Content, `src="data:image/gif`)
+	assert.Contains(t, withoutProcessing.Content, `data-src="photo.jpg"`)
+
+	withProcessing, err := ParseFromString(context.Background(), html, &Options{ProcessImages: true})
+	require.NoError(t, err)
+	assert.Contains(t, withProcessing.Content, `src="photo.jpg"`)
+	assert.NotContains(t, withProcessing.Content, `src="data:image/gif`)
+}
+
 // TestExtractorPath_Markdown is a regression test for the bug where tryExtractor
 // built a Result but never converted HTML to markdown, leaving ContentMarkdown nil
 // even when Markdown or SeparateMarkdown options were set.

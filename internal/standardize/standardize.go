@@ -8,6 +8,16 @@ import (
 	"github.com/dotcommander/defuddle/internal/metadata"
 )
 
+// Options controls optional element processors in the standardization pass.
+type Options struct {
+	ProcessCode      bool
+	ProcessImages    bool
+	ProcessHeadings  bool
+	ProcessMath      bool
+	ProcessFootnotes bool
+	ProcessRoles     bool
+}
+
 // Content standardizes and cleans up the main content element
 // JavaScript original code:
 //
@@ -57,6 +67,18 @@ import (
 //		}
 //	}
 func Content(element *goquery.Selection, metadata *metadata.Metadata, doc *goquery.Document, debug bool) {
+	ContentWithOptions(element, metadata, doc, Options{
+		ProcessCode:      true,
+		ProcessImages:    true,
+		ProcessHeadings:  true,
+		ProcessMath:      true,
+		ProcessFootnotes: true,
+		ProcessRoles:     true,
+	}, debug)
+}
+
+// ContentWithOptions standardizes content while honoring optional processor gates.
+func ContentWithOptions(element *goquery.Selection, metadata *metadata.Metadata, doc *goquery.Document, options Options, debug bool) {
 	standardizeSpaces(element)
 
 	// Remove HTML comments (TS order: after spaces, before headings)
@@ -68,20 +90,32 @@ func Content(element *goquery.Selection, metadata *metadata.Metadata, doc *goque
 	// Remove permalink anchors from headings
 	removeHeadingAnchors(element)
 
-	// Standardize footnotes and citations (full TS-compatible rewrite)
-	elements.StandardizeFootnotesInScope(doc, element)
+	if options.ProcessFootnotes {
+		// Standardize footnotes and citations (full TS-compatible rewrite)
+		elements.StandardizeFootnotesInScope(doc, element)
+	}
 
 	// Wrap <code> with white-space:pre not inside <pre>
 	wrapPreformattedCode(element)
 
-	// Convert embedded content to standard formats
-	standardizeElements(element, doc, debug)
+	if options.ProcessRoles {
+		// Convert embedded content to standard formats
+		standardizeElements(element, doc, debug)
+	}
 
 	// Process element-specific enhancements within the extracted content scope
-	elements.ProcessCodeBlocksInScope(element, nil)
-	elements.ProcessMathInScope(element, nil)
-	elements.ProcessHeadingsInScope(element, nil)
-	elements.ProcessImagesInScope(element, nil)
+	if options.ProcessCode {
+		elements.ProcessCodeBlocksInScope(element, nil)
+	}
+	if options.ProcessMath {
+		elements.ProcessMathInScope(element, nil)
+	}
+	if options.ProcessHeadings {
+		elements.ProcessHeadingsInScope(element, nil)
+	}
+	if options.ProcessImages {
+		elements.ProcessImagesInScope(element, nil)
+	}
 
 	// Unwrap special links (javascript:, block-wrapping, section anchors)
 	unwrapSpecialLinks(element, doc)

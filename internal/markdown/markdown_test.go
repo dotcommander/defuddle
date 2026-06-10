@@ -74,6 +74,24 @@ func TestConvertHTML_FootnoteBacklinkRemoved(t *testing.T) {
 	assert.NotContains(t, md, "↩︎")
 }
 
+func TestConvertHTML_LinkWithSpacesUsesAngleDestination(t *testing.T) {
+	t.Parallel()
+
+	md, err := ConvertHTML(`<p><a href="https://example.com/a path/file name.html">spaced link</a></p>`)
+	require.NoError(t, err)
+
+	assert.Contains(t, md, `[spaced link](<https://example.com/a path/file name.html>)`)
+}
+
+func TestConvertHTML_LinkEscapesParentheses(t *testing.T) {
+	t.Parallel()
+
+	md, err := ConvertHTML(`<p><a href="https://example.com/wiki/Foo_(bar)" title="A &quot;title&quot;">paren link</a></p>`)
+	require.NoError(t, err)
+
+	assert.Contains(t, md, `[paren link](https://example.com/wiki/Foo_\(bar\) "A \"title\"")`)
+}
+
 func TestConvertHTML_Figure(t *testing.T) {
 	t.Parallel()
 	html := `<figure><img src="photo.jpg" alt="A photo"><figcaption>Caption text</figcaption></figure>`

@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -172,6 +174,8 @@ func ParseFromURL(ctx context.Context, url string, options *Options) (*Result, e
 		options = &Options{}
 	}
 
+	useResponseURL := options.URL == ""
+
 	// Set URL in options if not already set
 	if options.URL == "" {
 		options.URL = url
@@ -185,33 +189,19 @@ func ParseFromURL(ctx context.Context, url string, options *Options) (*Result, e
 			requests.WithTimeout(30*time.Second),
 		)
 	}
-	resp, err := client.Get(url).Send(ctx)
+	fetched, err := fetchCapped(ctx, client, url)
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, fmt.Errorf("fetch %s: %w", url, ErrTimeout)
 		}
-		return nil, fmt.Errorf("failed to fetch URL %s: %w", url, err)
+		return nil, err
 	}
-	defer func() {
-		if closeErr := resp.Close(); closeErr != nil {
-			slog.Warn("Failed to close response", "error", closeErr)
-		}
-	}()
-
-	// Validate content type — reject non-HTML responses
-	ct := resp.ContentType()
-	if ct != "" && !strings.Contains(ct, "html") && !strings.Contains(ct, "xml") && !strings.Contains(ct, "text/") {
-		return nil, fmt.Errorf("fetch %s: content-type %q: %w", url, ct, ErrNotHTML)
-	}
-
-	// Enforce size limit
-	rawBody := resp.Body()
-	if len(rawBody) > maxResponseSize {
-		return nil, fmt.Errorf("fetch %s: response %d bytes: %w", url, len(rawBody), ErrTooLarge)
+	if useResponseURL && fetched.URL != "" {
+		options.URL = fetched.URL
 	}
 
 	// Detect and convert charset to UTF-8
-	body, err := toUTF8(rawBody, ct)
+	body, err := toUTF8(fetched.Body, fetched.ContentType)
 	if err != nil {
 		return nil, fmt.Errorf("fetch %s: charset conversion: %w", url, err)
 	}
@@ -223,6 +213,105 @@ func ParseFromURL(ctx context.Context, url string, options *Options) (*Result, e
 	}
 
 	return defuddle.Parse(ctx)
+}
+
+type fetchResult struct {
+	Body        []byte
+	ContentType string
+	URL         string
+}
+
+func fetchCapped(ctx context.Context, client *requests.Client, rawURL string) (*fetchResult, error) {
+	reqURL, err := buildRequestURL(client, rawURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch URL %s: %w", rawURL, err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch URL %s: %w", rawURL, err)
+	}
+	applyRequestDefaults(req, client)
+
+	httpClient := http.DefaultClient
+	if client != nil && client.HTTPClient != nil {
+		httpClient = client.HTTPClient
+	}
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch URL %s: %w", rawURL, err)
+	}
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			slog.Warn("Failed to close response", "error", closeErr)
+		}
+	}()
+
+	responseURL := rawURL
+	if resp.Request != nil && resp.Request.URL != nil {
+		responseURL = resp.Request.URL.String()
+	}
+
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return nil, &HTTPStatusError{
+			URL:        responseURL,
+			Status:     resp.Status,
+			StatusCode: resp.StatusCode,
+		}
+	}
+
+	ct := resp.Header.Get("Content-Type")
+	if ct != "" && !strings.Contains(ct, "html") && !strings.Contains(ct, "xml") && !strings.Contains(ct, "text/") {
+		return nil, fmt.Errorf("fetch %s: content-type %q: %w", rawURL, ct, ErrNotHTML)
+	}
+	if resp.ContentLength > maxResponseSize {
+		return nil, fmt.Errorf("fetch %s: response %d bytes: %w", rawURL, resp.ContentLength, ErrTooLarge)
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize+1))
+	if err != nil {
+		return nil, fmt.Errorf("fetch %s: read response: %w", rawURL, err)
+	}
+	if len(body) > maxResponseSize {
+		return nil, fmt.Errorf("fetch %s: response exceeds %d bytes: %w", rawURL, maxResponseSize, ErrTooLarge)
+	}
+	return &fetchResult{Body: body, ContentType: ct, URL: responseURL}, nil
+}
+
+func buildRequestURL(client *requests.Client, rawURL string) (string, error) {
+	if client == nil || client.BaseURL == "" {
+		_, err := url.Parse(rawURL)
+		return rawURL, err
+	}
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return "", err
+	}
+	if parsed.IsAbs() {
+		return rawURL, nil
+	}
+	base, err := url.Parse(client.BaseURL)
+	if err != nil {
+		return "", err
+	}
+	return base.ResolveReference(parsed).String(), nil
+}
+
+func applyRequestDefaults(req *http.Request, client *requests.Client) {
+	if client == nil {
+		return
+	}
+	if client.Headers != nil {
+		for key, values := range *client.Headers {
+			for _, value := range values {
+				req.Header.Add(key, value)
+			}
+		}
+	}
+	for _, cookie := range client.Cookies {
+		req.AddCookie(cookie)
+	}
 }
 
 // ParseFromString parses HTML content directly from a string
@@ -342,7 +431,7 @@ func (d *Defuddle) parseInternal(ctx context.Context, overrideOptions *Options) 
 	if mainContent == nil {
 		// Fallback to body content
 		body := workingDoc.Find("body")
-		content, _ := body.Html()
+		content := sanitizeHTMLFragment(selectionHTML(body))
 		wordCount := d.countWordsInSelection(body)
 		parseTime := time.Since(startTime).Milliseconds()
 
@@ -365,7 +454,7 @@ func (d *Defuddle) parseInternal(ctx context.Context, overrideOptions *Options) 
 	d.runRemovalPipeline(ctx, workingDoc, mainContent, smallImages, options)
 
 	// Normalize the main content
-	standardize.Content(mainContent, extractedMetadata, workingDoc, d.debug)
+	standardize.ContentWithOptions(mainContent, extractedMetadata, workingDoc, standardizeOptions(options), d.debug)
 
 	// Resolve relative URLs against page URL
 	if options.URL != "" {
@@ -376,7 +465,7 @@ func (d *Defuddle) parseInternal(ctx context.Context, overrideOptions *Options) 
 	// Strip unsafe elements and attributes (XSS safety)
 	urlutil.SanitizeUnsafe(mainContent)
 
-	content, _ := goquery.OuterHtml(mainContent)
+	content := selectionOuterHTML(mainContent)
 	wordCount := d.countWordsInSelection(mainContent)
 	parseTime := time.Since(startTime).Milliseconds()
 
@@ -467,11 +556,12 @@ func (d *Defuddle) tryExtractor(
 	extractorType := strings.ToLower(strings.TrimSuffix(ext.Name(), "Extractor"))
 
 	// buildMetadata uses extractedMetadata.Site; override with siteName after.
-	meta := buildMetadata(extractedMetadata, schemaOrgData, d.countWords(extracted.ContentHTML), time.Since(startTime).Milliseconds())
+	contentHTML := sanitizeHTMLFragment(extracted.ContentHTML)
+	meta := buildMetadata(extractedMetadata, schemaOrgData, d.countWords(contentHTML), time.Since(startTime).Milliseconds())
 	meta.Site = siteName
 	result := &Result{
 		Metadata:      meta,
-		Content:       extracted.ContentHTML,
+		Content:       contentHTML,
 		ExtractorType: &extractorType,
 		Variables:     extracted.Variables,
 		MetaTags:      metaTags,
@@ -497,7 +587,7 @@ func (d *Defuddle) tryExtractor(
 	}
 
 	if options.wantsMarkdown() {
-		if md, err := markdown.ConvertHTML(extracted.ContentHTML); err == nil {
+		if md, err := markdown.ConvertHTML(contentHTML); err == nil {
 			result.ContentMarkdown = &md
 		} else if d.debug {
 			slog.Debug("Failed to convert extractor output to Markdown", "error", err)
@@ -511,6 +601,29 @@ func (d *Defuddle) tryExtractor(
 	}
 
 	return result
+}
+
+func selectionHTML(sel *goquery.Selection) string {
+	content, _ := sel.Html()
+	return content
+}
+
+func selectionOuterHTML(sel *goquery.Selection) string {
+	content, _ := goquery.OuterHtml(sel)
+	return content
+}
+
+func sanitizeHTMLFragment(content string) string {
+	if content == "" {
+		return ""
+	}
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader("<div>" + content + "</div>"))
+	if err != nil {
+		return content
+	}
+	root := doc.Find("body > div").First()
+	urlutil.SanitizeUnsafe(root)
+	return selectionHTML(root)
 }
 
 // removeBySelector removes elements by exact and partial selectors.
@@ -660,6 +773,20 @@ func applyOptions(dst, src *Options) {
 	}
 	if src.MaxConcurrency > 0 {
 		dst.MaxConcurrency = src.MaxConcurrency
+	}
+}
+
+func standardizeOptions(options *Options) standardize.Options {
+	if options == nil {
+		return standardize.Options{}
+	}
+	return standardize.Options{
+		ProcessCode:      options.ProcessCode,
+		ProcessImages:    options.ProcessImages,
+		ProcessHeadings:  options.ProcessHeadings,
+		ProcessMath:      options.ProcessMath,
+		ProcessFootnotes: options.ProcessFootnotes,
+		ProcessRoles:     options.ProcessRoles,
 	}
 }
 

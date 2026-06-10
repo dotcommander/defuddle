@@ -127,6 +127,24 @@ const chatgptFragmentCitationHTML = `<html>
 </body>
 </html>`
 
+const chatgptSplitAssistantHTML = `<html>
+<head><title>Split - ChatGPT</title></head>
+<body>
+	<article data-testid="conversation-turn-1">
+		<h5 class="sr-only">ChatGPT:</h5>
+		<div data-message-author-role="assistant">
+			<div class="markdown"><p>Visible before thought.</p></div>
+		</div>
+		<div data-message-author-role="assistant">
+			<span data-state="closed">Thought for 5 seconds</span>
+		</div>
+		<div data-message-author-role="assistant">
+			<div class="markdown"><p>Visible after thought.</p></div>
+		</div>
+	</article>
+</body>
+</html>`
+
 // --- CanExtract ---
 
 func TestChatGPTExtractor_CanExtract_True(t *testing.T) {
@@ -243,6 +261,20 @@ func TestChatGPTExtractor_ExtractMessages_ContentExtracted(t *testing.T) {
 
 	assert.Contains(t, messages[0].Content, "What is Go?")
 	assert.Contains(t, messages[1].Content, "statically typed")
+}
+
+func TestChatGPTExtractor_ExtractMessages_MergesSplitAssistantContent(t *testing.T) {
+	t.Parallel()
+
+	doc := newTestDoc(t, chatgptSplitAssistantHTML)
+	ext := NewChatGPTExtractor(doc, "https://chatgpt.com/c/split", nil)
+	messages := ext.ExtractMessages()
+
+	require.Len(t, messages, 1)
+	assert.Equal(t, "assistant", messages[0].Metadata["role"])
+	assert.Contains(t, messages[0].Content, "Visible before thought.")
+	assert.Contains(t, messages[0].Content, "Visible after thought.")
+	assert.NotContains(t, messages[0].Content, "Thought for 5 seconds")
 }
 
 func TestChatGPTExtractor_ExtractMessages_NoArticles(t *testing.T) {

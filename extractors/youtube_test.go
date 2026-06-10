@@ -137,6 +137,58 @@ func TestYouTubeExtractor_Extract_SchemaOrgArray(t *testing.T) {
 	assert.Equal(t, "Test Channel", result.Variables["author"])
 }
 
+func TestYouTubeExtractor_Extract_PrefersDescriptiveLDJSONVideoObject(t *testing.T) {
+	t.Parallel()
+
+	html := `<html><head>
+<title>Fallback Title - YouTube</title>
+<script type="application/ld+json">[
+  {
+    "@type": "VideoObject",
+    "@id": "https://www.youtube.com/watch?v=vid123",
+    "name": "Pinned comment title",
+    "comment": {"text": "first comment"}
+  },
+  {
+    "@type": "VideoObject",
+    "@id": "https://www.youtube.com/watch?v=vid123",
+    "name": "Actual Video Title",
+    "author": "Actual Channel",
+    "description": "Actual video description",
+    "uploadDate": "2026-01-02",
+    "thumbnailUrl": ["https://img.youtube.com/vi/vid123/maxresdefault.jpg"]
+  }
+]</script>
+</head><body></body></html>`
+	doc := newTestDoc(t, html)
+	ext := NewYouTubeExtractor(doc, "https://www.youtube.com/watch?v=vid123", nil)
+	result := ext.Extract()
+
+	require.NotNil(t, result)
+	assert.Equal(t, "Actual Video Title", result.Variables["title"])
+	assert.Equal(t, "Actual Channel", result.Variables["author"])
+	assert.Equal(t, "Actual video description", result.Variables["description"])
+	assert.Equal(t, "2026-01-02", result.Variables["published"])
+}
+
+func TestYouTubeExtractor_Extract_RejectsStaleOpenGraphFallback(t *testing.T) {
+	t.Parallel()
+
+	html := `<html><head>
+<title>Current Title - YouTube</title>
+<meta property="og:url" content="https://www.youtube.com/watch?v=old123">
+<meta property="og:title" content="Stale OG Title">
+<meta property="og:description" content="Stale OG Description">
+</head><body></body></html>`
+	doc := newTestDoc(t, html)
+	ext := NewYouTubeExtractor(doc, "https://www.youtube.com/watch?v=current123", nil)
+	result := ext.Extract()
+
+	require.NotNil(t, result)
+	assert.Equal(t, "Current Title", result.Variables["title"])
+	assert.NotEqual(t, "Stale OG Description", result.Variables["description"])
+}
+
 func TestYouTubeExtractor_Extract_TitleFallbackFromDocument(t *testing.T) {
 	t.Parallel()
 
