@@ -47,11 +47,11 @@ func (e *MastodonExtractor) CanExtract() bool {
 		return true
 	}
 	// Mastodon sets a characteristic app meta tag
-	if gen := mastodonMetaAttr(doc, `meta[name="application-name"]`, "content"); strings.EqualFold(gen, "Mastodon") {
+	if gen := mastodonMetaAttr(doc, `meta[name="application-name"]`); strings.EqualFold(gen, "Mastodon") {
 		return true
 	}
 	// og:url containing /@user/digits is a strong Mastodon status signal
-	if ogURL := mastodonMetaAttr(doc, `meta[property="og:url"]`, "content"); mastodonStatusURLRe.MatchString(ogURL) {
+	if ogURL := mastodonMetaAttr(doc, `meta[property="og:url"]`); mastodonStatusURLRe.MatchString(ogURL) {
 		return true
 	}
 	return false
@@ -83,16 +83,16 @@ func (e *MastodonExtractor) Extract() *ExtractorResult {
 // extractAuthor resolves the post author from structured data or DOM.
 // Priority: og:article:author → meta author → DOM display name → og:site_name.
 func (e *MastodonExtractor) extractAuthor(doc *goquery.Document) string {
-	if a := mastodonMetaAttr(doc, `meta[property="og:article:author"]`, "content"); a != "" {
+	if a := mastodonMetaAttr(doc, `meta[property="og:article:author"]`); a != "" {
 		return a
 	}
-	if a := mastodonMetaAttr(doc, `meta[name="author"]`, "content"); a != "" {
+	if a := mastodonMetaAttr(doc, `meta[name="author"]`); a != "" {
 		return a
 	}
 	if a := strings.TrimSpace(doc.Find(".detailed-status__display-name strong, .account__display-name strong").First().Text()); a != "" {
 		return a
 	}
-	if a := mastodonMetaAttr(doc, `meta[property="og:site_name"]`, "content"); a != "" {
+	if a := mastodonMetaAttr(doc, `meta[property="og:site_name"]`); a != "" {
 		return a
 	}
 	return ""
@@ -103,7 +103,7 @@ func (e *MastodonExtractor) extractPublished(doc *goquery.Document) string {
 	if t, exists := doc.Find(".detailed-status__datetime[datetime], .status__relative-time[datetime]").First().Attr("datetime"); exists && t != "" {
 		return t
 	}
-	if t := mastodonMetaAttr(doc, `meta[property="article:published_time"]`, "content"); t != "" {
+	if t := mastodonMetaAttr(doc, `meta[property="article:published_time"]`); t != "" {
 		return t
 	}
 	return ""
@@ -111,7 +111,7 @@ func (e *MastodonExtractor) extractPublished(doc *goquery.Document) string {
 
 // buildTitle constructs a human-readable title for the status.
 func (e *MastodonExtractor) buildTitle(doc *goquery.Document, author, published string) string {
-	if t := mastodonMetaAttr(doc, `meta[property="og:title"]`, "content"); t != "" {
+	if t := mastodonMetaAttr(doc, `meta[property="og:title"]`); t != "" {
 		return t
 	}
 	// Compose from author + formatted date when og:title is absent.
@@ -141,7 +141,7 @@ func (e *MastodonExtractor) extractPostHTML(doc *goquery.Document) string {
 		content = doc.Find(".status__content").First()
 	}
 	if content.Length() == 0 {
-		if d := mastodonMetaAttr(doc, `meta[property="og:description"]`, "content"); d != "" {
+		if d := mastodonMetaAttr(doc, `meta[property="og:description"]`); d != "" {
 			return fmt.Sprintf("<p>%s</p>", html.EscapeString(d))
 		}
 		return ""
@@ -202,10 +202,10 @@ func (e *MastodonExtractor) extractReplies(doc *goquery.Document) string {
 	return renderCommentThread(comments)
 }
 
-// mastodonMetaAttr returns a named attribute from the first element matching
+// mastodonMetaAttr returns the content attribute of the first element matching
 // selector, or "" when absent. Scoped to mastodon to avoid collision with any
 // future package-level helper of the same name.
-func mastodonMetaAttr(doc *goquery.Document, selector, attr string) string {
-	v, _ := doc.Find(selector).First().Attr(attr)
+func mastodonMetaAttr(doc *goquery.Document, selector string) string {
+	v, _ := doc.Find(selector).First().Attr("content")
 	return strings.TrimSpace(v)
 }
