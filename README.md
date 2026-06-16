@@ -21,6 +21,21 @@ Download a pre-built binary from the [releases page](https://github.com/dotcomma
 go install github.com/dotcommander/defuddle/cmd/defuddle@latest
 ```
 
+### JavaScript rendering (opt-in)
+
+For JS-heavy / single-page sites, pass `--render` (alias `--js`) to render the page
+in a headless browser before extraction:
+
+```bash
+defuddle parse --render https://example.com/spa-article
+```
+
+This requires an existing Chrome or Chromium install (chromedp drives it over CDP —
+no browser is bundled). If Chrome is not found, point at one with `--chrome-path`,
+or install Chrome/Chromium. Tune with `--render-wait load|networkidle`,
+`--render-timeout`, and `--render-user-agent`. Without `--render`, behavior is
+unchanged (static HTTP fetch, no JS execution).
+
 ### Library
 
 ```bash

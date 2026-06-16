@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/dotcommander/defuddle"
+	"github.com/dotcommander/defuddle/cmd/defuddle/internal/render"
 	"github.com/spf13/cobra"
 )
 
@@ -51,6 +52,11 @@ type ParseOptions struct {
 	RemoveImages     bool
 	ContentSelector  string
 	NoClutterRemoval bool
+	Render           bool
+	RenderWait       string
+	RenderUA         string
+	ChromePath       string
+	RenderTimeout    time.Duration
 }
 
 // registerParseCmd attaches parse-mode flags. Called from init() in main.go.
@@ -68,6 +74,12 @@ func registerParseCmd() {
 	parseCmd.Flags().Bool("remove-images", false, "Remove images from extracted content")
 	parseCmd.Flags().String("content-selector", "", "CSS selector for content root (bypasses auto-detection)")
 	parseCmd.Flags().Bool("no-clutter-removal", false, "Disable all clutter removal heuristics")
+	parseCmd.Flags().Bool("render", false, "Render JavaScript via headless Chrome before extracting (requires Chrome/Chromium)")
+	parseCmd.Flags().Bool("js", false, "Alias for --render")
+	parseCmd.Flags().String("render-wait", "load", "Render wait strategy: 'load' or 'networkidle'")
+	parseCmd.Flags().String("render-user-agent", "", "User-agent for the render stage (default: Chrome default)")
+	parseCmd.Flags().String("chrome-path", "", "Path to a Chrome/Chromium executable (default: auto-detect)")
+	parseCmd.Flags().Duration("render-timeout", 30*time.Second, "Maximum time to spend rendering the page")
 }
 
 func parseContent(cmd *cobra.Command, args []string) error {
@@ -98,10 +110,19 @@ func parseContent(cmd *cobra.Command, args []string) error {
 	removeImages, _ := cmd.Flags().GetBool("remove-images")
 	contentSelector, _ := cmd.Flags().GetString("content-selector")
 	noClutterRemoval, _ := cmd.Flags().GetBool("no-clutter-removal")
+	renderFlag, _ := cmd.Flags().GetBool("render")
+	jsAlias, _ := cmd.Flags().GetBool("js")
+	renderWait, _ := cmd.Flags().GetString("render-wait")
+	renderUA, _ := cmd.Flags().GetString("render-user-agent")
+	chromePath, _ := cmd.Flags().GetString("chrome-path")
+	renderTimeout, _ := cmd.Flags().GetDuration("render-timeout")
 
 	// Handle markdown alias
 	if mdAlias {
 		markdown = true
+	}
+	if jsAlias {
+		renderFlag = true
 	}
 
 	opts := &ParseOptions{
@@ -118,6 +139,11 @@ func parseContent(cmd *cobra.Command, args []string) error {
 		RemoveImages:     removeImages,
 		ContentSelector:  contentSelector,
 		NoClutterRemoval: noClutterRemoval,
+		Render:           renderFlag,
+		RenderWait:       renderWait,
+		RenderUA:         renderUA,
+		ChromePath:       chromePath,
+		RenderTimeout:    renderTimeout,
 	}
 
 	if debug {
@@ -198,6 +224,9 @@ func loadResult(ctx context.Context, opts *ParseOptions, defuddleOpts *defuddle.
 		}
 		return d.Parse(ctx)
 	case strings.HasPrefix(opts.Source, "http://") || strings.HasPrefix(opts.Source, "https://"):
+		if opts.Render {
+			return renderAndParse(ctx, opts, defuddleOpts)
+		}
 		return defuddle.ParseFromURL(ctx, opts.Source, defuddleOpts)
 	default:
 		htmlContent, err := readFile(opts.Source)
@@ -210,6 +239,27 @@ func loadResult(ctx context.Context, opts *ParseOptions, defuddleOpts *defuddle.
 		}
 		return d.Parse(ctx)
 	}
+}
+
+// renderAndParse drives the chromedp render stage, then feeds the rendered
+// HTML into the UNCHANGED library entrypoint defuddle.ParseFromString. The
+// render deadline comes from opts.RenderTimeout (its own bounded context),
+// independent of the fetch --timeout.
+func renderAndParse(ctx context.Context, opts *ParseOptions, defuddleOpts *defuddle.Options) (*defuddle.Result, error) {
+	renderCtx, cancel := buildContext(opts.RenderTimeout)
+	defer cancel()
+
+	cfg := render.Config{
+		ChromePath:   opts.ChromePath,
+		UserAgent:    opts.RenderUA,
+		Wait:         render.WaitStrategy(opts.RenderWait),
+		MaxHTMLBytes: maxInputSize,
+	}
+	html, err := render.RenderHTML(renderCtx, opts.Source, cfg)
+	if err != nil {
+		return nil, err
+	}
+	return defuddle.ParseFromString(ctx, html, defuddleOpts)
 }
 
 // renderOutput formats result according to opts, returning the string to write.

@@ -123,6 +123,7 @@ tasks:
       - echo "Checking go.mod and go.sum are tidy..."
       - go mod tidy
       - git diff --exit-code -- go.mod go.sum
+      - cd cmd/defuddle && go mod tidy && git diff --exit-code -- go.mod go.sum
 
   fmt:
     desc: Format Go code

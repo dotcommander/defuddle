@@ -13,7 +13,8 @@ before:
 
 builds:
   - id: defuddle
-    main: ./cmd/defuddle
+    dir: ./cmd/defuddle
+    main: .
     binary: defuddle
     env:
       - CGO_ENABLED=0
