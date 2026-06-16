@@ -298,15 +298,8 @@ func (p *MathProcessor) getMathMLFromElement(s *goquery.Selection) *MathData {
 	if mathmlStr, exists := s.Attr("data-mathml"); exists && mathmlStr != "" {
 		tempDoc, err := goquery.NewDocumentFromReader(strings.NewReader(mathmlStr))
 		if err == nil {
-			mathEl := tempDoc.Find("math").First()
-			if mathEl.Length() > 0 {
-				outerHTML, _ := goquery.OuterHtml(mathEl)
-				display := mathEl.AttrOr("display", "inline")
-				return &MathData{
-					MathML:  outerHTML,
-					Type:    "mathjax",
-					Display: display,
-				}
+			if md := mathMLData(tempDoc.Find("math").First(), "mathjax"); md != nil {
+				return md
 			}
 		}
 	}
@@ -314,43 +307,53 @@ func (p *MathProcessor) getMathMLFromElement(s *goquery.Selection) *MathData {
 	// 3. MathJax v3: assistive MathML (.MJX_Assistive_MathML, mjx-assistive-mml)
 	assistive := s.Find(".MJX_Assistive_MathML, mjx-assistive-mml").First()
 	if assistive.Length() > 0 {
-		mathEl := assistive.Find("math").First()
-		if mathEl.Length() > 0 {
-			outerHTML, _ := goquery.OuterHtml(mathEl)
-			display := mathEl.AttrOr("display", "inline")
-			return &MathData{
-				MathML:  outerHTML,
-				Type:    "mathjax",
-				Display: display,
-			}
+		if md := mathMLData(assistive.Find("math").First(), "mathjax"); md != nil {
+			return md
 		}
 	}
 
 	// 4. Check for KaTeX
 	if s.HasClass("katex") {
-		annotation := s.Find("annotation[encoding=\"application/x-tex\"]").First()
-		if annotation.Length() > 0 {
-			latex := strings.TrimSpace(annotation.Text())
-			return &MathData{
-				LaTeX: latex,
-				Type:  "katex",
-			}
+		if md := laTeXData(s.Find("annotation[encoding=\"application/x-tex\"]").First(), "katex"); md != nil {
+			return md
 		}
 	}
 
 	// 5. Check for MathJax script
 	if s.HasClass("MathJax") {
-		script := s.Find("script[type^=\"math/\"]").First()
-		if script.Length() > 0 {
-			latex := strings.TrimSpace(script.Text())
-			return &MathData{
-				LaTeX: latex,
-				Type:  "mathjax",
-			}
+		if md := laTeXData(s.Find("script[type^=\"math/\"]").First(), "mathjax"); md != nil {
+			return md
 		}
 	}
 
 	return nil
+}
+
+// mathMLData builds a MathML MathData from mathEl (a <math> selection), or nil
+// when mathEl is empty. Shared by the MathJax v2/v3 detection strategies.
+func mathMLData(mathEl *goquery.Selection, mathType string) *MathData {
+	if mathEl.Length() == 0 {
+		return nil
+	}
+	outerHTML, _ := goquery.OuterHtml(mathEl)
+	display := mathEl.AttrOr("display", "inline")
+	return &MathData{
+		MathML:  outerHTML,
+		Type:    mathType,
+		Display: display,
+	}
+}
+
+// laTeXData builds a LaTeX MathData from sel's trimmed text, or nil when sel is
+// empty. Shared by the KaTeX and MathJax-script detection strategies.
+func laTeXData(sel *goquery.Selection, mathType string) *MathData {
+	if sel.Length() == 0 {
+		return nil
+	}
+	return &MathData{
+		LaTeX: strings.TrimSpace(sel.Text()),
+		Type:  mathType,
+	}
 }
 
 // getLaTeXFromElement extracts LaTeX content from element
