@@ -602,16 +602,7 @@ func renderListItem(ctx converter.Context, w converter.Writer, n *html.Node) con
 			startNum := 0
 			if _, err := fmt.Sscanf(start, "%d", &startNum); err == nil {
 				// Find this li's index among siblings
-				idx := 0
-				for c := n.Parent.FirstChild; c != nil; c = c.NextSibling {
-					if c.Type == html.ElementNode && c.Data == "li" {
-						idx++
-						if c == n {
-							break
-						}
-					}
-				}
-				customNumber = startNum + idx - 1
+				customNumber = startNum + liIndexInParent(n) - 1
 				hasCustomStart = true
 			}
 		}
@@ -633,15 +624,7 @@ func renderListItem(ctx converter.Context, w converter.Writer, n *html.Node) con
 		num := customNumber
 		if !hasCustomStart {
 			// Count position for regular OL
-			num = 0
-			for c := n.Parent.FirstChild; c != nil; c = c.NextSibling {
-				if c.Type == html.ElementNode && c.Data == "li" {
-					num++
-					if c == n {
-						break
-					}
-				}
-			}
+			num = liIndexInParent(n)
 		}
 		prefix = fmt.Sprintf("%d. ", num)
 	} else {
@@ -650,6 +633,21 @@ func renderListItem(ctx converter.Context, w converter.Writer, n *html.Node) con
 
 	w.WriteString(prefix + checkboxMarker + content + "\n")
 	return converter.RenderSuccess
+}
+
+// liIndexInParent returns the 1-based position of li node n among its parent's
+// li children. Callers guard that n.Parent is non-nil.
+func liIndexInParent(n *html.Node) int {
+	idx := 0
+	for c := n.Parent.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type == html.ElementNode && c.Data == "li" {
+			idx++
+			if c == n {
+				break
+			}
+		}
+	}
+	return idx
 }
 
 // renderOrderedList dispatches to ArXiv enumerate or footnotes list renderers.
