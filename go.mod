@@ -3,9 +3,9 @@ module github.com/dotcommander/defuddle
 go 1.26.2
 
 require (
-	github.com/JohannesKaufmann/html-to-markdown/v2 v2.5.1
+	github.com/JohannesKaufmann/html-to-markdown/v2 v2.5.2
 	github.com/PuerkitoBio/goquery v1.12.0
-	github.com/andybalholm/cascadia v1.3.3
+	github.com/andybalholm/cascadia v1.3.4
 	github.com/kaptinlin/requests v0.6.0
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/net v0.55.0
@@ -13,7 +13,7 @@ require (
 )
 
 require (
-	github.com/JohannesKaufmann/dom v0.2.0 // indirect
+	github.com/JohannesKaufmann/dom v0.3.1 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/go-json-experiment/json v0.0.0-20260505212615-e40f80bf6836 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
