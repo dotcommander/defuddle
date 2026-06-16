@@ -4,7 +4,7 @@ go 1.26.2
 
 require (
 	github.com/chromedp/chromedp v0.13.6
-	github.com/dotcommander/defuddle v0.7.3
+	github.com/dotcommander/defuddle v0.8.0
 	github.com/kaptinlin/requests v0.6.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
@@ -35,5 +35,3 @@ require (
 	golang.org/x/text v0.37.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace github.com/dotcommander/defuddle => ../..
