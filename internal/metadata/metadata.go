@@ -859,96 +859,6 @@ func getSchemaProperty(schemaOrgData any, property string) string {
 		return ""
 	}
 
-	var searchSchema func(data any, props []string, isExactMatch bool) []string
-	searchSchema = func(data any, props []string, isExactMatch bool) []string {
-		// Handle string data
-		if str, ok := data.(string); ok {
-			if len(props) == 0 {
-				return []string{str}
-			}
-			return []string{}
-		}
-
-		// Handle non-object data
-		if data == nil {
-			return []string{}
-		}
-
-		// Handle arrays
-		if arr, ok := data.([]any); ok {
-			if len(props) > 0 {
-				currentProp := props[0]
-				// Handle array index notation like [0]
-				if arrayIndexRe.MatchString(currentProp) {
-					indexStr := currentProp[1 : len(currentProp)-1]
-					if index, err := strconv.Atoi(indexStr); err == nil && index < len(arr) {
-						return searchSchema(arr[index], props[1:], isExactMatch)
-					}
-					return []string{}
-				}
-			}
-
-			// If no props left and all items are strings/numbers, return them
-			if len(props) == 0 {
-				var results []string
-				for _, item := range arr {
-					if str, ok := item.(string); ok {
-						results = append(results, str)
-					} else if num, ok := item.(float64); ok {
-						results = append(results, strconv.FormatFloat(num, 'f', -1, 64))
-					}
-				}
-				if len(results) == len(arr) {
-					return results
-				}
-			}
-
-			// Search in all array items
-			var allResults []string
-			for _, item := range arr {
-				results := searchSchema(item, props, isExactMatch)
-				allResults = append(allResults, results...)
-			}
-			return allResults
-		}
-
-		// Handle maps/objects
-		if obj, ok := data.(map[string]any); ok {
-			if len(props) == 0 {
-				if str, ok := obj["name"].(string); ok {
-					return []string{str}
-				}
-				if str, ok := data.(string); ok {
-					return []string{str}
-				}
-				return []string{}
-			}
-
-			currentProp := props[0]
-			remainingProps := props[1:]
-
-			// Check if property exists
-			if value, exists := obj[currentProp]; exists {
-				return searchSchema(value, remainingProps, true)
-			}
-
-			// If not exact match, search nested objects and arrays
-			if !isExactMatch {
-				var nestedResults []string
-				for _, value := range obj {
-					switch value.(type) {
-					case map[string]any, []any:
-						results := searchSchema(value, props, false)
-						nestedResults = append(nestedResults, results...)
-					}
-				}
-				return nestedResults
-			}
-		}
-
-		return []string{}
-	}
-
 	props := strings.Split(property, ".")
 	results := searchSchema(schemaOrgData, props, true)
 	if len(results) == 0 {
@@ -963,6 +873,98 @@ func getSchemaProperty(schemaOrgData any, property string) string {
 	}
 
 	return strings.Join(filteredResults, ", ")
+}
+
+// searchSchema recursively walks schema.org data (strings, arrays, objects)
+// following a dot-separated property path. When isExactMatch is false it also
+// descends into nested objects and arrays to find the property anywhere.
+func searchSchema(data any, props []string, isExactMatch bool) []string {
+	// Handle string data
+	if str, ok := data.(string); ok {
+		if len(props) == 0 {
+			return []string{str}
+		}
+		return []string{}
+	}
+
+	// Handle non-object data
+	if data == nil {
+		return []string{}
+	}
+
+	// Handle arrays
+	if arr, ok := data.([]any); ok {
+		if len(props) > 0 {
+			currentProp := props[0]
+			// Handle array index notation like [0]
+			if arrayIndexRe.MatchString(currentProp) {
+				indexStr := currentProp[1 : len(currentProp)-1]
+				if index, err := strconv.Atoi(indexStr); err == nil && index < len(arr) {
+					return searchSchema(arr[index], props[1:], isExactMatch)
+				}
+				return []string{}
+			}
+		}
+
+		// If no props left and all items are strings/numbers, return them
+		if len(props) == 0 {
+			var results []string
+			for _, item := range arr {
+				if str, ok := item.(string); ok {
+					results = append(results, str)
+				} else if num, ok := item.(float64); ok {
+					results = append(results, strconv.FormatFloat(num, 'f', -1, 64))
+				}
+			}
+			if len(results) == len(arr) {
+				return results
+			}
+		}
+
+		// Search in all array items
+		var allResults []string
+		for _, item := range arr {
+			results := searchSchema(item, props, isExactMatch)
+			allResults = append(allResults, results...)
+		}
+		return allResults
+	}
+
+	// Handle maps/objects
+	if obj, ok := data.(map[string]any); ok {
+		if len(props) == 0 {
+			if str, ok := obj["name"].(string); ok {
+				return []string{str}
+			}
+			if str, ok := data.(string); ok {
+				return []string{str}
+			}
+			return []string{}
+		}
+
+		currentProp := props[0]
+		remainingProps := props[1:]
+
+		// Check if property exists
+		if value, exists := obj[currentProp]; exists {
+			return searchSchema(value, remainingProps, true)
+		}
+
+		// If not exact match, search nested objects and arrays
+		if !isExactMatch {
+			var nestedResults []string
+			for _, value := range obj {
+				switch value.(type) {
+				case map[string]any, []any:
+					results := searchSchema(value, props, false)
+					nestedResults = append(nestedResults, results...)
+				}
+			}
+			return nestedResults
+		}
+	}
+
+	return []string{}
 }
 
 // removeDuplicates removes duplicate strings from slice while preserving order
