@@ -1,8 +1,8 @@
 // Package main: property accessors for `defuddle parse --property`.
 //
-// propertyExtractors is the canonical map of valid --property values to
-// Result accessors. knownProperties exposes the sorted key list for error
-// messages; getProperty performs case-insensitive lookup.
+// propertyExtractors is the canonical map of valid --property values to their
+// display name and Result accessor. knownProperties exposes the sorted display
+// list for error messages; getProperty performs case-insensitive lookup.
 package main
 
 import (
@@ -14,21 +14,29 @@ import (
 	"github.com/dotcommander/defuddle"
 )
 
-// propertyExtractors maps lowercase property names to their Result accessor.
-// The keys also serve as the canonical list of valid --property values.
-var propertyExtractors = map[string]func(*defuddle.Result) string{
-	"content":     func(r *defuddle.Result) string { return r.Content },
-	"title":       func(r *defuddle.Result) string { return r.Title },
-	"description": func(r *defuddle.Result) string { return r.Description },
-	"domain":      func(r *defuddle.Result) string { return r.Domain },
-	"favicon":     func(r *defuddle.Result) string { return r.Favicon },
-	"image":       func(r *defuddle.Result) string { return r.Image },
-	"author":      func(r *defuddle.Result) string { return r.Author },
-	"site":        func(r *defuddle.Result) string { return r.Site },
-	"published":   func(r *defuddle.Result) string { return r.Published },
-	"wordcount":   func(r *defuddle.Result) string { return strconv.Itoa(r.WordCount) },
-	"parsetime":   func(r *defuddle.Result) string { return strconv.FormatInt(r.ParseTime, 10) },
-	"metatags": func(r *defuddle.Result) string {
+// propertyAccessor pairs a property's display name (for error messages) with
+// its Result accessor. One entry per --property value — the single source of
+// truth for the valid property set.
+type propertyAccessor struct {
+	display string
+	get     func(*defuddle.Result) string
+}
+
+// propertyExtractors maps lowercase property names to their accessor.
+// The keys are the canonical list of valid --property values.
+var propertyExtractors = map[string]propertyAccessor{
+	"content":     {"content", func(r *defuddle.Result) string { return r.Content }},
+	"title":       {"title", func(r *defuddle.Result) string { return r.Title }},
+	"description": {"description", func(r *defuddle.Result) string { return r.Description }},
+	"domain":      {"domain", func(r *defuddle.Result) string { return r.Domain }},
+	"favicon":     {"favicon", func(r *defuddle.Result) string { return r.Favicon }},
+	"image":       {"image", func(r *defuddle.Result) string { return r.Image }},
+	"author":      {"author", func(r *defuddle.Result) string { return r.Author }},
+	"site":        {"site", func(r *defuddle.Result) string { return r.Site }},
+	"published":   {"published", func(r *defuddle.Result) string { return r.Published }},
+	"wordcount":   {"wordCount", func(r *defuddle.Result) string { return strconv.Itoa(r.WordCount) }},
+	"parsetime":   {"parseTime", func(r *defuddle.Result) string { return strconv.FormatInt(r.ParseTime, 10) }},
+	"metatags": {"metaTags", func(r *defuddle.Result) string {
 		if r.MetaTags == nil {
 			return ""
 		}
@@ -37,8 +45,8 @@ var propertyExtractors = map[string]func(*defuddle.Result) string{
 			return ""
 		}
 		return string(b)
-	},
-	"schemaorgdata": func(r *defuddle.Result) string {
+	}},
+	"schemaorgdata": {"schemaOrgData", func(r *defuddle.Result) string {
 		if r.SchemaOrgData == nil {
 			return "null"
 		}
@@ -47,44 +55,26 @@ var propertyExtractors = map[string]func(*defuddle.Result) string{
 			return ""
 		}
 		return string(b)
-	},
-	"extractortype": func(r *defuddle.Result) string {
+	}},
+	"extractortype": {"extractorType", func(r *defuddle.Result) string {
 		if r.ExtractorType != nil {
 			return *r.ExtractorType
 		}
 		return ""
-	},
-	"contentmarkdown": func(r *defuddle.Result) string {
+	}},
+	"contentmarkdown": {"contentMarkdown", func(r *defuddle.Result) string {
 		if r.ContentMarkdown != nil {
 			return *r.ContentMarkdown
 		}
 		return ""
-	},
-}
-
-var propertyDisplayNames = map[string]string{
-	"content":         "content",
-	"title":           "title",
-	"description":     "description",
-	"domain":          "domain",
-	"favicon":         "favicon",
-	"image":           "image",
-	"author":          "author",
-	"site":            "site",
-	"published":       "published",
-	"wordcount":       "wordCount",
-	"parsetime":       "parseTime",
-	"metatags":        "metaTags",
-	"schemaorgdata":   "schemaOrgData",
-	"extractortype":   "extractorType",
-	"contentmarkdown": "contentMarkdown",
+	}},
 }
 
 // knownProperties is the sorted display list for error messages.
 var knownProperties = func() []string {
 	keys := make([]string, 0, len(propertyExtractors))
-	for k := range propertyExtractors {
-		keys = append(keys, propertyDisplayNames[k])
+	for _, p := range propertyExtractors {
+		keys = append(keys, p.display)
 	}
 	slices.Sort(keys)
 	return keys
@@ -92,9 +82,9 @@ var knownProperties = func() []string {
 
 func getProperty(result *defuddle.Result, property string) (string, bool) {
 	// Convert to lowercase for case-insensitive matching (matching TypeScript behavior)
-	fn, ok := propertyExtractors[strings.ToLower(property)]
+	p, ok := propertyExtractors[strings.ToLower(property)]
 	if !ok {
 		return "", false
 	}
-	return fn(result), true
+	return p.get(result), true
 }
