@@ -1,7 +1,6 @@
 package extractors
 
 import (
-	"fmt"
 	"log/slog"
 	"regexp"
 	"strings"
@@ -310,13 +309,7 @@ func (c *ClaudeExtractor) GetMetadata() ConversationMetadata {
 		messages = c.ExtractMessages()
 	}
 
-	return ConversationMetadata{
-		Title:        title,
-		Site:         "Claude",
-		URL:          c.url,
-		MessageCount: len(messages),
-		Description:  fmt.Sprintf("Claude conversation with %d messages", len(messages)),
-	}
+	return conversationMetadata("Claude", title, c.url, len(messages))
 }
 
 // getTitle extracts the conversation title

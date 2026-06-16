@@ -289,13 +289,7 @@ func (g *GrokExtractor) GetMetadata() ConversationMetadata {
 		messageCount = g.messageBubbles.Length()
 	}
 
-	return ConversationMetadata{
-		Title:        title,
-		Site:         "Grok",
-		URL:          g.url,
-		MessageCount: messageCount,
-		Description:  fmt.Sprintf("Grok conversation with %d messages", messageCount),
-	}
+	return conversationMetadata("Grok", title, g.url, messageCount)
 }
 
 // getTitle extracts the conversation title

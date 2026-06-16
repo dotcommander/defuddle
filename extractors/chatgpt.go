@@ -506,13 +506,7 @@ func (c *ChatGPTExtractor) GetMetadata() ConversationMetadata {
 		messages = c.ExtractMessages()
 	}
 
-	return ConversationMetadata{
-		Title:        title,
-		Site:         "ChatGPT",
-		URL:          c.url,
-		MessageCount: len(messages),
-		Description:  fmt.Sprintf("ChatGPT conversation with %d messages", len(messages)),
-	}
+	return conversationMetadata("ChatGPT", title, c.url, len(messages))
 }
 
 // getTitle extracts the conversation title

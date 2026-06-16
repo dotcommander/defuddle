@@ -301,3 +301,15 @@ func (c *ConversationExtractorBase) ExtractWithDefuddle(extractor ConversationEx
 		},
 	}
 }
+
+// conversationMetadata builds ConversationMetadata for a chat extractor, with the
+// shared "<site> conversation with N messages" description template.
+func conversationMetadata(site, title, url string, messageCount int) ConversationMetadata {
+	return ConversationMetadata{
+		Title:        title,
+		Site:         site,
+		URL:          url,
+		MessageCount: messageCount,
+		Description:  fmt.Sprintf("%s conversation with %d messages", site, messageCount),
+	}
+}

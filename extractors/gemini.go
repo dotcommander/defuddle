@@ -443,13 +443,7 @@ func (g *GeminiExtractor) GetMetadata() ConversationMetadata {
 		messageCount = len(g.ExtractMessages())
 	}
 
-	return ConversationMetadata{
-		Title:        title,
-		Site:         "Gemini",
-		URL:          g.url,
-		MessageCount: messageCount,
-		Description:  fmt.Sprintf("Gemini conversation with %d messages", messageCount),
-	}
+	return conversationMetadata("Gemini", title, g.url, messageCount)
 }
 
 // getTitle extracts the conversation title
