@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
-	"github.com/dotcommander/defuddle/internal/constants"
 )
 
 var (
@@ -68,14 +67,7 @@ func standardizeHeadings(element *goquery.Selection, title string, _ *goquery.Do
 		newH2.WriteString("<h2")
 
 		// Copy allowed attributes
-		if h1.Length() > 0 {
-			node := h1.Get(0)
-			for _, attr := range node.Attr {
-				if constants.IsAllowedAttribute(attr.Key) {
-					newH2.WriteString(` ` + attr.Key + `="` + attr.Val + `"`)
-				}
-			}
-		}
+		writeAllowedAttributes(&newH2, h1)
 
 		newH2.WriteString(">" + html + "</h2>")
 		h1.ReplaceWithHtml(newH2.String())

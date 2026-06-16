@@ -181,14 +181,7 @@ func standardizeElements(element *goquery.Selection, doc *goquery.Document, debu
 				newElementHTML.WriteString("<" + rule.Element)
 
 				// Copy allowed attributes
-				if el.Length() > 0 {
-					node := el.Get(0)
-					for _, attr := range node.Attr {
-						if constants.IsAllowedAttribute(attr.Key) {
-							newElementHTML.WriteString(` ` + attr.Key + `="` + attr.Val + `"`)
-						}
-					}
-				}
+				writeAllowedAttributes(&newElementHTML, el)
 
 				newElementHTML.WriteString(">" + html + "</" + rule.Element + ">")
 				el.ReplaceWithHtml(newElementHTML.String())
@@ -222,6 +215,21 @@ func standardizeElements(element *goquery.Selection, doc *goquery.Document, debu
 
 	if debug {
 		slog.Debug("Converted embedded elements", "count", processedCount)
+	}
+}
+
+// writeAllowedAttributes appends ` key="val"` to b for each allow-listed attribute
+// on the first node of sel. Shared by element and heading standardization, which both
+// rebuild a tag and must copy only allow-listed attributes.
+func writeAllowedAttributes(b *strings.Builder, sel *goquery.Selection) {
+	if sel.Length() == 0 {
+		return
+	}
+	node := sel.Get(0)
+	for _, attr := range node.Attr {
+		if constants.IsAllowedAttribute(attr.Key) {
+			b.WriteString(` ` + attr.Key + `="` + attr.Val + `"`)
+		}
 	}
 }
 
