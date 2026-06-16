@@ -278,195 +278,197 @@ func standardizeSpaces(element *goquery.Selection) {
 //			processingTime: `${(endTime - startTime).toFixed(2)}ms`
 //		});
 //	}
+//
+// removeEmptyTextNodes is the first pass: remove empty text nodes and clean up
+// text content. removedCount accumulates characters/nodes removed (diagnostic only).
+func removeEmptyTextNodes(node *html.Node, removedCount *int) {
+	// Skip if inside pre or code
+	if node.Type == html.ElementNode {
+		tag := strings.ToLower(node.Data)
+		if tag == "pre" || tag == "code" {
+			return
+		}
+	}
+
+	// Process children first (depth-first)
+	var children []*html.Node
+	for child := node.FirstChild; child != nil; child = child.NextSibling {
+		children = append(children, child)
+	}
+	for _, child := range children {
+		removeEmptyTextNodes(child, removedCount)
+	}
+
+	// Then handle this node
+	if node.Type == html.TextNode {
+		text := node.Data
+		// If it's completely empty or just special characters/whitespace, remove it
+		if text == "" || emptyTextRe.MatchString(text) {
+			if node.Parent != nil {
+				node.Parent.RemoveChild(node)
+				*removedCount++
+			}
+		} else {
+			// Clean up the text content while preserving important spaces
+			newText := text
+
+			// More than 2 newlines -> 2 newlines
+			newText = threeNewlinesRe.ReplaceAllString(newText, "\n\n")
+
+			// Remove leading newlines/tabs (preserve spaces)
+			newText = leadingNewlinesRe.ReplaceAllString(newText, "")
+
+			// Remove trailing newlines/tabs (preserve spaces)
+			newText = trailingNewlinesRe.ReplaceAllString(newText, "")
+
+			// Remove spaces around newlines
+			newText = spacesAroundNlRe.ReplaceAllString(newText, "\n")
+
+			// 3+ spaces -> 1 space
+			newText = threeSpacesRe.ReplaceAllString(newText, " ")
+
+			// Multiple spaces between elements -> single space
+			newText = onlySpacesRe.ReplaceAllString(newText, " ")
+
+			// Remove spaces before punctuation
+			newText = spaceBeforePunctRe.ReplaceAllString(newText, "$1")
+
+			// Clean up zero-width characters and multiple non-breaking spaces
+			newText = zeroWidthCharsRe.ReplaceAllString(newText, "")
+			newText = multiNbspRe.ReplaceAllString(newText, "\xA0")
+
+			if newText != text {
+				node.Data = newText
+				*removedCount += len(text) - len(newText)
+			}
+		}
+	}
+}
+
+// cleanupEmptyElements is the second pass: clean up empty elements and normalize
+// spacing. removedCount accumulates removals (diagnostic only).
+func cleanupEmptyElements(node *html.Node, blockElements []string, removedCount *int) {
+	if node.Type != html.ElementNode {
+		return
+	}
+
+	// Skip pre and code elements
+	tag := strings.ToLower(node.Data)
+	if tag == "pre" || tag == "code" {
+		return
+	}
+
+	// Process children first (depth-first)
+	var children []*html.Node
+	for child := node.FirstChild; child != nil; child = child.NextSibling {
+		if child.Type == html.ElementNode {
+			children = append(children, child)
+		}
+	}
+	for _, child := range children {
+		cleanupEmptyElements(child, blockElements, removedCount)
+	}
+
+	// Determine if this is a block element (simplified check)
+	isBlockElement := slices.Contains(blockElements, tag)
+
+	// Additional block elements
+	if !isBlockElement {
+		if slices.Contains(additionalBlockElements, tag) {
+			isBlockElement = true
+		}
+	}
+
+	// Only remove empty text nodes at the start and end if they contain just newlines/tabs
+	// For block elements, also remove spaces
+	var startPattern, endPattern *regexp.Regexp
+	if isBlockElement {
+		startPattern = blockStartSpaceRe
+		endPattern = blockStartSpaceRe
+	} else {
+		startPattern = inlineStartSpaceRe
+		endPattern = inlineStartSpaceRe
+	}
+
+	// Remove empty text nodes at start
+	for node.FirstChild != nil &&
+		node.FirstChild.Type == html.TextNode &&
+		startPattern.MatchString(node.FirstChild.Data) {
+		node.RemoveChild(node.FirstChild)
+		*removedCount++
+	}
+
+	// Remove empty text nodes at end
+	for node.LastChild != nil &&
+		node.LastChild.Type == html.TextNode &&
+		endPattern.MatchString(node.LastChild.Data) {
+		node.RemoveChild(node.LastChild)
+		*removedCount++
+	}
+
+	// Ensure there's a space between inline elements if needed
+	if !isBlockElement {
+		var nodeChildren []*html.Node
+		for child := node.FirstChild; child != nil; child = child.NextSibling {
+			nodeChildren = append(nodeChildren, child)
+		}
+
+		for i := range len(nodeChildren) - 1 {
+			current := nodeChildren[i]
+			next := nodeChildren[i+1]
+
+			// Only add space between elements or between element and text
+			if current.Type == html.ElementNode || next.Type == html.ElementNode {
+				// Get the text content (simplified)
+				var nextContent, currentContent string
+				if next.Type == html.TextNode {
+					nextContent = next.Data
+				}
+				if current.Type == html.TextNode {
+					currentContent = current.Data
+				}
+
+				// Don't add space if:
+				// 1. Next content starts with punctuation or closing parenthesis
+				// 2. Current content ends with punctuation or opening parenthesis
+				// 3. There's already a space
+				nextStartsWithPunctuation := startsWithPunctRe.MatchString(nextContent)
+				currentEndsWithPunctuation := endsWithPunctRe.MatchString(currentContent)
+
+				hasSpace := (current.Type == html.TextNode && strings.HasSuffix(current.Data, " ")) ||
+					(next.Type == html.TextNode && strings.HasPrefix(next.Data, " "))
+
+				// Only add space if none of the above conditions are true
+				if !nextStartsWithPunctuation &&
+					!currentEndsWithPunctuation &&
+					!hasSpace {
+					space := &html.Node{
+						Type: html.TextNode,
+						Data: " ",
+					}
+					node.InsertBefore(space, next)
+				}
+			}
+		}
+	}
+}
+
+// removeEmptyLines runs the two whitespace-normalization passes over element.
 func removeEmptyLines(element *goquery.Selection, _ *goquery.Document, debug bool) {
 	removedCount := 0
 	startTime := time.Now()
 	blockElements := constants.GetBlockElements()
 
-	// First pass: remove empty text nodes and clean up text content
-	var removeEmptyTextNodes func(node *html.Node)
-	removeEmptyTextNodes = func(node *html.Node) {
-		// Skip if inside pre or code
-		if node.Type == html.ElementNode {
-			tag := strings.ToLower(node.Data)
-			if tag == "pre" || tag == "code" {
-				return
-			}
-		}
-
-		// Process children first (depth-first)
-		var children []*html.Node
-		for child := node.FirstChild; child != nil; child = child.NextSibling {
-			children = append(children, child)
-		}
-		for _, child := range children {
-			removeEmptyTextNodes(child)
-		}
-
-		// Then handle this node
-		if node.Type == html.TextNode {
-			text := node.Data
-			// If it's completely empty or just special characters/whitespace, remove it
-			if text == "" || emptyTextRe.MatchString(text) {
-				if node.Parent != nil {
-					node.Parent.RemoveChild(node)
-					removedCount++
-				}
-			} else {
-				// Clean up the text content while preserving important spaces
-				newText := text
-
-				// More than 2 newlines -> 2 newlines
-				newText = threeNewlinesRe.ReplaceAllString(newText, "\n\n")
-
-				// Remove leading newlines/tabs (preserve spaces)
-				newText = leadingNewlinesRe.ReplaceAllString(newText, "")
-
-				// Remove trailing newlines/tabs (preserve spaces)
-				newText = trailingNewlinesRe.ReplaceAllString(newText, "")
-
-				// Remove spaces around newlines
-				newText = spacesAroundNlRe.ReplaceAllString(newText, "\n")
-
-				// 3+ spaces -> 1 space
-				newText = threeSpacesRe.ReplaceAllString(newText, " ")
-
-				// Multiple spaces between elements -> single space
-				newText = onlySpacesRe.ReplaceAllString(newText, " ")
-
-				// Remove spaces before punctuation
-				newText = spaceBeforePunctRe.ReplaceAllString(newText, "$1")
-
-				// Clean up zero-width characters and multiple non-breaking spaces
-				newText = zeroWidthCharsRe.ReplaceAllString(newText, "")
-				newText = multiNbspRe.ReplaceAllString(newText, "\xA0")
-
-				if newText != text {
-					node.Data = newText
-					removedCount += len(text) - len(newText)
-				}
-			}
-		}
-	}
-
-	// Second pass: clean up empty elements and normalize spacing
-	var cleanupEmptyElements func(node *html.Node)
-	cleanupEmptyElements = func(node *html.Node) {
-		if node.Type != html.ElementNode {
-			return
-		}
-
-		// Skip pre and code elements
-		tag := strings.ToLower(node.Data)
-		if tag == "pre" || tag == "code" {
-			return
-		}
-
-		// Process children first (depth-first)
-		var children []*html.Node
-		for child := node.FirstChild; child != nil; child = child.NextSibling {
-			if child.Type == html.ElementNode {
-				children = append(children, child)
-			}
-		}
-		for _, child := range children {
-			cleanupEmptyElements(child)
-		}
-
-		// Determine if this is a block element (simplified check)
-		isBlockElement := slices.Contains(blockElements, tag)
-
-		// Additional block elements
-		if !isBlockElement {
-			if slices.Contains(additionalBlockElements, tag) {
-				isBlockElement = true
-			}
-		}
-
-		// Only remove empty text nodes at the start and end if they contain just newlines/tabs
-		// For block elements, also remove spaces
-		var startPattern, endPattern *regexp.Regexp
-		if isBlockElement {
-			startPattern = blockStartSpaceRe
-			endPattern = blockStartSpaceRe
-		} else {
-			startPattern = inlineStartSpaceRe
-			endPattern = inlineStartSpaceRe
-		}
-
-		// Remove empty text nodes at start
-		for node.FirstChild != nil &&
-			node.FirstChild.Type == html.TextNode &&
-			startPattern.MatchString(node.FirstChild.Data) {
-			node.RemoveChild(node.FirstChild)
-			removedCount++
-		}
-
-		// Remove empty text nodes at end
-		for node.LastChild != nil &&
-			node.LastChild.Type == html.TextNode &&
-			endPattern.MatchString(node.LastChild.Data) {
-			node.RemoveChild(node.LastChild)
-			removedCount++
-		}
-
-		// Ensure there's a space between inline elements if needed
-		if !isBlockElement {
-			var nodeChildren []*html.Node
-			for child := node.FirstChild; child != nil; child = child.NextSibling {
-				nodeChildren = append(nodeChildren, child)
-			}
-
-			for i := range len(nodeChildren) - 1 {
-				current := nodeChildren[i]
-				next := nodeChildren[i+1]
-
-				// Only add space between elements or between element and text
-				if current.Type == html.ElementNode || next.Type == html.ElementNode {
-					// Get the text content (simplified)
-					var nextContent, currentContent string
-					if next.Type == html.TextNode {
-						nextContent = next.Data
-					}
-					if current.Type == html.TextNode {
-						currentContent = current.Data
-					}
-
-					// Don't add space if:
-					// 1. Next content starts with punctuation or closing parenthesis
-					// 2. Current content ends with punctuation or opening parenthesis
-					// 3. There's already a space
-					nextStartsWithPunctuation := startsWithPunctRe.MatchString(nextContent)
-					currentEndsWithPunctuation := endsWithPunctRe.MatchString(currentContent)
-
-					hasSpace := (current.Type == html.TextNode && strings.HasSuffix(current.Data, " ")) ||
-						(next.Type == html.TextNode && strings.HasPrefix(next.Data, " "))
-
-					// Only add space if none of the above conditions are true
-					if !nextStartsWithPunctuation &&
-						!currentEndsWithPunctuation &&
-						!hasSpace {
-						space := &html.Node{
-							Type: html.TextNode,
-							Data: " ",
-						}
-						node.InsertBefore(space, next)
-					}
-				}
-			}
-		}
-	}
-
 	// Run both passes
 	element.Each(func(_ int, sel *goquery.Selection) {
 		if sel.Length() > 0 {
-			removeEmptyTextNodes(sel.Get(0))
+			removeEmptyTextNodes(sel.Get(0), &removedCount)
 		}
 	})
 
 	element.Each(func(_ int, sel *goquery.Selection) {
 		if sel.Length() > 0 {
-			cleanupEmptyElements(sel.Get(0))
+			cleanupEmptyElements(sel.Get(0), blockElements, &removedCount)
 		}
 	})
 
