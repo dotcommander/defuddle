@@ -214,7 +214,18 @@ tasks:
           echo "VERSION is required. Usage: task tag VERSION=v1.0.0"
           exit 1
         fi
-      - echo "Creating tag {{.VERSION}}..."
+      # Phase 1: tag and publish the library module FIRST — the nested CLI
+      # module's go.mod requires it, so it must be on the remote before the
+      # CLI module can `go mod tidy` against it.
+      - echo "Tagging library {{.VERSION}}..."
       - git tag -a {{.VERSION}} -m "Release {{.VERSION}}"
       - git push origin {{.VERSION}}
-      - echo "Tag {{.VERSION}} created and pushed"
+      # Phase 2: point the nested CLI module at the just-published library
+      # version, then commit + tag + push the CLI module. (go.work keeps local
+      # dev building against the local library; the published module has no
+      # replace directive so `go install ...@latest` works.)
+      - echo "Releasing CLI module cmd/defuddle/{{.VERSION}}..."
+      - cd {{.CLI_FOLDER}} && go mod edit -require=github.com/dotcommander/defuddle@{{.VERSION}} && GOWORK=off go mod tidy
+      - 'git add {{.CLI_FOLDER}}/go.mod {{.CLI_FOLDER}}/go.sum && (git diff --cached --quiet || git commit -m "build(cli): require defuddle {{.VERSION}}")'
+      - git tag -a cmd/defuddle/{{.VERSION}} -m "Release cmd/defuddle {{.VERSION}}"
+      - git push origin HEAD cmd/defuddle/{{.VERSION}}
