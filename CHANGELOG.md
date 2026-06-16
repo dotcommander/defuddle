@@ -6,6 +6,23 @@ All notable changes to this project will be documented in this file. The format 
 
 ---
 
+## [v0.8.0] — 2026-06-16
+
+### Added
+
+- Opt-in JavaScript rendering for the CLI: `defuddle parse --render` (alias `--js`) renders a page in headless Chrome (via chromedp) before extraction — for JS-heavy / single-page sites that return little or no content from a static fetch. Tune with `--render-wait` (`load` or `networkidle`), `--render-timeout`, `--render-user-agent`, and `--chrome-path`. Requires an existing Chrome/Chromium install; no browser is bundled. Without `--render`, behavior is unchanged (static HTTP fetch, no JS execution).
+
+### Changed
+
+- The CLI is now a separate Go module (`github.com/dotcommander/defuddle/cmd/defuddle`) so the library module stays dependency-light — chromedp never enters the library's module graph. Install the CLI with `go install github.com/dotcommander/defuddle/cmd/defuddle@latest`; import the library with `go get github.com/dotcommander/defuddle`.
+
+### Documentation
+
+- Rewrote the CLI reference (`docs/cli.md`) to cover every command, flag, input/output mode, the JSON output shape, and exit codes.
+- Documented `--render` across the README and docs, and added a Documentation index to the README.
+
+---
+
 ## [v0.7.3] — 2026-06-10
 
 ### Fixed
