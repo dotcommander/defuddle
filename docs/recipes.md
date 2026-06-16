@@ -237,9 +237,16 @@ Load `cookies` from a browser extension export (e.g. [cookies.txt format](https:
 
 ---
 
-## 6. Pipe HTML from a Headless Browser
+## 6. Render JavaScript Pages
 
-For JS-rendered pages, fetch with a headless browser and pipe the rendered HTML into defuddle. This is the standard workaround for client-only SPAs.
+For JS-rendered pages, the CLI has a built-in `--render` (alias `--js`) flag that renders the page in headless Chrome before extracting:
+
+```bash
+defuddle parse --render https://example.com/spa-page
+defuddle parse --render --render-wait networkidle https://example.com/spa-page
+```
+
+When you need finer control — a custom wait strategy, an authenticated browser session, or rendering inside your own Go program — drive a headless browser yourself and pass the rendered HTML into defuddle.
 
 **Shell pipeline (using Playwright CLI):**
 
@@ -303,4 +310,4 @@ func main() {
 }
 ```
 
-See [docs/limitations.md](limitations.md) for a full discussion of JS-rendered pages and other cases where defuddle needs help from a headless browser.
+See the [CLI reference](cli.md#javascript-rendering-opt-in) for the built-in `--render` flag, and [limitations.md](limitations.md) for other cases where defuddle needs help from a headless browser.

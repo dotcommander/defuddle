@@ -23,18 +23,16 @@ Defuddle extracts the `<div id="__next">` — which is empty.
 
 **What to do instead:**
 
-Pre-render with a headless browser and pipe the resulting HTML into defuddle:
+**CLI:** use the built-in `--render` (alias `--js`) flag, which renders the page in headless Chrome before extraction:
 
 ```bash
-# Using playwright CLI (or any headless tool that can dump HTML)
-playwright screenshot --full-page https://example.com/article --save-html article.html
-defuddle parse article.html
-
-# Or pipe directly
-npx playwright eval "page.goto('https://example.com'); page.content()" | defuddle parse
+defuddle parse --render https://example.com/article
+defuddle parse --render --render-wait networkidle https://example.com/article
 ```
 
-In Go, fetch with a headless browser client (e.g. [chromedp](https://github.com/chromedp/chromedp)) and pass the resulting HTML to `ParseFromString`:
+This requires an existing Chrome/Chromium install (chromedp drives it over CDP; no browser is bundled). See the [CLI reference](cli.md#javascript-rendering-opt-in) for `--chrome-path`, `--render-timeout`, and `--render-user-agent`.
+
+**Library:** the `defuddle` package itself does not execute JavaScript. Pre-render with a headless browser (e.g. [chromedp](https://github.com/chromedp/chromedp)) and pass the resulting HTML to `ParseFromString`:
 
 ```go
 html := fetchWithChromedp(ctx, url) // your headless fetch
@@ -156,7 +154,7 @@ result, err := defuddle.ParseFromURL(ctx, url, &defuddle.Options{
 
 | Problem | Workaround |
 |---------|-----------|
-| JS-rendered page | Pre-fetch with headless browser; pipe HTML to `defuddle parse -` or `ParseFromString` |
+| JS-rendered page | CLI: `defuddle parse --render`; Library: pre-render (e.g. chromedp) then `ParseFromString` |
 | Paywall / login wall | Pass authenticated `*requests.Client` with session cookies |
 | PDF / binary | Check `Content-Type` before calling defuddle; route separately |
 | Over 5 MB | Skip, or truncate before `ParseFromString` |

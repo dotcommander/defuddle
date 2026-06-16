@@ -438,12 +438,31 @@ defuddle parse https://slow-site.com --timeout 120s
 | `--no-clutter-removal` | | Disable all clutter removal heuristics |
 | `--remove-images` | | Strip images from output |
 | `--debug` | | Enable debug output |
+| `--md` | | Alias for `--markdown` |
+| `--render` | | Render JavaScript via headless Chrome before extracting |
+| `--js` | | Alias for `--render` |
+| `--render-wait` | | Render wait strategy: `load` or `networkidle` |
+| `--render-user-agent` | | User agent for the render stage |
+| `--chrome-path` | | Path to a Chrome/Chromium executable |
+| `--render-timeout` | | Maximum time to spend rendering the page |
+
+See [docs/cli.md](docs/cli.md) for the complete CLI reference with examples.
+
+## Documentation
+
+- [Getting Started](docs/getting-started.md)
+- [CLI Reference](docs/cli.md)
+- [Library Guide](docs/library.md)
+- [Configuration](docs/configuration.md)
+- [Extractors](docs/extractors.md)
+- [Recipes](docs/recipes.md)
+- [When NOT to Use Defuddle](docs/limitations.md)
 
 ## Limitations
 
 Defuddle works best on static, article-style HTML. Several categories of pages will produce poor or empty results:
 
-**JS-rendered pages.** If a site uses client-side rendering (React, Vue, Svelte without SSR), defuddle receives the shell HTML before JavaScript runs — usually near-empty. Pre-render with a headless browser and pipe the resulting HTML in: `playwright ... | defuddle parse -`.
+**JS-rendered pages.** If a site uses client-side rendering (React, Vue, Svelte without SSR), defuddle receives the shell HTML before JavaScript runs — usually near-empty. Use the built-in `--render` (alias `--js`) flag to render the page in headless Chrome before extraction (see [JavaScript rendering](#javascript-rendering-opt-in)). For library use, or to drive rendering yourself, pre-render with a headless browser and pass the HTML to `ParseFromString`.
 
 **Paywalled and login-gated content.** Defuddle fetches exactly what an unauthenticated request returns. For login-gated content, pass an authenticated `*requests.Client` with session cookies. For hard paywalls, you get the paywall HTML.
 
