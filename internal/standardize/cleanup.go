@@ -633,24 +633,19 @@ func removeOrphanedDividers(element *goquery.Selection) {
 	}
 	node := element.Get(0)
 
-	// Remove leading <hr> elements
-	for {
-		n := node.FirstChild
-		for n != nil && n.Type == html.TextNode && strings.TrimSpace(n.Data) == "" {
-			n = n.NextSibling
-		}
-		if n != nil && n.Type == html.ElementNode && strings.EqualFold(n.Data, "hr") {
-			node.RemoveChild(n)
-		} else {
-			break
-		}
-	}
+	removeEdgeHRs(node, func(p *html.Node) *html.Node { return p.FirstChild }, func(n *html.Node) *html.Node { return n.NextSibling })
+	removeEdgeHRs(node, func(p *html.Node) *html.Node { return p.LastChild }, func(n *html.Node) *html.Node { return n.PrevSibling })
+}
 
-	// Remove trailing <hr> elements
+// removeEdgeHRs strips <hr> elements from one end of node, skipping
+// whitespace-only text nodes between them. edge returns the boundary child
+// (FirstChild for leading, LastChild for trailing) and step advances inward
+// (NextSibling or PrevSibling).
+func removeEdgeHRs(node *html.Node, edge, step func(*html.Node) *html.Node) {
 	for {
-		n := node.LastChild
+		n := edge(node)
 		for n != nil && n.Type == html.TextNode && strings.TrimSpace(n.Data) == "" {
-			n = n.PrevSibling
+			n = step(n)
 		}
 		if n != nil && n.Type == html.ElementNode && strings.EqualFold(n.Data, "hr") {
 			node.RemoveChild(n)
