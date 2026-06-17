@@ -368,6 +368,18 @@ func ParseFromURLs(ctx context.Context, urls []string, options *Options) []URLRe
 }
 
 // parseInternal performs the actual parsing work
+// selectMainContent returns the main content element: the explicit
+// ContentSelector match if provided and present, otherwise automatic detection
+// (which may return nil).
+func (d *Defuddle) selectMainContent(workingDoc *goquery.Document, options *Options) *goquery.Selection {
+	if options.ContentSelector != "" {
+		if sel := workingDoc.Find(options.ContentSelector).First(); sel.Length() > 0 {
+			return sel
+		}
+	}
+	return d.findMainContent(workingDoc)
+}
+
 func (d *Defuddle) parseInternal(ctx context.Context, overrideOptions *Options) (*Result, error) {
 	startTime := time.Now()
 
@@ -414,19 +426,8 @@ func (d *Defuddle) parseInternal(ctx context.Context, overrideOptions *Options) 
 	// Find small images in fresh document, excluding lazy-loaded ones
 	smallImages := d.findSmallImages(workingDoc)
 
-	// Use explicit content selector if provided
-	var mainContent *goquery.Selection
-	if options.ContentSelector != "" {
-		sel := workingDoc.Find(options.ContentSelector).First()
-		if sel.Length() > 0 {
-			mainContent = sel
-		}
-	}
-
-	// Fall back to automatic content detection
-	if mainContent == nil {
-		mainContent = d.findMainContent(workingDoc)
-	}
+	// Select main content: explicit selector if provided, else auto-detect
+	mainContent := d.selectMainContent(workingDoc, options)
 
 	if mainContent == nil {
 		// Fallback to body content
