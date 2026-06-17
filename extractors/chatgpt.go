@@ -573,22 +573,7 @@ func (c *ChatGPTExtractor) processFootnotes(content string) string {
 		fragmentText := extractFragmentText(citationURL)
 
 		// Deduplicate: reuse existing footnote number for same URL
-		footnoteNumber := -1
-		for i, fn := range c.footnotes {
-			if fn.URL == citationURL {
-				footnoteNumber = i + 1
-				break
-			}
-		}
-
-		if footnoteNumber == -1 {
-			c.footnoteCounter++
-			footnoteNumber = c.footnoteCounter
-			c.footnotes = append(c.footnotes, Footnote{
-				URL:  citationURL,
-				Text: fmt.Sprintf(`<a href="%s">%s</a>%s`, citationURL, domain, fragmentText),
-			})
-		}
+		footnoteNumber := c.footnoteIndexForURL(citationURL, domain, fragmentText)
 
 		// Replace with footnote reference using fn:N format (matching TS)
 		replacement := fmt.Sprintf(`<sup id="fnref:%d"><a href="#fn:%d">%d</a></sup>`, footnoteNumber, footnoteNumber, footnoteNumber)
@@ -596,6 +581,22 @@ func (c *ChatGPTExtractor) processFootnotes(content string) string {
 	}
 
 	return processedContent
+}
+
+// footnoteIndexForURL returns the 1-based footnote number for citationURL,
+// creating a new footnote (linking domain + fragment text) if not present.
+func (c *ChatGPTExtractor) footnoteIndexForURL(citationURL, domain, fragmentText string) int {
+	for i, fn := range c.footnotes {
+		if fn.URL == citationURL {
+			return i + 1
+		}
+	}
+	c.footnoteCounter++
+	c.footnotes = append(c.footnotes, Footnote{
+		URL:  citationURL,
+		Text: fmt.Sprintf(`<a href="%s">%s</a>%s`, citationURL, domain, fragmentText),
+	})
+	return c.footnoteCounter
 }
 
 // extractCitationDomain extracts the hostname without www. prefix.
