@@ -230,27 +230,29 @@ func (p *ImageProcessor) transformUniImages(scope *goquery.Selection) {
 		}
 		b.WriteString(`/>`)
 
-		figcaptionEl := el.Find("figcaption").First()
-		if figcaptionEl.Length() > 0 {
-			captionText := strings.TrimSpace(figcaptionEl.Text())
-			if len(captionText) > 5 {
-				richTextP := figcaptionEl.Find(".rich-text p").First()
-				if richTextP.Length() > 0 {
-					inner, _ := richTextP.Html()
-					b.WriteString("<figcaption>")
-					b.WriteString(inner)
-					b.WriteString("</figcaption>")
-				} else {
-					b.WriteString("<figcaption>")
-					b.WriteString(captionText)
-					b.WriteString("</figcaption>")
-				}
-			}
-		}
+		b.WriteString(uniImageFigcaption(el))
 
 		b.WriteString("</figure>")
 		el.ReplaceWithHtml(b.String())
 	})
+}
+
+// uniImageFigcaption returns the <figcaption>…</figcaption> HTML for a
+// uni-image element, or "" when there is no caption worth rendering.
+func uniImageFigcaption(el *goquery.Selection) string {
+	figcaptionEl := el.Find("figcaption").First()
+	if figcaptionEl.Length() == 0 {
+		return ""
+	}
+	captionText := strings.TrimSpace(figcaptionEl.Text())
+	if len(captionText) <= 5 {
+		return ""
+	}
+	if richTextP := figcaptionEl.Find(".rich-text p").First(); richTextP.Length() > 0 {
+		inner, _ := richTextP.Html()
+		return "<figcaption>" + inner + "</figcaption>"
+	}
+	return "<figcaption>" + captionText + "</figcaption>"
 }
 
 // --- Transform 3: Lazy-loaded image de-lazification ---
