@@ -320,14 +320,7 @@ func (h *HackerNewsExtractor) commentPageContent() string {
 	commentText, _ := h.mainComment.Find(".commtext").Html()
 
 	timeElement := h.mainComment.Find(".age")
-	timestamp, _ := timeElement.Attr("title")
-	date := ""
-	if timestamp != "" {
-		parts := strings.Split(timestamp, "T")
-		if len(parts) > 0 {
-			date = parts[0]
-		}
-	}
+	date := hnDateFromAge(timeElement)
 
 	points := strings.TrimSpace(h.mainComment.Find(".score").Text())
 	parentURL, _ := h.mainPost.Find(`.navs a[href*="parent"]`).Attr("href")
@@ -482,15 +475,7 @@ func (h *HackerNewsExtractor) processComments(comments []*goquery.Selection) str
 
 		commentURL := fmt.Sprintf("https://news.ycombinator.com/item?id=%s", id)
 
-		// Get the timestamp from the title attribute and extract the date portion.
-		timestamp, _ := timeElement.Attr("title")
-		date := ""
-		if timestamp != "" {
-			parts := strings.Split(timestamp, "T")
-			if len(parts) > 0 {
-				date = parts[0]
-			}
-		}
+		date := hnDateFromAge(timeElement)
 
 		extra := ""
 		if points != "" {
@@ -602,6 +587,19 @@ func (h *HackerNewsExtractor) createDescription() string {
 	return fmt.Sprintf("%s - by %s on Hacker News", title, author)
 }
 
+// hnDateFromAge returns the YYYY-MM-DD portion of a HackerNews .age element's title.
+func hnDateFromAge(timeElement *goquery.Selection) string {
+	timestamp, _ := timeElement.Attr("title")
+	if timestamp == "" {
+		return ""
+	}
+	parts := strings.Split(timestamp, "T")
+	if len(parts) > 0 {
+		return parts[0]
+	}
+	return ""
+}
+
 // getPostDate extracts the post date
 // TypeScript original code:
 //
@@ -615,16 +613,5 @@ func (h *HackerNewsExtractor) getPostDate() string {
 	if h.mainPost.Length() == 0 {
 		return ""
 	}
-
-	timeElement := h.mainPost.Find(".age")
-	timestamp, _ := timeElement.Attr("title")
-
-	if timestamp != "" {
-		parts := strings.Split(timestamp, "T")
-		if len(parts) > 0 {
-			return parts[0]
-		}
-	}
-
-	return ""
+	return hnDateFromAge(h.mainPost.Find(".age"))
 }
