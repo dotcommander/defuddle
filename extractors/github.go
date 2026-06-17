@@ -163,10 +163,8 @@ func (g *GitHubExtractor) extractIssue() *ExtractorResult {
 
 			// Add the main issue
 			fmt.Fprintf(&content, `<div class="issue-author"><strong>%s</strong>`, issueAuthor)
-			if issueTimestamp != "" {
-				if date, err := time.Parse(time.RFC3339, issueTimestamp); err == nil {
-					fmt.Fprintf(&content, ` opened this issue on %s`, date.Format("January 2, 2006"))
-				}
+			if d := formatGitHubDate(issueTimestamp); d != "" {
+				fmt.Fprintf(&content, ` opened this issue on %s`, d)
 			}
 			content.WriteString("</div>\n\n")
 			fmt.Fprintf(&content, `<div class="issue-body">%s</div>\n\n`, bodyContent)
@@ -203,10 +201,8 @@ func (g *GitHubExtractor) extractIssue() *ExtractorResult {
 			if bodyContent != "" {
 				content.WriteString(`<div class="comment">\n`)
 				fmt.Fprintf(&content, `<div class="comment-header"><strong>%s</strong>`, author)
-				if timestamp != "" {
-					if date, err := time.Parse(time.RFC3339, timestamp); err == nil {
-						fmt.Fprintf(&content, ` commented on %s`, date.Format("January 2, 2006"))
-					}
+				if d := formatGitHubDate(timestamp); d != "" {
+					fmt.Fprintf(&content, ` commented on %s`, d)
 				}
 				content.WriteString(`</div>\n`)
 				fmt.Fprintf(&content, `<div class="comment-body">%s</div>\n`, bodyContent)
@@ -426,4 +422,14 @@ func relativeTimeDatetime(sel *goquery.Selection) string {
 		return ""
 	}
 	return el.AttrOr("datetime", "")
+}
+
+// formatGitHubDate parses an RFC3339 timestamp and formats it as "January 2, 2006",
+// or returns "" if ts is empty or unparseable.
+func formatGitHubDate(ts string) string {
+	date, err := time.Parse(time.RFC3339, ts)
+	if err != nil {
+		return ""
+	}
+	return date.Format("January 2, 2006")
 }
