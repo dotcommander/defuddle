@@ -192,45 +192,7 @@ func (r *RedditExtractor) getPostContent() string {
 	} else {
 		// Fallback method: Look for alternative selectors
 		slog.Debug("Reddit extractor: using fallback selectors")
-
-		// Try to find post content using alternative selectors
-		alternativeSelectors := []string{
-			"div[data-testid='post-content']",
-			".usertext-body",
-			".md",
-			"div[data-click-id='text']",
-			"div[data-click-id='body']",
-		}
-
-		for _, selector := range alternativeSelectors {
-			postContent := r.document.Find(selector).First()
-			if postContent.Length() > 0 {
-				if html, err := postContent.Html(); err == nil && html != "" {
-					content.WriteString(html)
-					slog.Debug("Reddit extractor: found content with selector", "selector", selector)
-					break
-				}
-			}
-		}
-
-		// Try to find images separately
-		imageSelectors := []string{
-			"img[src*='i.redd.it']",
-			"img[src*='preview.redd.it']",
-			"img[src*='external-preview.redd.it']",
-		}
-
-		for _, selector := range imageSelectors {
-			images := r.document.Find(selector)
-			if images.Length() > 0 {
-				images.Each(func(_ int, img *goquery.Selection) {
-					if outerHTML, err := img.Clone().Wrap("<div>").Parent().Html(); err == nil {
-						content.WriteString(outerHTML)
-					}
-				})
-				break
-			}
-		}
+		content.WriteString(r.fallbackPostContent())
 	}
 
 	result := content.String()
@@ -239,6 +201,54 @@ func (r *RedditExtractor) getPostContent() string {
 		"contentLength", len(result))
 
 	return result
+}
+
+// fallbackPostContent builds post content from alternative selectors when no
+// shreddit-post element is present: the first content selector that yields HTML,
+// plus images from the first matching image selector.
+func (r *RedditExtractor) fallbackPostContent() string {
+	var content strings.Builder
+
+	// Try to find post content using alternative selectors
+	alternativeSelectors := []string{
+		"div[data-testid='post-content']",
+		".usertext-body",
+		".md",
+		"div[data-click-id='text']",
+		"div[data-click-id='body']",
+	}
+
+	for _, selector := range alternativeSelectors {
+		postContent := r.document.Find(selector).First()
+		if postContent.Length() > 0 {
+			if html, err := postContent.Html(); err == nil && html != "" {
+				content.WriteString(html)
+				slog.Debug("Reddit extractor: found content with selector", "selector", selector)
+				break
+			}
+		}
+	}
+
+	// Try to find images separately
+	imageSelectors := []string{
+		"img[src*='i.redd.it']",
+		"img[src*='preview.redd.it']",
+		"img[src*='external-preview.redd.it']",
+	}
+
+	for _, selector := range imageSelectors {
+		images := r.document.Find(selector)
+		if images.Length() > 0 {
+			images.Each(func(_ int, img *goquery.Selection) {
+				if outerHTML, err := img.Clone().Wrap("<div>").Parent().Html(); err == nil {
+					content.WriteString(outerHTML)
+				}
+			})
+			break
+		}
+	}
+
+	return content.String()
 }
 
 // createContentHTML creates the formatted HTML content
