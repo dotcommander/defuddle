@@ -281,22 +281,7 @@ func (p *ImageProcessor) transformLazyImages(scope *goquery.Selection) {
 		}
 
 		// Scan all attributes for image URLs
-		if el.Length() > 0 {
-			node := el.Get(0)
-			for _, attr := range node.Attr {
-				if attr.Key == "src" || attr.Key == "srcset" || attr.Key == "alt" {
-					continue
-				}
-				if len(attr.Val) > 0 && (attr.Val[0] == '{' || attr.Val[0] == '[') {
-					continue
-				}
-				if srcsetPatternRe.MatchString(attr.Val) {
-					el.SetAttr("srcset", attr.Val)
-				} else if srcPatternRe.MatchString(attr.Val) {
-					el.SetAttr("src", attr.Val)
-				}
-			}
-		}
+		promoteImageURLAttrs(el)
 
 		// Clean up lazy-loading artifacts
 		el.RemoveClass("lazy")
@@ -306,6 +291,29 @@ func (p *ImageProcessor) transformLazyImages(scope *goquery.Selection) {
 		el.RemoveAttr("data-srcset")
 		el.RemoveAttr("loading")
 	})
+}
+
+// promoteImageURLAttrs scans an img's non-standard attributes for image URLs
+// (skipping src/srcset/alt and JSON-ish values) and promotes a match to
+// srcset or src.
+func promoteImageURLAttrs(el *goquery.Selection) {
+	if el.Length() == 0 {
+		return
+	}
+	node := el.Get(0)
+	for _, attr := range node.Attr {
+		if attr.Key == "src" || attr.Key == "srcset" || attr.Key == "alt" {
+			continue
+		}
+		if len(attr.Val) > 0 && (attr.Val[0] == '{' || attr.Val[0] == '[') {
+			continue
+		}
+		if srcsetPatternRe.MatchString(attr.Val) {
+			el.SetAttr("srcset", attr.Val)
+		} else if srcPatternRe.MatchString(attr.Val) {
+			el.SetAttr("src", attr.Val)
+		}
+	}
 }
 
 // --- Transform 4: span:has(img) → figure ---
