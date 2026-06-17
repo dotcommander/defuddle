@@ -569,21 +569,16 @@ func (d *Defuddle) tryExtractor(
 
 	// Override metadata from extractor variables
 	if extracted.Variables != nil {
-		if v, ok := extracted.Variables["title"]; ok && v != "" {
-			result.Title = v
+		setIfPresent := func(key string, dst *string) {
+			if v, ok := extracted.Variables[key]; ok && v != "" {
+				*dst = v
+			}
 		}
-		if v, ok := extracted.Variables["author"]; ok && v != "" {
-			result.Author = v
-		}
-		if v, ok := extracted.Variables["published"]; ok && v != "" {
-			result.Published = v
-		}
-		if v, ok := extracted.Variables["description"]; ok && v != "" {
-			result.Description = v
-		}
-		if v, ok := extracted.Variables["image"]; ok && v != "" {
-			result.Image = v
-		}
+		setIfPresent("title", &result.Title)
+		setIfPresent("author", &result.Author)
+		setIfPresent("published", &result.Published)
+		setIfPresent("description", &result.Description)
+		setIfPresent("image", &result.Image)
 	}
 
 	if options.wantsMarkdown() {
