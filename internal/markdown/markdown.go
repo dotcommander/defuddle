@@ -728,42 +728,8 @@ func renderFootnotesList(ctx converter.Context, w converter.Writer, n *html.Node
 		if li.Type != html.ElementNode || li.Data != "li" {
 			continue
 		}
-
-		// Extract footnote ID from li's id attribute
-		liID := getAttr(li, "id")
-		id := liID
-		if strings.HasPrefix(liID, "fn:") {
-			id = strings.TrimPrefix(liID, "fn:")
-		} else if idx := strings.LastIndex(liID, "/"); idx >= 0 {
-			// Handle cite_note-style IDs
-			tail := liID[idx+1:]
-			if strings.HasPrefix(tail, "cite_note-") {
-				id = strings.TrimPrefix(tail, "cite_note-")
-			}
-		}
-
-		// Remove leading <sup> if its text matches the footnote ID
-		for c := li.FirstChild; c != nil; c = c.NextSibling {
-			if c.Type == html.ElementNode && c.Data == "sup" {
-				if strings.TrimSpace(extractText(c)) == id {
-					li.RemoveChild(c)
-				}
-				break
-			}
-		}
-
-		// Render li content to markdown
-		var buf bytes.Buffer
-		ctx.RenderChildNodes(ctx, &buf, li)
-		content := strings.TrimSpace(buf.String())
-
-		// Remove backlink symbol
-		content = strings.TrimRight(content, " ")
-		content = backLinkRe.ReplaceAllString(content, "")
-		content = strings.TrimSpace(content)
-
-		if content != "" {
-			defs = append(defs, fmt.Sprintf("[^%s]: %s", strings.ToLower(id), content))
+		if def := footnoteDefinition(ctx, li); def != "" {
+			defs = append(defs, def)
 		}
 	}
 
@@ -775,6 +741,49 @@ func renderFootnotesList(ctx converter.Context, w converter.Writer, n *html.Node
 	w.WriteString(strings.Join(defs, "\n\n"))
 	w.WriteString("\n\n")
 	return converter.RenderSuccess
+}
+
+// footnoteDefinition renders one footnote <li> as a "[^id]: content" markdown
+// definition, deriving the id from fn:/cite_note- conventions and stripping the
+// leading sup marker and trailing backlink. Returns "" when the content is empty.
+func footnoteDefinition(ctx converter.Context, li *html.Node) string {
+	// Extract footnote ID from li's id attribute
+	liID := getAttr(li, "id")
+	id := liID
+	if strings.HasPrefix(liID, "fn:") {
+		id = strings.TrimPrefix(liID, "fn:")
+	} else if idx := strings.LastIndex(liID, "/"); idx >= 0 {
+		// Handle cite_note-style IDs
+		tail := liID[idx+1:]
+		if strings.HasPrefix(tail, "cite_note-") {
+			id = strings.TrimPrefix(tail, "cite_note-")
+		}
+	}
+
+	// Remove leading <sup> if its text matches the footnote ID
+	for c := li.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type == html.ElementNode && c.Data == "sup" {
+			if strings.TrimSpace(extractText(c)) == id {
+				li.RemoveChild(c)
+			}
+			break
+		}
+	}
+
+	// Render li content to markdown
+	var buf bytes.Buffer
+	ctx.RenderChildNodes(ctx, &buf, li)
+	content := strings.TrimSpace(buf.String())
+
+	// Remove backlink symbol
+	content = strings.TrimRight(content, " ")
+	content = backLinkRe.ReplaceAllString(content, "")
+	content = strings.TrimSpace(content)
+
+	if content == "" {
+		return ""
+	}
+	return fmt.Sprintf("[^%s]: %s", strings.ToLower(id), content)
 }
 
 // renderTableSpecial handles ArXiv equation tables and complex tables (colspan/rowspan).
