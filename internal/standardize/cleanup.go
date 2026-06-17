@@ -425,18 +425,7 @@ func stripExtraBrElements(element *goquery.Selection) {
 	}
 
 	for _, br := range brNodes {
-		isConsecutive := false
-		if len(consecutiveBrs) > 0 {
-			lastBr := consecutiveBrs[len(consecutiveBrs)-1]
-			// Walk backwards from current br, skipping whitespace-only text nodes
-			node := br.PrevSibling
-			for node != nil && node.Type == html.TextNode && strings.TrimSpace(node.Data) == "" {
-				node = node.PrevSibling
-			}
-			if node == lastBr {
-				isConsecutive = true
-			}
-		}
+		isConsecutive := len(consecutiveBrs) > 0 && isConsecutiveBr(br, consecutiveBrs[len(consecutiveBrs)-1])
 
 		if isConsecutive {
 			consecutiveBrs = append(consecutiveBrs, br)
@@ -446,6 +435,17 @@ func stripExtraBrElements(element *goquery.Selection) {
 		}
 	}
 	processBrs()
+}
+
+// isConsecutiveBr reports whether br immediately follows lastBr with only
+// whitespace-only text nodes between them.
+func isConsecutiveBr(br, lastBr *html.Node) bool {
+	// Walk backwards from br, skipping whitespace-only text nodes
+	node := br.PrevSibling
+	for node != nil && node.Type == html.TextNode && strings.TrimSpace(node.Data) == "" {
+		node = node.PrevSibling
+	}
+	return node == lastBr
 }
 
 // hasCalloutClass checks if a class attribute value contains a callout class (callout or callout-*).
