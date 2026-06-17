@@ -482,40 +482,47 @@ func (y *YouTubeExtractor) parseInlineJSON(globalName string) map[string]any {
 		if result != nil {
 			return
 		}
-		text := s.Text()
-		idx := strings.Index(text, globalName)
-		if idx == -1 {
-			return
+		if parsed := parseGlobalJSON(s.Text(), globalName); parsed != nil {
+			result = parsed
 		}
-		// Find opening brace after the variable name
-		startIndex := strings.IndexByte(text[idx:], '{')
-		if startIndex == -1 {
-			return
-		}
-		startIndex += idx
+	})
+	return result
+}
 
-		// Brace-balance to find matching closing brace
-		depth := 0
-		for i := startIndex; i < len(text); i++ {
-			switch text[i] {
-			case '{':
-				depth++
-			case '}':
+// parseGlobalJSON finds globalName in text and returns the first balanced
+// {...} JSON object that follows it, or nil if absent or unparseable.
+func parseGlobalJSON(text, globalName string) map[string]any {
+	idx := strings.Index(text, globalName)
+	if idx == -1 {
+		return nil
+	}
+	// Find opening brace after the variable name
+	startIndex := strings.IndexByte(text[idx:], '{')
+	if startIndex == -1 {
+		return nil
+	}
+	startIndex += idx
+
+	// Brace-balance to find matching closing brace
+	depth := 0
+	for i := startIndex; i < len(text); i++ {
+		switch text[i] {
+		case '{':
+			depth++
+		case '}':
 				depth--
 				if depth == 0 {
 					jsonText := text[startIndex : i+1]
 					var parsed map[string]any
 					if err := json.Unmarshal([]byte(jsonText), &parsed); err != nil {
 						slog.Debug("YouTube: failed to parse inline JSON", "error", err)
-						return
+						return nil
 					}
-					result = parsed
-					return
+					return parsed
 				}
 			}
-		}
-	})
-	return result
+	}
+	return nil
 }
 
 // getDescription gets the video description
