@@ -36,22 +36,8 @@ func (e *ThreadsExtractor) extractPostContent(container *goquery.Selection) stri
 
 	allSpans := container.Find(`span[dir="auto"]`)
 	allSpans.Each(func(_ int, span *goquery.Selection) {
-		if span.Closest(`a[href^="/@"], a[href*="/post/"], a[href*="l.threads.com"], time`).Length() > 0 {
-			return
-		}
-		if span.Closest(`[role="button"]`).Length() > 0 {
-			return
-		}
-		text := strings.TrimSpace(span.Text())
-		if text == "" || text == "Author" || text == "·" || text == "Top" || text == "View activity" {
-			return
-		}
-		if threadsThreadNumberRe.MatchString(text) && threadsThreadNumberRe.FindString(text) == text {
-			return
-		}
-		cleaned := e.cleanText(span)
-		if cleaned != "" {
-			parts = append(parts, fmt.Sprintf("<p>%s</p>", cleaned))
+		if p := e.spanParagraph(span); p != "" {
+			parts = append(parts, p)
 		}
 	})
 
@@ -66,6 +52,30 @@ func (e *ThreadsExtractor) extractPostContent(container *goquery.Selection) stri
 	}
 
 	return strings.Join(parts, "\n")
+}
+
+// spanParagraph returns the cleaned <p>…</p> HTML for a content span, or "" when
+// the span is navigational/noise (inside a link/time/button, a known label, or a
+// bare thread-number) or yields empty content.
+func (e *ThreadsExtractor) spanParagraph(span *goquery.Selection) string {
+	if span.Closest(`a[href^="/@"], a[href*="/post/"], a[href*="l.threads.com"], time`).Length() > 0 {
+		return ""
+	}
+	if span.Closest(`[role="button"]`).Length() > 0 {
+		return ""
+	}
+	text := strings.TrimSpace(span.Text())
+	if text == "" || text == "Author" || text == "·" || text == "Top" || text == "View activity" {
+		return ""
+	}
+	if threadsThreadNumberRe.MatchString(text) && threadsThreadNumberRe.FindString(text) == text {
+		return ""
+	}
+	cleaned := e.cleanText(span)
+	if cleaned == "" {
+		return ""
+	}
+	return fmt.Sprintf("<p>%s</p>", cleaned)
 }
 
 // cleanText clones a span, removes thread-number divs, rewrites links, then
