@@ -640,6 +640,12 @@ func getFavicon(doc *goquery.Document, baseURL string, metaTags []MetaTag) strin
 		favicon = "/favicon.ico"
 	}
 
+	return resolveFaviconURL(favicon, baseURL)
+}
+
+// resolveFaviconURL returns favicon as an absolute URL, resolving a relative
+// value against baseURL when possible.
+func resolveFaviconURL(favicon, baseURL string) string {
 	if strings.HasPrefix(favicon, "http") {
 		return favicon
 	}
