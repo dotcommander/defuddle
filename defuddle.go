@@ -662,21 +662,7 @@ func (d *Defuddle) removePartialSelectors(doc *goquery.Document, mainContent *go
 	combinedSelector := strings.Join(attrSelector, ",")
 
 	doc.Find(combinedSelector).Each(func(_ int, element *goquery.Selection) {
-		if scoring.IsProtectedNode(element, mainContent) {
-			return
-		}
-		// Protect footnote lists and their parents (element itself or any descendant matches)
-		if element.IsMatcher(constants.FootnoteListMatcher) ||
-			element.FindMatcher(constants.FootnoteListMatcher).Length() > 0 {
-			return
-		}
-		// Skip heading elements — their IDs often match partial selectors
-		tag := goquery.NodeName(element)
-		if slices.Contains(headingTags, tag) {
-			return
-		}
-		// Skip anchor links inside headings
-		if element.Closest(headingSelector).Length() > 0 {
+		if isProtectedFromPartialRemoval(element, mainContent) {
 			return
 		}
 
@@ -697,6 +683,26 @@ func (d *Defuddle) removePartialSelectors(doc *goquery.Document, mainContent *go
 			element.Remove()
 		}
 	})
+}
+
+// isProtectedFromPartialRemoval reports whether element must be kept despite
+// matching a test-attribute selector: protected content nodes, footnote lists
+// (or their parents), headings, and anchors inside headings.
+func isProtectedFromPartialRemoval(element, mainContent *goquery.Selection) bool {
+	if scoring.IsProtectedNode(element, mainContent) {
+		return true
+	}
+	// Protect footnote lists and their parents (element itself or any descendant matches)
+	if element.IsMatcher(constants.FootnoteListMatcher) ||
+		element.FindMatcher(constants.FootnoteListMatcher).Length() > 0 {
+		return true
+	}
+	// Skip heading elements — their IDs often match partial selectors
+	if slices.Contains(headingTags, goquery.NodeName(element)) {
+		return true
+	}
+	// Skip anchor links inside headings
+	return element.Closest(headingSelector).Length() > 0
 }
 
 // mergeOptions merges override options with instance options and defaults.
