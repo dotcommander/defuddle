@@ -409,46 +409,53 @@ func cleanupEmptyElements(node *html.Node, blockElements []string, removedCount 
 
 	// Ensure there's a space between inline elements if needed
 	if !isBlockElement {
-		var nodeChildren []*html.Node
-		for child := node.FirstChild; child != nil; child = child.NextSibling {
-			nodeChildren = append(nodeChildren, child)
-		}
+		ensureInlineSpacing(node)
+	}
+}
 
-		for i := range len(nodeChildren) - 1 {
-			current := nodeChildren[i]
-			next := nodeChildren[i+1]
+// ensureInlineSpacing inserts a single space between adjacent inline children
+// of node where one side is an element and no existing space or adjoining
+// punctuation would make that space wrong.
+func ensureInlineSpacing(node *html.Node) {
+	var nodeChildren []*html.Node
+	for child := node.FirstChild; child != nil; child = child.NextSibling {
+		nodeChildren = append(nodeChildren, child)
+	}
 
-			// Only add space between elements or between element and text
-			if current.Type == html.ElementNode || next.Type == html.ElementNode {
-				// Get the text content (simplified)
-				var nextContent, currentContent string
-				if next.Type == html.TextNode {
-					nextContent = next.Data
+	for i := range len(nodeChildren) - 1 {
+		current := nodeChildren[i]
+		next := nodeChildren[i+1]
+
+		// Only add space between elements or between element and text
+		if current.Type == html.ElementNode || next.Type == html.ElementNode {
+			// Get the text content (simplified)
+			var nextContent, currentContent string
+			if next.Type == html.TextNode {
+				nextContent = next.Data
+			}
+			if current.Type == html.TextNode {
+				currentContent = current.Data
+			}
+
+			// Don't add space if:
+			// 1. Next content starts with punctuation or closing parenthesis
+			// 2. Current content ends with punctuation or opening parenthesis
+			// 3. There's already a space
+			nextStartsWithPunctuation := startsWithPunctRe.MatchString(nextContent)
+			currentEndsWithPunctuation := endsWithPunctRe.MatchString(currentContent)
+
+			hasSpace := (current.Type == html.TextNode && strings.HasSuffix(current.Data, " ")) ||
+				(next.Type == html.TextNode && strings.HasPrefix(next.Data, " "))
+
+			// Only add space if none of the above conditions are true
+			if !nextStartsWithPunctuation &&
+				!currentEndsWithPunctuation &&
+				!hasSpace {
+				space := &html.Node{
+					Type: html.TextNode,
+					Data: " ",
 				}
-				if current.Type == html.TextNode {
-					currentContent = current.Data
-				}
-
-				// Don't add space if:
-				// 1. Next content starts with punctuation or closing parenthesis
-				// 2. Current content ends with punctuation or opening parenthesis
-				// 3. There's already a space
-				nextStartsWithPunctuation := startsWithPunctRe.MatchString(nextContent)
-				currentEndsWithPunctuation := endsWithPunctRe.MatchString(currentContent)
-
-				hasSpace := (current.Type == html.TextNode && strings.HasSuffix(current.Data, " ")) ||
-					(next.Type == html.TextNode && strings.HasPrefix(next.Data, " "))
-
-				// Only add space if none of the above conditions are true
-				if !nextStartsWithPunctuation &&
-					!currentEndsWithPunctuation &&
-					!hasSpace {
-					space := &html.Node{
-						Type: html.TextNode,
-						Data: " ",
-					}
-					node.InsertBefore(space, next)
-				}
+				node.InsertBefore(space, next)
 			}
 		}
 	}
