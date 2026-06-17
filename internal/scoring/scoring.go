@@ -720,24 +720,13 @@ func isLikelyContent(_ context.Context, element *goquery.Selection) bool {
 
 	// Navigation heading detection: blocks with headings that match navigation
 	// indicators (e.g. "Related Articles", "Popular Posts") are not content
-	if words < 1000 {
-		hasNavigationHeading := false
-		element.Find("h1, h2, h3, h4, h5, h6").EachWithBreak(func(_ int, h *goquery.Selection) bool {
-			headingText := strings.ToLower(strings.TrimSpace(h.Text()))
-			if navigationHeadingPattern.MatchString(headingText) {
-				hasNavigationHeading = true
-				return false
-			}
-			return true
-		})
-		if hasNavigationHeading {
-			if words < 200 {
-				return false
-			}
-			linkCount := element.Find("a").Length()
-			if float64(linkCount)/float64(max(words, 1)) > 0.2 {
-				return false
-			}
+	if words < 1000 && hasNavigationHeading(element) {
+		if words < 200 {
+			return false
+		}
+		linkCount := element.Find("a").Length()
+		if float64(linkCount)/float64(max(words, 1)) > 0.2 {
+			return false
 		}
 	}
 
@@ -747,19 +736,8 @@ func isLikelyContent(_ context.Context, element *goquery.Selection) bool {
 	}
 
 	// Social profile links in small blocks indicate author bios, not content
-	if words < 80 {
-		hasSocialProfile := false
-		element.Find("a").EachWithBreak(func(_ int, a *goquery.Selection) bool {
-			href := strings.ToLower(a.AttrOr("href", ""))
-			if socialProfileRe.MatchString(href) && !isSocialIntentURL(href) {
-				hasSocialProfile = true
-				return false
-			}
-			return true
-		})
-		if hasSocialProfile {
-			return false
-		}
+	if words < 80 && hasSocialProfileLink(element) {
+		return false
 	}
 
 	paragraphs := element.Find("p").Length()
@@ -790,6 +768,36 @@ func isLikelyContent(_ context.Context, element *goquery.Selection) bool {
 	}
 
 	return false
+}
+
+// hasNavigationHeading reports whether element contains a heading whose text
+// matches a navigation indicator (e.g. "Related Articles", "Popular Posts").
+func hasNavigationHeading(element *goquery.Selection) bool {
+	found := false
+	element.Find("h1, h2, h3, h4, h5, h6").EachWithBreak(func(_ int, h *goquery.Selection) bool {
+		headingText := strings.ToLower(strings.TrimSpace(h.Text()))
+		if navigationHeadingPattern.MatchString(headingText) {
+			found = true
+			return false
+		}
+		return true
+	})
+	return found
+}
+
+// hasSocialProfileLink reports whether element links to a social profile (an
+// author-bio signal), excluding share/intent URLs.
+func hasSocialProfileLink(element *goquery.Selection) bool {
+	found := false
+	element.Find("a").EachWithBreak(func(_ int, a *goquery.Selection) bool {
+		href := strings.ToLower(a.AttrOr("href", ""))
+		if socialProfileRe.MatchString(href) && !isSocialIntentURL(href) {
+			found = true
+			return false
+		}
+		return true
+	})
+	return found
 }
 
 // scoreNonContentBlock scores a block element to determine if it's likely not content
