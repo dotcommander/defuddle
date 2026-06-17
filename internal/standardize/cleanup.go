@@ -521,6 +521,43 @@ func unwrapBareSpans(element *goquery.Selection) {
 // 2. Unwraps javascript: links (keep text, remove the link)
 // 3. Restructures block-wrapping links containing headings into heading-wrapping links
 // 4. Unwraps anchor links that wrap headings (clickable section headers)
+// restructureHeadingLink moves a block-wrapping <a>'s href onto an inner <a>
+// around the heading's content, then unwraps the outer link. No-op when the
+// link has no usable href or no heading child.
+func restructureHeadingLink(link *goquery.Selection) {
+	href, exists := link.Attr("href")
+	if !exists || href == "" || strings.HasPrefix(href, "#") {
+		return
+	}
+	// Find a heading child
+	var headingNode *html.Node
+	link.Children().Each(func(_ int, child *goquery.Selection) {
+		tag := strings.ToUpper(goquery.NodeName(child))
+		if len(tag) == 2 && tag[0] == 'H' && tag[1] >= '1' && tag[1] <= '6' {
+			headingNode = child.Get(0)
+		}
+	})
+	if headingNode == nil {
+		return
+	}
+
+	// Create inner <a> with the href, move heading's children into it
+	innerLink := &html.Node{
+		Type: html.ElementNode,
+		Data: "a",
+		Attr: []html.Attribute{{Key: "href", Val: href}},
+	}
+	for headingNode.FirstChild != nil {
+		child := headingNode.FirstChild
+		headingNode.RemoveChild(child)
+		innerLink.AppendChild(child)
+	}
+	headingNode.AppendChild(innerLink)
+
+	// Unwrap the outer <a>
+	unwrapSelection(link)
+}
+
 func unwrapSpecialLinks(element *goquery.Selection, _ *goquery.Document) {
 	// 1. Unwrap links inside inline code
 	element.Find("code a").Each(func(_ int, a *goquery.Selection) {
@@ -534,37 +571,7 @@ func unwrapSpecialLinks(element *goquery.Selection, _ *goquery.Document) {
 
 	// 3. Restructure block-wrapping links containing headings
 	element.Find("a").Each(func(_ int, link *goquery.Selection) {
-		href, exists := link.Attr("href")
-		if !exists || href == "" || strings.HasPrefix(href, "#") {
-			return
-		}
-		// Find a heading child
-		var headingNode *html.Node
-		link.Children().Each(func(_ int, child *goquery.Selection) {
-			tag := strings.ToUpper(goquery.NodeName(child))
-			if len(tag) == 2 && tag[0] == 'H' && tag[1] >= '1' && tag[1] <= '6' {
-				headingNode = child.Get(0)
-			}
-		})
-		if headingNode == nil {
-			return
-		}
-
-		// Create inner <a> with the href, move heading's children into it
-		innerLink := &html.Node{
-			Type: html.ElementNode,
-			Data: "a",
-			Attr: []html.Attribute{{Key: "href", Val: href}},
-		}
-		for headingNode.FirstChild != nil {
-			child := headingNode.FirstChild
-			headingNode.RemoveChild(child)
-			innerLink.AppendChild(child)
-		}
-		headingNode.AppendChild(innerLink)
-
-		// Unwrap the outer <a>
-		unwrapSelection(link)
+		restructureHeadingLink(link)
 	})
 
 	// 4. Unwrap anchor links wrapping headings
