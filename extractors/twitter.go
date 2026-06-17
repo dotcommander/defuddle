@@ -103,6 +103,21 @@ func NewTwitterExtractor(document *goquery.Document, url string, schemaOrgData a
 		threadTweets:  make([]*goquery.Selection, 0),
 	}
 
+	allTweets := findTweets(document)
+
+	// Set main tweet and thread tweets
+	if len(allTweets) > 0 {
+		extractor.mainTweet = allTweets[0]
+		extractor.threadTweets = allTweets[1:]
+	}
+
+	return extractor
+}
+
+// findTweets locates the conversation's tweets in document: it prefers the
+// timeline (filtering out recommended tweets past a section/h2 boundary) and
+// falls back to document-wide tweet selectors when no timeline is found.
+func findTweets(document *goquery.Document) []*goquery.Selection {
 	// Primary method: Get all tweets from the timeline
 	timeline := document.Find(`[aria-label="Timeline: Conversation"]`).First()
 	if timeline.Length() == 0 {
@@ -165,13 +180,7 @@ func NewTwitterExtractor(document *goquery.Document, url string, schemaOrgData a
 		}
 	}
 
-	// Set main tweet and thread tweets
-	if len(allTweets) > 0 {
-		extractor.mainTweet = allTweets[0]
-		extractor.threadTweets = allTweets[1:]
-	}
-
-	return extractor
+	return allTweets
 }
 
 // filterTweetsBeforeBoundary removes tweets that appear after the boundary
