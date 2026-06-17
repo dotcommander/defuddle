@@ -268,6 +268,12 @@ func (y *YouTubeExtractor) getVideoDataFromLDJSONScripts() map[string]any {
 		return fallback
 	}
 
+	return y.videoDataFromOGMeta(videoID)
+}
+
+// videoDataFromOGMeta builds minimal video data from og: meta tags, but only when
+// og:url matches videoID. Returns an empty map otherwise.
+func (y *YouTubeExtractor) videoDataFromOGMeta(videoID string) map[string]any {
 	if videoID == "" {
 		return make(map[string]any)
 	}
