@@ -222,62 +222,7 @@ func removeEmptyElements(element *goquery.Selection, debug bool) {
 		var emptyElements []*goquery.Selection
 
 		element.Find("*").Each(func(_ int, el *goquery.Selection) {
-			tagName := strings.ToLower(goquery.NodeName(el))
-
-			// Skip allowed empty elements
-			if constants.IsAllowedEmptyElement(tagName) {
-				return
-			}
-
-			// Check if element has only whitespace or &nbsp;
-			textContent := el.Text()
-			hasOnlyWhitespace := strings.TrimSpace(textContent) == ""
-			hasNbsp := strings.Contains(textContent, "\u00A0") // Unicode non-breaking space
-
-			// Check if element has no meaningful children
-			hasNoChildren := true
-			el.Contents().Each(func(_ int, child *goquery.Selection) {
-				if goquery.NodeName(child) == "#text" {
-					nodeText := child.Text()
-					if strings.TrimSpace(nodeText) != "" || strings.Contains(nodeText, "\u00A0") {
-						hasNoChildren = false
-					}
-				} else {
-					hasNoChildren = false
-				}
-			})
-
-			// If no child nodes at all, it's definitely empty
-			if el.Contents().Length() == 0 {
-				hasNoChildren = true
-			}
-
-			// Special case: Check for divs that only contain spans with commas
-			if tagName == "div" {
-				children := el.Children()
-				if children.Length() > 0 {
-					hasOnlyCommaSpans := true
-					children.Each(func(_ int, child *goquery.Selection) {
-						childTag := strings.ToLower(goquery.NodeName(child))
-						if childTag != "span" {
-							hasOnlyCommaSpans = false
-							return
-						}
-						content := strings.TrimSpace(child.Text())
-						if content != "," && content != "" && content != " " {
-							hasOnlyCommaSpans = false
-							return
-						}
-					})
-					if hasOnlyCommaSpans {
-						emptyElements = append(emptyElements, el)
-						return
-					}
-				}
-			}
-
-			// Element is empty if it has only whitespace, no &nbsp;, and no meaningful children
-			if hasOnlyWhitespace && !hasNbsp && hasNoChildren {
+			if isRemovableEmptyElement(el) {
 				emptyElements = append(emptyElements, el)
 			}
 		})
@@ -297,6 +242,67 @@ func removeEmptyElements(element *goquery.Selection, debug bool) {
 			"count", removedCount,
 			"iterations", iterations)
 	}
+}
+
+// isRemovableEmptyElement reports whether el should be removed as empty: a
+// non-allowed-empty tag that is whitespace-only with no meaningful children, or
+// a div containing only comma/blank spans.
+func isRemovableEmptyElement(el *goquery.Selection) bool {
+	tagName := strings.ToLower(goquery.NodeName(el))
+
+	// Skip allowed empty elements
+	if constants.IsAllowedEmptyElement(tagName) {
+		return false
+	}
+
+	// Check if element has only whitespace or &nbsp;
+	textContent := el.Text()
+	hasOnlyWhitespace := strings.TrimSpace(textContent) == ""
+	hasNbsp := strings.Contains(textContent, "\u00A0") // Unicode non-breaking space
+
+	// Check if element has no meaningful children
+	hasNoChildren := true
+	el.Contents().Each(func(_ int, child *goquery.Selection) {
+		if goquery.NodeName(child) == "#text" {
+			nodeText := child.Text()
+			if strings.TrimSpace(nodeText) != "" || strings.Contains(nodeText, "\u00A0") {
+				hasNoChildren = false
+			}
+		} else {
+			hasNoChildren = false
+		}
+	})
+
+	// If no child nodes at all, it's definitely empty
+	if el.Contents().Length() == 0 {
+		hasNoChildren = true
+	}
+
+	// Special case: Check for divs that only contain spans with commas
+	if tagName == "div" {
+		children := el.Children()
+		if children.Length() > 0 {
+			hasOnlyCommaSpans := true
+			children.Each(func(_ int, child *goquery.Selection) {
+				childTag := strings.ToLower(goquery.NodeName(child))
+				if childTag != "span" {
+					hasOnlyCommaSpans = false
+					return
+				}
+				content := strings.TrimSpace(child.Text())
+				if content != "," && content != "" && content != " " {
+					hasOnlyCommaSpans = false
+					return
+				}
+			})
+			if hasOnlyCommaSpans {
+				return true
+			}
+		}
+	}
+
+	// Element is empty if it has only whitespace, no &nbsp;, and no meaningful children
+	return hasOnlyWhitespace && !hasNbsp && hasNoChildren
 }
 
 // removeTrailingHeadings removes headings at the end of content
