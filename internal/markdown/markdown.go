@@ -363,21 +363,7 @@ func renderKaTeX(_ converter.Context, w converter.Writer, n *html.Node) converte
 	}
 
 	// Determine display mode
-	isBlock := hasExactClass(class, "katex-display") ||
-		strings.Contains(class, "mwe-math-fallback-image-display") ||
-		hasExactClass(class, "math-display")
-
-	if !isBlock {
-		// Check child math element
-		walkChildren(n, func(child *html.Node) bool {
-			if child.Type == html.ElementNode && child.Data == "math" &&
-				getAttr(child, "display") == "block" {
-				isBlock = true
-				return false
-			}
-			return true
-		})
-	}
+	isBlock := isBlockMath(n, class)
 
 	if isBlock && !isInsideTable(n) {
 		w.WriteString("\n$$\n")
@@ -389,6 +375,27 @@ func renderKaTeX(_ converter.Context, w converter.Writer, n *html.Node) converte
 		w.WriteString("$")
 	}
 	return converter.RenderSuccess
+}
+
+// isBlockMath reports whether a katex/math span renders as display (block) math,
+// from its class or a child <math display="block">.
+func isBlockMath(n *html.Node, class string) bool {
+	if hasExactClass(class, "katex-display") ||
+		strings.Contains(class, "mwe-math-fallback-image-display") ||
+		hasExactClass(class, "math-display") {
+		return true
+	}
+
+	isBlock := false
+	walkChildren(n, func(child *html.Node) bool {
+		if child.Type == html.ElementNode && child.Data == "math" &&
+			getAttr(child, "display") == "block" {
+			isBlock = true
+			return false
+		}
+		return true
+	})
+	return isBlock
 }
 
 // extractKaTeXLatex pulls LaTeX from a katex/math span: data-latex, then a KaTeX
