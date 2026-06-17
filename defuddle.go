@@ -632,65 +632,76 @@ func sanitizeHTMLFragment(content string) string {
 // and heading protections apply only in the removePartial branch.
 func (d *Defuddle) removeBySelector(doc *goquery.Document, removeExact, removePartial bool, mainContent *goquery.Selection) {
 	if removeExact {
-		exactSelectors := constants.GetExactSelectors()
-		for _, selector := range exactSelectors {
-			doc.Find(selector).Each(func(_ int, el *goquery.Selection) {
-				if scoring.IsProtectedNode(el, mainContent) {
-					return
-				}
-				el.Remove()
-			})
-		}
+		d.removeExactSelectors(doc, mainContent)
 	}
-
 	if removePartial {
-		testAttributes := constants.GetTestAttributes()
-		partialRegex := constants.GetPartialSelectorRegex()
+		d.removePartialSelectors(doc, mainContent)
+	}
+}
 
-		// Only query elements that have at least one test attribute
-		attrSelector := make([]string, len(testAttributes))
-		for i, attr := range testAttributes {
-			attrSelector[i] = "[" + attr + "]"
-		}
-		combinedSelector := strings.Join(attrSelector, ",")
-
-		doc.Find(combinedSelector).Each(func(_ int, element *goquery.Selection) {
-			if scoring.IsProtectedNode(element, mainContent) {
+// removeExactSelectors removes elements matching the exact removal selectors,
+// preserving protected (main-content) nodes.
+func (d *Defuddle) removeExactSelectors(doc *goquery.Document, mainContent *goquery.Selection) {
+	exactSelectors := constants.GetExactSelectors()
+	for _, selector := range exactSelectors {
+		doc.Find(selector).Each(func(_ int, el *goquery.Selection) {
+			if scoring.IsProtectedNode(el, mainContent) {
 				return
 			}
-			// Protect footnote lists and their parents (element itself or any descendant matches)
-			if element.IsMatcher(constants.FootnoteListMatcher) ||
-				element.FindMatcher(constants.FootnoteListMatcher).Length() > 0 {
-				return
-			}
-			// Skip heading elements — their IDs often match partial selectors
-			tag := goquery.NodeName(element)
-			if slices.Contains(headingTags, tag) {
-				return
-			}
-			// Skip anchor links inside headings
-			if element.Closest(headingSelector).Length() > 0 {
-				return
-			}
-
-			// Combine all test attribute values into one string for single regex test
-			var combined strings.Builder
-			for _, attr := range testAttributes {
-				if value, exists := element.Attr(attr); exists && value != "" {
-					combined.WriteString(value)
-					combined.WriteByte(' ')
-				}
-			}
-			attrs := strings.ToLower(combined.String())
-			if strings.TrimSpace(attrs) == "" {
-				return
-			}
-
-			if partialRegex.MatchString(attrs) {
-				element.Remove()
-			}
+			el.Remove()
 		})
 	}
+}
+
+// removePartialSelectors removes elements whose test-attribute values match the
+// partial selector regex, preserving protected nodes, footnote lists, and headings.
+func (d *Defuddle) removePartialSelectors(doc *goquery.Document, mainContent *goquery.Selection) {
+	testAttributes := constants.GetTestAttributes()
+	partialRegex := constants.GetPartialSelectorRegex()
+
+	// Only query elements that have at least one test attribute
+	attrSelector := make([]string, len(testAttributes))
+	for i, attr := range testAttributes {
+		attrSelector[i] = "[" + attr + "]"
+	}
+	combinedSelector := strings.Join(attrSelector, ",")
+
+	doc.Find(combinedSelector).Each(func(_ int, element *goquery.Selection) {
+		if scoring.IsProtectedNode(element, mainContent) {
+			return
+		}
+		// Protect footnote lists and their parents (element itself or any descendant matches)
+		if element.IsMatcher(constants.FootnoteListMatcher) ||
+			element.FindMatcher(constants.FootnoteListMatcher).Length() > 0 {
+			return
+		}
+		// Skip heading elements — their IDs often match partial selectors
+		tag := goquery.NodeName(element)
+		if slices.Contains(headingTags, tag) {
+			return
+		}
+		// Skip anchor links inside headings
+		if element.Closest(headingSelector).Length() > 0 {
+			return
+		}
+
+		// Combine all test attribute values into one string for single regex test
+		var combined strings.Builder
+		for _, attr := range testAttributes {
+			if value, exists := element.Attr(attr); exists && value != "" {
+				combined.WriteString(value)
+				combined.WriteByte(' ')
+			}
+		}
+		attrs := strings.ToLower(combined.String())
+		if strings.TrimSpace(attrs) == "" {
+			return
+		}
+
+		if partialRegex.MatchString(attrs) {
+			element.Remove()
+		}
+	})
 }
 
 // mergeOptions merges override options with instance options and defaults.
