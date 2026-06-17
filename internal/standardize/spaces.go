@@ -83,66 +83,67 @@ func isWordChar(s string) bool {
 //		processNode(element);
 //	}
 func standardizeSpaces(element *goquery.Selection) {
-	var processNode func(node *html.Node)
-	processNode = func(node *html.Node) {
-		// Skip pre and code elements
-		if node.Type == html.ElementNode {
-			tag := strings.ToLower(node.Data)
-			if tag == "pre" || tag == "code" {
-				return
-			}
-		}
-
-		// Process text nodes
-		if node.Type == html.TextNode {
-			text := node.Data
-			// Replace &nbsp; with regular spaces, except when it's a single &nbsp; between words
-			newText := nbspRe.ReplaceAllStringFunc(text, func(match string) string {
-				// If it's a single &nbsp; between word characters, preserve it
-				if len(match) == 1 {
-					// Check previous sibling
-					var prev string
-					if node.PrevSibling != nil && node.PrevSibling.Type == html.TextNode {
-						prevText := node.PrevSibling.Data
-						if len(prevText) > 0 {
-							prev = string(prevText[len(prevText)-1])
-						}
-					}
-
-					// Check next sibling
-					var next string
-					if node.NextSibling != nil && node.NextSibling.Type == html.TextNode {
-						nextText := node.NextSibling.Data
-						if len(nextText) > 0 {
-							next = string(nextText[0])
-						}
-					}
-
-					// If between word characters, preserve the &nbsp;
-					if isWordChar(prev) && isWordChar(next) {
-						return "\xA0"
-					}
-				}
-				return strings.Repeat(" ", len(match))
-			})
-
-			if newText != text {
-				node.Data = newText
-			}
-		}
-
-		// Process children recursively
-		for child := node.FirstChild; child != nil; child = child.NextSibling {
-			processNode(child)
-		}
-	}
-
 	// Process all nodes in the selection
 	element.Each(func(_ int, sel *goquery.Selection) {
 		if sel.Length() > 0 {
-			processNode(sel.Get(0))
+			standardizeSpacesNode(sel.Get(0))
 		}
 	})
+}
+
+// standardizeSpacesNode normalizes &nbsp; runs in node's text recursively,
+// preserving a single &nbsp; between word characters and skipping pre/code subtrees.
+func standardizeSpacesNode(node *html.Node) {
+	// Skip pre and code elements
+	if node.Type == html.ElementNode {
+		tag := strings.ToLower(node.Data)
+		if tag == "pre" || tag == "code" {
+			return
+		}
+	}
+
+	// Process text nodes
+	if node.Type == html.TextNode {
+		text := node.Data
+		// Replace &nbsp; with regular spaces, except when it's a single &nbsp; between words
+		newText := nbspRe.ReplaceAllStringFunc(text, func(match string) string {
+			// If it's a single &nbsp; between word characters, preserve it
+			if len(match) == 1 {
+				// Check previous sibling
+				var prev string
+				if node.PrevSibling != nil && node.PrevSibling.Type == html.TextNode {
+					prevText := node.PrevSibling.Data
+					if len(prevText) > 0 {
+						prev = string(prevText[len(prevText)-1])
+					}
+				}
+
+				// Check next sibling
+				var next string
+				if node.NextSibling != nil && node.NextSibling.Type == html.TextNode {
+					nextText := node.NextSibling.Data
+					if len(nextText) > 0 {
+						next = string(nextText[0])
+					}
+				}
+
+				// If between word characters, preserve the &nbsp;
+				if isWordChar(prev) && isWordChar(next) {
+					return "\xA0"
+				}
+			}
+			return strings.Repeat(" ", len(match))
+		})
+
+		if newText != text {
+			node.Data = newText
+		}
+	}
+
+	// Process children recursively
+	for child := node.FirstChild; child != nil; child = child.NextSibling {
+		standardizeSpacesNode(child)
+	}
 }
 
 // removeEmptyLines removes empty lines and excessive whitespace
