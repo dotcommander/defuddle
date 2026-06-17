@@ -211,18 +211,7 @@ func renderFigure(ctx converter.Context, w converter.Writer, n *html.Node) conve
 		return converter.RenderTryNext
 	}
 
-	var imgNode, captionNode *html.Node
-	walkChildren(n, func(child *html.Node) bool {
-		if child.Type == html.ElementNode {
-			if child.Data == "img" && imgNode == nil {
-				imgNode = child
-			}
-			if child.Data == "figcaption" && captionNode == nil {
-				captionNode = child
-			}
-		}
-		return true
-	})
+	imgNode, captionNode := figureImgAndCaption(n)
 
 	if imgNode == nil {
 		return converter.RenderTryNext
@@ -244,6 +233,22 @@ func renderFigure(ctx converter.Context, w converter.Writer, n *html.Node) conve
 	}
 	w.WriteString("\n")
 	return converter.RenderSuccess
+}
+
+// figureImgAndCaption returns the first <img> and first <figcaption> child nodes of n.
+func figureImgAndCaption(n *html.Node) (imgNode, captionNode *html.Node) {
+	walkChildren(n, func(child *html.Node) bool {
+		if child.Type == html.ElementNode {
+			if child.Data == "img" && imgNode == nil {
+				imgNode = child
+			}
+			if child.Data == "figcaption" && captionNode == nil {
+				captionNode = child
+			}
+		}
+		return true
+	})
+	return imgNode, captionNode
 }
 
 func renderHighlight(ctx converter.Context, w converter.Writer, n *html.Node) converter.RenderStatus {
