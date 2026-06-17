@@ -268,6 +268,16 @@ func normalizeSchemaSlice(data any) []any {
 
 // getDescription extracts a plain-text description (≤140 chars) from the first
 // meaningful paragraph after UI noise has been cleaned.
+// hasWordChar reports whether s contains at least one ASCII letter.
+func hasWordChar(s string) bool {
+	for _, r := range s {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' {
+			return true
+		}
+	}
+	return false
+}
+
 func (e *MediumExtractor) getDescription() string {
 	if e.article == nil {
 		return ""
@@ -279,14 +289,7 @@ func (e *MediumExtractor) getDescription() string {
 			return true
 		}
 		// Skip purely numeric/punctuation paragraphs.
-		allNonWord := true
-		for _, r := range text {
-			if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' {
-				allNonWord = false
-				break
-			}
-		}
-		if allNonWord {
+		if !hasWordChar(text) {
 			return true
 		}
 		runes := []rune(text)
