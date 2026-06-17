@@ -389,34 +389,39 @@ func (g *GeminiExtractor) extractSources() {
 
 	if browseItems.Length() > 0 {
 		browseItems.Each(func(_ int, item *goquery.Selection) {
-			link := item.Find("a").First()
-			if link.Length() > 0 {
-				href, exists := link.Attr("href")
-				if !exists || href == "" {
-					return
-				}
-
-				domain := strings.TrimSpace(link.Find(".domain").Text())
-				title := strings.TrimSpace(link.Find(".title").Text())
-
-				if href != "" && (domain != "" || title != "") {
-					var text string
-					if title != "" {
-						text = fmt.Sprintf("%s: %s", domain, title)
-					} else {
-						text = domain
-					}
-
-					g.footnotes = append(g.footnotes, Footnote{
-						URL:  href,
-						Text: text,
-					})
-				}
+			if fn := geminiSourceFootnote(item); fn != nil {
+				g.footnotes = append(g.footnotes, *fn)
 			}
 		})
 	}
 
 	slog.Debug("Gemini sources extracted", "footnoteCount", len(g.footnotes))
+}
+
+// geminiSourceFootnote builds a Footnote from a browse-item's link (URL + a
+// "domain: title" or domain label), or nil when the link or label is missing.
+func geminiSourceFootnote(item *goquery.Selection) *Footnote {
+	link := item.Find("a").First()
+	if link.Length() == 0 {
+		return nil
+	}
+	href, exists := link.Attr("href")
+	if !exists || href == "" {
+		return nil
+	}
+	domain := strings.TrimSpace(link.Find(".domain").Text())
+	title := strings.TrimSpace(link.Find(".title").Text())
+	if domain == "" && title == "" {
+		return nil
+	}
+	text := domain
+	if title != "" {
+		text = fmt.Sprintf("%s: %s", domain, title)
+	}
+	return &Footnote{
+		URL:  href,
+		Text: text,
+	}
 }
 
 // GetFootnotes returns the conversation footnotes
