@@ -105,6 +105,13 @@ func runBatch(cmd *cobra.Command, _ []string) error {
 
 	results := defuddle.ParseFromURLs(ctx, urls, opts)
 
+	return encodeBatchResults(results, continueOnError)
+}
+
+// encodeBatchResults writes each parse result to stdout as JSON. On a parse
+// error it returns immediately unless continueOnError is set, in which case it
+// emits an error object and continues.
+func encodeBatchResults(results []defuddle.URLResult, continueOnError bool) error {
 	enc := json.NewEncoder(os.Stdout)
 	for _, r := range results {
 		if r.Err != nil {
