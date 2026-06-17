@@ -314,13 +314,8 @@ func getAuthor(doc *goquery.Document, schemaOrgData any, metaTags []MetaTag) str
 				cleanParts = append(cleanParts, cleaned)
 			}
 		}
-		if len(cleanParts) > 0 {
-			// Remove duplicates
-			uniqueAuthors := removeDuplicates(cleanParts)
-			if len(uniqueAuthors) > 10 {
-				uniqueAuthors = uniqueAuthors[:10]
-			}
-			return strings.Join(uniqueAuthors, ", ")
+		if joined := joinUniqueAuthors(cleanParts); joined != "" {
+			return joined
 		}
 	}
 
@@ -360,12 +355,8 @@ func getAuthor(doc *goquery.Document, schemaOrgData any, metaTags []MetaTag) str
 				cleanAuthors = append(cleanAuthors, trimmed)
 			}
 		}
-		uniqueAuthors := removeDuplicates(cleanAuthors)
-		if len(uniqueAuthors) > 0 {
-			if len(uniqueAuthors) > 10 {
-				uniqueAuthors = uniqueAuthors[:10]
-			}
-			return strings.Join(uniqueAuthors, ", ")
+		if joined := joinUniqueAuthors(cleanAuthors); joined != "" {
+			return joined
 		}
 	}
 
@@ -380,6 +371,19 @@ func getAuthor(doc *goquery.Document, schemaOrgData any, metaTags []MetaTag) str
 		getMetaContent(metaTags, "name", "twitter:creator"),
 		getMetaContent(metaTags, "name", "application-name"),
 	)
+}
+
+// joinUniqueAuthors deduplicates names (preserving order), caps the result at 10,
+// and joins with ", ". Returns "" when names is empty.
+func joinUniqueAuthors(names []string) string {
+	unique := removeDuplicates(names)
+	if len(unique) == 0 {
+		return ""
+	}
+	if len(unique) > 10 {
+		unique = unique[:10]
+	}
+	return strings.Join(unique, ", ")
 }
 
 // getSite extracts site name
