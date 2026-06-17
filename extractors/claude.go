@@ -222,31 +222,8 @@ func (c *ClaudeExtractor) ExtractMessages() []ConversationMessage {
 	}
 
 	c.articles.Each(func(i int, article *goquery.Selection) {
-		var role string
-		var content string
-
-		testid, hasTestid := article.Attr("data-testid")
-
-		switch {
-		case hasTestid:
-			// Only handle user messages via data-testid (TS skips assistant-message testid)
-			if testid == "user-message" {
-				role = "you"
-				content, _ = article.Html()
-			} else {
-				// Skip non-user-message testid elements
-				return
-			}
-		case article.HasClass("font-claude-response"):
-			// Claude's response identified by class
-			role = "assistant"
-			assistantBody := article.Find(".standard-markdown").First()
-			if assistantBody.Length() > 0 {
-				content, _ = assistantBody.Html()
-			} else {
-				content, _ = article.Html()
-			}
-		default:
+		role, content := claudeMessageRoleContent(article)
+		if role == "" {
 			return
 		}
 
@@ -272,6 +249,34 @@ func (c *ClaudeExtractor) ExtractMessages() []ConversationMessage {
 
 	slog.Debug("Claude messages extracted", "messageCount", len(messages))
 	return messages
+}
+
+// claudeMessageRoleContent classifies a Claude article into its role ("you" or
+// "assistant") and HTML content, returning an empty role for articles to skip.
+func claudeMessageRoleContent(article *goquery.Selection) (role, content string) {
+	testid, hasTestid := article.Attr("data-testid")
+
+	switch {
+	case hasTestid:
+		// Only handle user messages via data-testid (TS skips assistant-message testid)
+		if testid != "user-message" {
+			// Skip non-user-message testid elements
+			return "", ""
+		}
+		content, _ = article.Html()
+		return "you", content
+	case article.HasClass("font-claude-response"):
+		// Claude's response identified by class
+		assistantBody := article.Find(".standard-markdown").First()
+		if assistantBody.Length() > 0 {
+			content, _ = assistantBody.Html()
+		} else {
+			content, _ = article.Html()
+		}
+		return "assistant", content
+	default:
+		return "", ""
+	}
 }
 
 // GetFootnotes returns the conversation footnotes
