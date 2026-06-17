@@ -385,15 +385,11 @@ func (c *ChatGPTExtractor) messageContentHTML(article *goquery.Selection, messag
 	for _, messageEl := range messageEls {
 		contentEls := c.messageContentElements(messageEl)
 		if len(contentEls) == 0 {
-			if htmlContent, err := goquery.OuterHtml(messageEl); err == nil && strings.TrimSpace(htmlContent) != "" {
-				parts = append(parts, htmlContent)
-			}
+			parts = appendOuterHTML(parts, messageEl)
 			continue
 		}
 		for _, contentEl := range contentEls {
-			if htmlContent, err := goquery.OuterHtml(contentEl); err == nil && strings.TrimSpace(htmlContent) != "" {
-				parts = append(parts, htmlContent)
-			}
+			parts = appendOuterHTML(parts, contentEl)
 		}
 	}
 
@@ -402,6 +398,14 @@ func (c *ChatGPTExtractor) messageContentHTML(article *goquery.Selection, messag
 		return htmlContent
 	}
 	return strings.Join(parts, "\n")
+}
+
+// appendOuterHTML appends sel's outer HTML to parts when it is non-empty.
+func appendOuterHTML(parts []string, sel *goquery.Selection) []string {
+	if htmlContent, err := goquery.OuterHtml(sel); err == nil && strings.TrimSpace(htmlContent) != "" {
+		parts = append(parts, htmlContent)
+	}
+	return parts
 }
 
 func (c *ChatGPTExtractor) messageContentElements(messageEl *goquery.Selection) []*goquery.Selection {
