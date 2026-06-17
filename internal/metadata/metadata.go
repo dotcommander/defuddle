@@ -123,8 +123,28 @@ type Metadata struct {
 //	  };
 //	}
 func Extract(doc *goquery.Document, schemaOrgData any, metaTags []MetaTag, baseURL string) *Metadata {
-	domain := ""
-	documentURL := baseURL
+	documentURL, domain := resolveDocumentURL(doc, schemaOrgData, metaTags, baseURL)
+
+	return &Metadata{
+		Title:         getTitle(doc, schemaOrgData, metaTags),
+		Description:   getDescription(doc, schemaOrgData, metaTags),
+		Domain:        domain,
+		Favicon:       getFavicon(doc, documentURL, metaTags),
+		Image:         getImage(doc, schemaOrgData, metaTags),
+		Language:      getLanguage(doc, schemaOrgData, metaTags),
+		Published:     getPublished(doc, schemaOrgData, metaTags),
+		Author:        getAuthor(doc, schemaOrgData, metaTags),
+		Site:          getSite(doc, schemaOrgData, metaTags),
+		SchemaOrgData: schemaOrgData,
+		WordCount:     0,
+		ParseTime:     0,
+	}
+}
+
+// resolveDocumentURL determines the document URL (from baseURL, meta/schema, a
+// canonical link, or a base tag) and the domain derived from it.
+func resolveDocumentURL(doc *goquery.Document, schemaOrgData any, metaTags []MetaTag, baseURL string) (documentURL, domain string) {
+	documentURL = baseURL
 
 	// If no base URL provided, try to extract from meta tags and canonical links
 	if documentURL == "" {
@@ -164,20 +184,7 @@ func Extract(doc *goquery.Document, schemaOrgData any, metaTags []MetaTag, baseU
 		}
 	}
 
-	return &Metadata{
-		Title:         getTitle(doc, schemaOrgData, metaTags),
-		Description:   getDescription(doc, schemaOrgData, metaTags),
-		Domain:        domain,
-		Favicon:       getFavicon(doc, documentURL, metaTags),
-		Image:         getImage(doc, schemaOrgData, metaTags),
-		Language:      getLanguage(doc, schemaOrgData, metaTags),
-		Published:     getPublished(doc, schemaOrgData, metaTags),
-		Author:        getAuthor(doc, schemaOrgData, metaTags),
-		Site:          getSite(doc, schemaOrgData, metaTags),
-		SchemaOrgData: schemaOrgData,
-		WordCount:     0,
-		ParseTime:     0,
-	}
+	return documentURL, domain
 }
 
 // getAuthor extracts author information
