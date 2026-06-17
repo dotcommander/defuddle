@@ -163,19 +163,7 @@ func (d *Defuddle) findTableBasedContent(doc *goquery.Document) *goquery.Selecti
 		if hasTableLayout {
 			return
 		}
-		width, exists := table.Attr("width")
-		if exists {
-			if w, err := strconv.Atoi(width); err == nil && w > 400 {
-				hasTableLayout = true
-				return
-			}
-		}
-		if align, _ := table.Attr("align"); strings.EqualFold(align, "center") {
-			hasTableLayout = true
-			return
-		}
-		cls := strings.ToLower(table.AttrOr("class", ""))
-		if strings.Contains(cls, "content") || strings.Contains(cls, "article") {
+		if isContentLayoutTable(table) {
 			hasTableLayout = true
 		}
 	})
@@ -200,6 +188,21 @@ func (d *Defuddle) findTableBasedContent(doc *goquery.Document) *goquery.Selecti
 		return bestElement
 	}
 	return nil
+}
+
+// isContentLayoutTable reports whether a table looks like an old-style content
+// layout (wide width, centered, or a content/article class).
+func isContentLayoutTable(table *goquery.Selection) bool {
+	if width, exists := table.Attr("width"); exists {
+		if w, err := strconv.Atoi(width); err == nil && w > 400 {
+			return true
+		}
+	}
+	if align, _ := table.Attr("align"); strings.EqualFold(align, "center") {
+		return true
+	}
+	cls := strings.ToLower(table.AttrOr("class", ""))
+	return strings.Contains(cls, "content") || strings.Contains(cls, "article")
 }
 
 // findContentByScoring finds content using scoring algorithm
