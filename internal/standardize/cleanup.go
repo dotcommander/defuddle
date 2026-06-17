@@ -75,81 +75,82 @@ var (
 //		logDebug('Stripped attributes:', attributeCount);
 //	}
 func stripUnwantedAttributes(element *goquery.Selection, debug bool) {
-	attributeCount := 0
-
-	processElement := func(el *goquery.Selection) {
-		if el.Length() == 0 {
-			return
-		}
-
-		node := el.Get(0)
-
-		// Skip SVG elements - preserve all their attributes
-		tagName := strings.ToLower(node.Data)
-		if tagName == "svg" || node.Namespace == "http://www.w3.org/2000/svg" {
-			return
-		}
-
-		// Get all attributes and process them
-		var attributesToRemove []string
-		for _, attr := range node.Attr {
-			attrName := strings.ToLower(attr.Key)
-			attrValue := attr.Val
-
-			// Special cases for preserving specific attributes
-			preserveAttribute := false
-
-			// Preserve footnote IDs
-			if attrName == "id" && (strings.HasPrefix(attrValue, "fnref:") || // Footnote reference
-				strings.HasPrefix(attrValue, "fn:") || // Footnote content
-				attrValue == "footnotes") { // Footnotes container
-				preserveAttribute = true
-			}
-
-			// Preserve code block language classes, footnote backref class, and callout classes
-			if attrName == "class" {
-				if (tagName == "code" && strings.HasPrefix(attrValue, "language-")) ||
-					attrValue == "footnote-backref" ||
-					hasCalloutClass(attrValue) {
-					preserveAttribute = true
-				}
-			}
-
-			if preserveAttribute {
-				continue
-			}
-
-			// In debug mode, allow debug attributes and data- attributes
-			if debug {
-				if !constants.IsAllowedAttribute(attrName) &&
-					!constants.IsAllowedAttributeDebug(attrName) &&
-					!strings.HasPrefix(attrName, "data-") {
-					attributesToRemove = append(attributesToRemove, attr.Key)
-					attributeCount++
-				}
-			} else {
-				// In normal mode, only allow standard attributes
-				if !constants.IsAllowedAttribute(attrName) {
-					attributesToRemove = append(attributesToRemove, attr.Key)
-					attributeCount++
-				}
-			}
-		}
-
-		// Remove unwanted attributes
-		for _, attrName := range attributesToRemove {
-			el.RemoveAttr(attrName)
-		}
-	}
-
-	processElement(element)
+	attributeCount := stripElementAttributes(element, debug)
 	element.Find("*").Each(func(_ int, el *goquery.Selection) {
-		processElement(el)
+		attributeCount += stripElementAttributes(el, debug)
 	})
 
 	if debug {
 		slog.Debug("Stripped attributes", "count", attributeCount)
 	}
+}
+
+// stripElementAttributes removes non-allowed attributes from el and returns the
+// count removed. It preserves footnote ids, code language / footnote-backref /
+// callout classes, plus (in debug mode) data- and debug attributes. SVG elements
+// keep all their attributes.
+func stripElementAttributes(el *goquery.Selection, debug bool) int {
+	if el.Length() == 0 {
+		return 0
+	}
+
+	node := el.Get(0)
+
+	// Skip SVG elements - preserve all their attributes
+	tagName := strings.ToLower(node.Data)
+	if tagName == "svg" || node.Namespace == "http://www.w3.org/2000/svg" {
+		return 0
+	}
+
+	// Get all attributes and process them
+	var attributesToRemove []string
+	for _, attr := range node.Attr {
+		attrName := strings.ToLower(attr.Key)
+		attrValue := attr.Val
+
+		// Special cases for preserving specific attributes
+		preserveAttribute := false
+
+		// Preserve footnote IDs
+		if attrName == "id" && (strings.HasPrefix(attrValue, "fnref:") || // Footnote reference
+			strings.HasPrefix(attrValue, "fn:") || // Footnote content
+			attrValue == "footnotes") { // Footnotes container
+			preserveAttribute = true
+		}
+
+		// Preserve code block language classes, footnote backref class, and callout classes
+		if attrName == "class" {
+			if (tagName == "code" && strings.HasPrefix(attrValue, "language-")) ||
+				attrValue == "footnote-backref" ||
+				hasCalloutClass(attrValue) {
+				preserveAttribute = true
+			}
+		}
+
+		if preserveAttribute {
+			continue
+		}
+
+		// In debug mode, allow debug attributes and data- attributes
+		if debug {
+			if !constants.IsAllowedAttribute(attrName) &&
+				!constants.IsAllowedAttributeDebug(attrName) &&
+				!strings.HasPrefix(attrName, "data-") {
+				attributesToRemove = append(attributesToRemove, attr.Key)
+			}
+		} else {
+			// In normal mode, only allow standard attributes
+			if !constants.IsAllowedAttribute(attrName) {
+				attributesToRemove = append(attributesToRemove, attr.Key)
+			}
+		}
+	}
+
+	// Remove unwanted attributes
+	for _, attrName := range attributesToRemove {
+		el.RemoveAttr(attrName)
+	}
+	return len(attributesToRemove)
 }
 
 // removeEmptyElements removes empty elements that don't contribute content
