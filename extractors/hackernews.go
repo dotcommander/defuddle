@@ -287,46 +287,7 @@ func (h *HackerNewsExtractor) getPostContent() string {
 
 	// If this is a comment page, use the comment as the main content
 	if h.isCommentPage && h.mainComment != nil && h.mainComment.Length() > 0 {
-		author := h.mainComment.Find(".hnuser").Text()
-		if author == "" {
-			author = "[deleted]"
-		}
-
-		commentText, _ := h.mainComment.Find(".commtext").Html()
-
-		timeElement := h.mainComment.Find(".age")
-		timestamp, _ := timeElement.Attr("title")
-		date := ""
-		if timestamp != "" {
-			parts := strings.Split(timestamp, "T")
-			if len(parts) > 0 {
-				date = parts[0]
-			}
-		}
-
-		points := strings.TrimSpace(h.mainComment.Find(".score").Text())
-		parentURL, _ := h.mainPost.Find(`.navs a[href*="parent"]`).Attr("href")
-
-		var content strings.Builder
-		content.WriteString(`<div class="comment main-comment">`)
-		content.WriteString(`<div class="comment-metadata">`)
-		fmt.Fprintf(&content, `<span class="comment-author"><strong>%s</strong></span> •`, author)
-		fmt.Fprintf(&content, ` <span class="comment-date">%s</span>`, date)
-
-		if points != "" {
-			fmt.Fprintf(&content, ` • <span class="comment-points">%s</span>`, points)
-		}
-
-		if parentURL != "" {
-			fmt.Fprintf(&content, ` • <a href="https://news.ycombinator.com/%s" class="parent-link">parent</a>`, parentURL)
-		}
-
-		content.WriteString(`</div>`)
-		fmt.Fprintf(&content, `<div class="comment-content">%s</div>`, commentText)
-		content.WriteString(`</div>`)
-
-		slog.Debug("HackerNews extractor: extracted comment page content", "author", author, "hasPoints", points != "", "hasParentURL", parentURL != "")
-		return content.String()
+		return h.commentPageContent()
 	}
 
 	// Otherwise handle regular post content
@@ -345,6 +306,51 @@ func (h *HackerNewsExtractor) getPostContent() string {
 	}
 
 	slog.Debug("HackerNews extractor: extracted regular post content", "hasUrl", url != "", "hasText", text.Length() > 0)
+	return content.String()
+}
+
+// commentPageContent renders the main comment as the post content for a
+// HackerNews comment page.
+func (h *HackerNewsExtractor) commentPageContent() string {
+	author := h.mainComment.Find(".hnuser").Text()
+	if author == "" {
+		author = "[deleted]"
+	}
+
+	commentText, _ := h.mainComment.Find(".commtext").Html()
+
+	timeElement := h.mainComment.Find(".age")
+	timestamp, _ := timeElement.Attr("title")
+	date := ""
+	if timestamp != "" {
+		parts := strings.Split(timestamp, "T")
+		if len(parts) > 0 {
+			date = parts[0]
+		}
+	}
+
+	points := strings.TrimSpace(h.mainComment.Find(".score").Text())
+	parentURL, _ := h.mainPost.Find(`.navs a[href*="parent"]`).Attr("href")
+
+	var content strings.Builder
+	content.WriteString(`<div class="comment main-comment">`)
+	content.WriteString(`<div class="comment-metadata">`)
+	fmt.Fprintf(&content, `<span class="comment-author"><strong>%s</strong></span> •`, author)
+	fmt.Fprintf(&content, ` <span class="comment-date">%s</span>`, date)
+
+	if points != "" {
+		fmt.Fprintf(&content, ` • <span class="comment-points">%s</span>`, points)
+	}
+
+	if parentURL != "" {
+		fmt.Fprintf(&content, ` • <a href="https://news.ycombinator.com/%s" class="parent-link">parent</a>`, parentURL)
+	}
+
+	content.WriteString(`</div>`)
+	fmt.Fprintf(&content, `<div class="comment-content">%s</div>`, commentText)
+	content.WriteString(`</div>`)
+
+	slog.Debug("HackerNews extractor: extracted comment page content", "author", author, "hasPoints", points != "", "hasParentURL", parentURL != "")
 	return content.String()
 }
 
