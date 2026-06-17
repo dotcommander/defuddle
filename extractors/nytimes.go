@@ -119,6 +119,13 @@ func (e *NytimesExtractor) extractPreloadData(doc *goquery.Document) *nytArticle
 
 // renderBlocks converts the NYT block sequence to an HTML string.
 // Mirrors the upstream TS renderBlocks() method.
+// nytHeadingTags maps NYT heading block typenames to their HTML heading tags.
+var nytHeadingTags = map[string]string{
+	"Heading2Block": "h2",
+	"Heading3Block": "h3",
+	"Heading4Block": "h4",
+}
+
 func (e *NytimesExtractor) renderBlocks(blocks []json.RawMessage) string {
 	var parts []string
 	for _, raw := range blocks {
@@ -132,20 +139,11 @@ func (e *NytimesExtractor) renderBlocks(blocks []json.RawMessage) string {
 			if err := json.Unmarshal(raw, &b); err == nil {
 				parts = append(parts, fmt.Sprintf("<p>%s</p>", e.renderInlines(b.Content)))
 			}
-		case "Heading2Block":
+		case "Heading2Block", "Heading3Block", "Heading4Block":
 			var b nytHeadingBlock
 			if err := json.Unmarshal(raw, &b); err == nil {
-				parts = append(parts, fmt.Sprintf("<h2>%s</h2>", e.renderInlines(b.Content)))
-			}
-		case "Heading3Block":
-			var b nytHeadingBlock
-			if err := json.Unmarshal(raw, &b); err == nil {
-				parts = append(parts, fmt.Sprintf("<h3>%s</h3>", e.renderInlines(b.Content)))
-			}
-		case "Heading4Block":
-			var b nytHeadingBlock
-			if err := json.Unmarshal(raw, &b); err == nil {
-				parts = append(parts, fmt.Sprintf("<h4>%s</h4>", e.renderInlines(b.Content)))
+				tag := nytHeadingTags[base.Typename]
+				parts = append(parts, fmt.Sprintf("<%s>%s</%s>", tag, e.renderInlines(b.Content), tag))
 			}
 		case "ImageBlock":
 			if imgHTML := e.renderImageBlock(raw); imgHTML != "" {
