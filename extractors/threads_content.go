@@ -180,24 +180,7 @@ func (e *ThreadsExtractor) extractQuotedPost(container *goquery.Selection) strin
 		username := e.getUsername(nested)
 		date := e.getDate(nested)
 
-		var contentParts []string
-		nested.Find(`span[dir="auto"]`).Each(func(_ int, span *goquery.Selection) {
-			if span.Closest(`[role="button"], time`).Length() > 0 {
-				return
-			}
-			link := span.Closest(`a[href^="/@"]`)
-			if link.Length() > 0 && !strings.Contains(link.AttrOr("href", ""), "/post/") {
-				return
-			}
-			text := strings.TrimSpace(span.Text())
-			if text == "" || text == "·" || text == "Author" {
-				return
-			}
-			if threadsThreadNumberRe.MatchString(text) {
-				return
-			}
-			contentParts = append(contentParts, fmt.Sprintf("<p>%s</p>", html.EscapeString(text)))
-		})
+		contentParts := quotedPostParagraphs(nested)
 
 		author := ""
 		if username != "" {
@@ -227,6 +210,30 @@ func (e *ThreadsExtractor) extractQuotedPost(container *goquery.Selection) strin
 		return false
 	})
 	return result
+}
+
+// quotedPostParagraphs collects content paragraphs from a quoted post's spans,
+// skipping buttons, timestamps, non-post author links, and noise tokens.
+func quotedPostParagraphs(nested *goquery.Selection) []string {
+	var contentParts []string
+	nested.Find(`span[dir="auto"]`).Each(func(_ int, span *goquery.Selection) {
+		if span.Closest(`[role="button"], time`).Length() > 0 {
+			return
+		}
+		link := span.Closest(`a[href^="/@"]`)
+		if link.Length() > 0 && !strings.Contains(link.AttrOr("href", ""), "/post/") {
+			return
+		}
+		text := strings.TrimSpace(span.Text())
+		if text == "" || text == "·" || text == "Author" {
+			return
+		}
+		if threadsThreadNumberRe.MatchString(text) {
+			return
+		}
+		contentParts = append(contentParts, fmt.Sprintf("<p>%s</p>", html.EscapeString(text)))
+	})
+	return contentParts
 }
 
 // getUsername resolves the author handle from /@username links inside a container.
