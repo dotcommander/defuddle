@@ -1050,35 +1050,39 @@ func walkChildren(n *html.Node, fn func(*html.Node) bool) {
 // getBestImageSrc parses srcset to find the highest-resolution image URL.
 // Falls back to src. Handles CDN URLs with commas (e.g. Substack).
 func getBestImageSrc(n *html.Node) string {
-	srcset := getAttr(n, "srcset")
-	if srcset != "" {
-		var bestURL string
-		var bestWidth int
-		tokens := strings.Fields(strings.TrimSpace(srcset))
-		var urlParts []string
-
-		for _, token := range tokens {
-			if m := widthDescriptorRe.FindStringSubmatch(token); m != nil {
-				width := 0
-				fmt.Sscanf(m[1], "%d", &width)
-				if len(urlParts) > 0 && width > bestWidth {
-					u := strings.TrimLeft(strings.Join(urlParts, " "), ", ")
-					if u != "" {
-						bestWidth = width
-						bestURL = u
-					}
-				}
-				urlParts = nil
-			} else if densityDescriptorRe.MatchString(token) {
-				// Density descriptor (e.g. 2x) — skip
-				urlParts = nil
-			} else {
-				urlParts = append(urlParts, token)
-			}
-		}
-		if bestURL != "" {
-			return bestURL
+	if srcset := getAttr(n, "srcset"); srcset != "" {
+		if best := bestSrcsetURL(srcset); best != "" {
+			return best
 		}
 	}
 	return getAttr(n, "src")
+}
+
+// bestSrcsetURL returns the URL with the largest width descriptor in a srcset,
+// or "" if none can be parsed.
+func bestSrcsetURL(srcset string) string {
+	var bestURL string
+	var bestWidth int
+	var urlParts []string
+
+	for _, token := range strings.Fields(strings.TrimSpace(srcset)) {
+		if m := widthDescriptorRe.FindStringSubmatch(token); m != nil {
+			width := 0
+			fmt.Sscanf(m[1], "%d", &width)
+			if len(urlParts) > 0 && width > bestWidth {
+				u := strings.TrimLeft(strings.Join(urlParts, " "), ", ")
+				if u != "" {
+					bestWidth = width
+					bestURL = u
+				}
+			}
+			urlParts = nil
+		} else if densityDescriptorRe.MatchString(token) {
+			// Density descriptor (e.g. 2x) — skip
+			urlParts = nil
+		} else {
+			urlParts = append(urlParts, token)
+		}
+	}
+	return bestURL
 }
