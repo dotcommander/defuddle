@@ -445,6 +445,25 @@ func (t *TwitterExtractor) formatTweetText(text string) string {
 //		result += '</div>';
 //		return result.trim();
 //	}
+//
+// quotedTweetContent returns the rendered content of tweet's quoted tweet, or "".
+func (t *TwitterExtractor) quotedTweetContent(tweet *goquery.Selection) string {
+	quotedTweet := tweet.Find(`[aria-labelledby*="id__"]`).First()
+	if quotedTweet.Length() == 0 {
+		return ""
+	}
+	quotedUserName := quotedTweet.Find(`[data-testid="User-Name"]`).First()
+	if quotedUserName.Length() == 0 {
+		return ""
+	}
+	// Find the closest parent with aria-labelledby
+	quotedTweetContainer := quotedUserName.Closest(`[aria-labelledby*="id__"]`)
+	if quotedTweetContainer.Length() == 0 {
+		return ""
+	}
+	return t.extractTweet(quotedTweetContainer)
+}
+
 func (t *TwitterExtractor) extractTweet(tweet *goquery.Selection) string {
 	if tweet == nil || tweet.Length() == 0 {
 		return ""
@@ -462,18 +481,7 @@ func (t *TwitterExtractor) extractTweet(tweet *goquery.Selection) string {
 	userInfo := t.extractUserInfo(tweet)
 
 	// Extract quoted tweet if present
-	quotedTweet := tweet.Find(`[aria-labelledby*="id__"]`).First()
-	var quotedContent string
-	if quotedTweet.Length() > 0 {
-		quotedUserName := quotedTweet.Find(`[data-testid="User-Name"]`).First()
-		if quotedUserName.Length() > 0 {
-			// Find the closest parent with aria-labelledby
-			quotedTweetContainer := quotedUserName.Closest(`[aria-labelledby*="id__"]`)
-			if quotedTweetContainer.Length() > 0 {
-				quotedContent = t.extractTweet(quotedTweetContainer)
-			}
-		}
-	}
+	quotedContent := t.quotedTweetContent(tweet)
 
 	var result strings.Builder
 	result.WriteString(`<div class="tweet">`)
