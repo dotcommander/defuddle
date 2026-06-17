@@ -256,60 +256,74 @@ func (g *GeminiExtractor) ExtractMessages() []ConversationMessage {
 	g.extractSources()
 
 	g.conversationContainers.Each(func(_ int, container *goquery.Selection) {
-		// Handle user query
-		userQuery := container.Find("user-query").First()
-		if userQuery.Length() > 0 {
-			queryText := userQuery.Find(".query-text").First()
-			if queryText.Length() > 0 {
-				content, _ := queryText.Html()
-				if strings.TrimSpace(content) != "" {
-					messages = append(messages, ConversationMessage{
-						Author:  "You",
-						Content: strings.TrimSpace(content),
-						Metadata: map[string]any{
-							"role": "user",
-						},
-					})
-				}
-			}
+		if msg := geminiUserMessage(container); msg != nil {
+			messages = append(messages, *msg)
 		}
-
-		// Handle model response
-		modelResponse := container.Find("model-response").First()
-		if modelResponse.Length() > 0 {
-			// Try extended content first, then regular content
-			extendedContent := modelResponse.Find("#extended-response-markdown-content").First()
-			regularContent := modelResponse.Find(".model-response-text .markdown").First()
-
-			var contentElement *goquery.Selection
-			if extendedContent.Length() > 0 {
-				contentElement = extendedContent
-			} else {
-				contentElement = regularContent
-			}
-
-			if contentElement.Length() > 0 {
-				content, _ := contentElement.Html()
-				if strings.TrimSpace(content) != "" {
-					// Clean up content - remove table-content class but keep the content
-					// `table-content` is a PARTIAL selector in defuddle (table of contents, will be removed), but a real table in Gemini (should be kept).
-					cleanedContent := g.cleanGeminiContent(content)
-
-					messages = append(messages, ConversationMessage{
-						Author:  "Gemini",
-						Content: strings.TrimSpace(cleanedContent),
-						Metadata: map[string]any{
-							"role": "assistant",
-						},
-					})
-				}
-			}
+		if msg := g.geminiModelMessage(container); msg != nil {
+			messages = append(messages, *msg)
 		}
 	})
 
 	*g.messageCount = len(messages)
 	slog.Debug("Gemini messages extracted", "messageCount", len(messages), "footnoteCount", len(g.footnotes))
 	return messages
+}
+
+// geminiUserMessage extracts the user-query message from a conversation container,
+// or nil when absent or empty.
+func geminiUserMessage(container *goquery.Selection) *ConversationMessage {
+	userQuery := container.Find("user-query").First()
+	if userQuery.Length() == 0 {
+		return nil
+	}
+	queryText := userQuery.Find(".query-text").First()
+	if queryText.Length() == 0 {
+		return nil
+	}
+	content, _ := queryText.Html()
+	if strings.TrimSpace(content) == "" {
+		return nil
+	}
+	return &ConversationMessage{
+		Author:  "You",
+		Content: strings.TrimSpace(content),
+		Metadata: map[string]any{
+			"role": "user",
+		},
+	}
+}
+
+// geminiModelMessage extracts the model-response message from a conversation
+// container (preferring extended content over regular), or nil when absent or empty.
+func (g *GeminiExtractor) geminiModelMessage(container *goquery.Selection) *ConversationMessage {
+	modelResponse := container.Find("model-response").First()
+	if modelResponse.Length() == 0 {
+		return nil
+	}
+	// Try extended content first, then regular content
+	extendedContent := modelResponse.Find("#extended-response-markdown-content").First()
+	regularContent := modelResponse.Find(".model-response-text .markdown").First()
+	contentElement := regularContent
+	if extendedContent.Length() > 0 {
+		contentElement = extendedContent
+	}
+	if contentElement.Length() == 0 {
+		return nil
+	}
+	content, _ := contentElement.Html()
+	if strings.TrimSpace(content) == "" {
+		return nil
+	}
+	// Clean up content - remove table-content class but keep the content
+	// `table-content` is a PARTIAL selector in defuddle (table of contents, will be removed), but a real table in Gemini (should be kept).
+	cleanedContent := g.cleanGeminiContent(content)
+	return &ConversationMessage{
+		Author:  "Gemini",
+		Content: strings.TrimSpace(cleanedContent),
+		Metadata: map[string]any{
+			"role": "assistant",
+		},
+	}
 }
 
 // cleanGeminiContent cleans up Gemini response content
