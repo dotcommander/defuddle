@@ -2,6 +2,7 @@ package extractors
 
 import (
 	"fmt"
+	"log/slog"
 	"regexp"
 	"strconv"
 	"strings"
@@ -312,4 +313,12 @@ func conversationMetadata(site, title, url string, messageCount int) Conversatio
 		MessageCount: messageCount,
 		Description:  fmt.Sprintf("%s conversation with %d messages", site, messageCount),
 	}
+}
+
+// canExtractFromSelection reports whether sel is non-empty (the conversation
+// extractors' shared CanExtract test) and logs the decision under countLabel.
+func canExtractFromSelection(sel *goquery.Selection, site, countLabel string) bool {
+	canExtract := sel.Length() > 0
+	slog.Debug(site+" extractor can extract check", "canExtract", canExtract, countLabel, sel.Length())
+	return canExtract
 }

@@ -97,9 +97,7 @@ func NewGrokExtractor(document *goquery.Document, urlStr string, schemaOrgData a
 //		return !!this.messageBubbles && this.messageBubbles.length > 0;
 //	}
 func (g *GrokExtractor) CanExtract() bool {
-	canExtract := g.messageBubbles.Length() > 0
-	slog.Debug("Grok extractor can extract check", "canExtract", canExtract, "messageBubblesCount", g.messageBubbles.Length())
-	return canExtract
+	return canExtractFromSelection(g.messageBubbles, "Grok", "messageBubblesCount")
 }
 
 // Name returns the name of the extractor

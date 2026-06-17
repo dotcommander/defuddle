@@ -173,9 +173,7 @@ func NewGeminiExtractor(document *goquery.Document, urlStr string, schemaOrgData
 //		return !!this.conversationContainers && this.conversationContainers.length > 0;
 //	}
 func (g *GeminiExtractor) CanExtract() bool {
-	canExtract := g.conversationContainers.Length() > 0
-	slog.Debug("Gemini extractor can extract check", "canExtract", canExtract, "containersCount", g.conversationContainers.Length())
-	return canExtract
+	return canExtractFromSelection(g.conversationContainers, "Gemini", "containersCount")
 }
 
 // Name returns the name of the extractor

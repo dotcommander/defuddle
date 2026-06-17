@@ -211,9 +211,7 @@ func NewChatGPTExtractor(document *goquery.Document, urlStr string, schemaOrgDat
 //		return !!this.articles && this.articles.length > 0;
 //	}
 func (c *ChatGPTExtractor) CanExtract() bool {
-	canExtract := c.articles.Length() > 0
-	slog.Debug("ChatGPT extractor can extract check", "canExtract", canExtract, "articlesCount", c.articles.Length())
-	return canExtract
+	return canExtractFromSelection(c.articles, "ChatGPT", "articlesCount")
 }
 
 // Name returns the name of the extractor

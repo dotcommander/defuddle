@@ -150,9 +150,7 @@ func NewClaudeExtractor(document *goquery.Document, urlStr string, schemaOrgData
 //		return !!this.articles && this.articles.length > 0;
 //	}
 func (c *ClaudeExtractor) CanExtract() bool {
-	canExtract := c.articles.Length() > 0
-	slog.Debug("Claude extractor can extract check", "canExtract", canExtract, "articlesCount", c.articles.Length())
-	return canExtract
+	return canExtractFromSelection(c.articles, "Claude", "articlesCount")
 }
 
 // Name returns the name of the extractor
