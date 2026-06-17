@@ -104,16 +104,24 @@ func (d *Defuddle) findMainContent(doc *goquery.Document) *goquery.Selection {
 		}
 	}
 
-	// If the top candidate contains a child candidate that matched a
-	// higher-priority selector (lower index), prefer the more specific child.
-	// This prevents e.g. <main> from winning over a contained <article>
-	// just because sibling noise inflates the parent's content score.
-	top := candidates[0]
-	best := top
+	best := preferSpecificChild(candidates)
 
+	if d.debug {
+		tag := goquery.NodeName(best.element)
+		slog.Debug("Selected main content", "tag", tag, "score", best.score)
+	}
+
+	return best.element
+}
+
+// preferSpecificChild returns the highest-scoring candidate, descending to a
+// contained child candidate that matched a higher-priority (lower-index) selector
+// and has substantial text (>50 words) so a contained <article> can win over its
+// <main> parent. The descent is skipped on listing pages (top candidate has 3+ articles).
+func preferSpecificChild(candidates []contentCandidate) contentCandidate {
+	best := candidates[0]
 	// Don't descend into child on listing pages (multiple articles)
-	articleCount := top.element.Find("article").Length()
-	if articleCount < 3 {
+	if best.element.Find("article").Length() < 3 {
 		for i := 1; i < len(candidates); i++ {
 			child := candidates[i]
 			childText := strings.TrimSpace(child.element.Text())
@@ -123,13 +131,7 @@ func (d *Defuddle) findMainContent(doc *goquery.Document) *goquery.Selection {
 			}
 		}
 	}
-
-	if d.debug {
-		tag := goquery.NodeName(best.element)
-		slog.Debug("Selected main content", "tag", tag, "score", best.score)
-	}
-
-	return best.element
+	return best
 }
 
 // findTableBasedContent finds content in table-based layouts
