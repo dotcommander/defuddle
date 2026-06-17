@@ -269,16 +269,20 @@ func (g *GitHubExtractor) appendIssueComments(content *strings.Builder) {
 func (g *GitHubExtractor) extractAuthor(container *goquery.Selection, selectors []string) string {
 	for _, selector := range selectors {
 		authorLink := container.Find(selector).First()
-		if authorLink.Length() > 0 {
-			if href, exists := authorLink.Attr("href"); exists {
-				if strings.HasPrefix(href, "/") {
-					return href[1:]
-				} else if strings.Contains(href, "github.com/") {
-					matches := githubUserRe.FindStringSubmatch(href)
-					if len(matches) > 1 && matches[1] != "" {
-						return matches[1]
-					}
-				}
+		if authorLink.Length() == 0 {
+			continue
+		}
+		href, exists := authorLink.Attr("href")
+		if !exists {
+			continue
+		}
+		if strings.HasPrefix(href, "/") {
+			return href[1:]
+		}
+		if strings.Contains(href, "github.com/") {
+			matches := githubUserRe.FindStringSubmatch(href)
+			if len(matches) > 1 && matches[1] != "" {
+				return matches[1]
 			}
 		}
 	}
