@@ -124,60 +124,66 @@ func (p *ImageProcessor) ProcessImages(options *ImageProcessingOptions) {
 // <source> and applying its srcset to the <img>, then removing sources.
 func (p *ImageProcessor) transformPictures(scope *goquery.Selection) {
 	scope.Find("picture").Each(func(_ int, el *goquery.Selection) {
-		// Collect source elements
-		var sources []*goquery.Selection
-		el.Find("source").Each(func(_ int, src *goquery.Selection) {
-			sources = append(sources, src)
-		})
-
-		img := el.Find("img").First()
-
-		if img.Length() == 0 {
-			// No img fallback — try to create one from best source
-			best := selectBestSource(sources)
-			if best != nil {
-				if srcset, ok := best.Attr("srcset"); ok && srcset != "" {
-					firstURL := extractFirstURLFromSrcset(srcset)
-					if firstURL != "" && isValidImageURL(firstURL) {
-						el.SetHtml(`<img src="` + firstURL + `" srcset="` + srcset + `"/>`)
-					}
-				}
-			}
-			return
-		}
-
-		var bestSrcset, bestSrc string
-		if len(sources) > 0 {
-			best := selectBestSource(sources)
-			if best != nil {
-				if srcset, ok := best.Attr("srcset"); ok && srcset != "" {
-					bestSrcset = srcset
-					bestSrc = extractFirstURLFromSrcset(bestSrcset)
-				}
-			}
-		}
-
-		if bestSrcset != "" {
-			img.SetAttr("srcset", bestSrcset)
-		}
-		if bestSrc != "" && isValidImageURL(bestSrc) {
-			img.SetAttr("src", bestSrc)
-		} else {
-			currentSrc := img.AttrOr("src", "")
-			if currentSrc == "" || !isValidImageURL(currentSrc) {
-				// Try extracting from img's own srcset or bestSrcset
-				imgSrcset := img.AttrOr("srcset", bestSrcset)
-				if firstURL := extractFirstURLFromSrcset(imgSrcset); firstURL != "" && isValidImageURL(firstURL) {
-					img.SetAttr("src", firstURL)
-				}
-			}
-		}
-
-		// Remove all source elements
-		for _, src := range sources {
-			src.Remove()
-		}
+		transformPicture(el)
 	})
+}
+
+// transformPicture rewrites one <picture> element: it promotes the best <source>
+// srcset/src onto the fallback <img> (creating one if absent) and drops the sources.
+func transformPicture(el *goquery.Selection) {
+	// Collect source elements
+	var sources []*goquery.Selection
+	el.Find("source").Each(func(_ int, src *goquery.Selection) {
+		sources = append(sources, src)
+	})
+
+	img := el.Find("img").First()
+
+	if img.Length() == 0 {
+		// No img fallback — try to create one from best source
+		best := selectBestSource(sources)
+		if best != nil {
+			if srcset, ok := best.Attr("srcset"); ok && srcset != "" {
+				firstURL := extractFirstURLFromSrcset(srcset)
+				if firstURL != "" && isValidImageURL(firstURL) {
+					el.SetHtml(`<img src="` + firstURL + `" srcset="` + srcset + `"/>`)
+				}
+			}
+		}
+		return
+	}
+
+	var bestSrcset, bestSrc string
+	if len(sources) > 0 {
+		best := selectBestSource(sources)
+		if best != nil {
+			if srcset, ok := best.Attr("srcset"); ok && srcset != "" {
+				bestSrcset = srcset
+				bestSrc = extractFirstURLFromSrcset(bestSrcset)
+			}
+		}
+	}
+
+	if bestSrcset != "" {
+		img.SetAttr("srcset", bestSrcset)
+	}
+	if bestSrc != "" && isValidImageURL(bestSrc) {
+		img.SetAttr("src", bestSrc)
+	} else {
+		currentSrc := img.AttrOr("src", "")
+		if currentSrc == "" || !isValidImageURL(currentSrc) {
+			// Try extracting from img's own srcset or bestSrcset
+			imgSrcset := img.AttrOr("srcset", bestSrcset)
+			if firstURL := extractFirstURLFromSrcset(imgSrcset); firstURL != "" && isValidImageURL(firstURL) {
+				img.SetAttr("src", firstURL)
+			}
+		}
+	}
+
+	// Remove all source elements
+	for _, src := range sources {
+		src.Remove()
+	}
 }
 
 // --- Transform 2: uni-image-full-width → figure ---
