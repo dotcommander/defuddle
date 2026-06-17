@@ -689,21 +689,30 @@ func (t *TwitterExtractor) extractImages(tweet *goquery.Selection) []string {
 				}
 			}
 
-			if goquery.NodeName(img) == "img" {
-				if src, exists := img.Attr("src"); exists {
-					// Improve image quality
-					highQualitySrc := twitterImageNameRe.ReplaceAllString(src, "&name=large")
-
-					alt := img.AttrOr("alt", "")
-					cleanAlt := strings.TrimSpace(whitespaceRe.ReplaceAllString(alt, " "))
-
-					images = append(images, fmt.Sprintf(`<img src="%s" alt="%s" />`, highQualitySrc, cleanAlt))
-				}
+			if h := tweetImageHTML(img); h != "" {
+				images = append(images, h)
 			}
 		})
 	}
 
 	return images
+}
+
+// tweetImageHTML returns the high-quality <img> HTML for an img selection
+// (forcing &name=large and cleaning the alt text), or "" if it is not an img
+// element or has no src.
+func tweetImageHTML(img *goquery.Selection) string {
+	if goquery.NodeName(img) != "img" {
+		return ""
+	}
+	src, exists := img.Attr("src")
+	if !exists {
+		return ""
+	}
+	// Improve image quality
+	highQualitySrc := twitterImageNameRe.ReplaceAllString(src, "&name=large")
+	cleanAlt := strings.TrimSpace(whitespaceRe.ReplaceAllString(img.AttrOr("alt", ""), " "))
+	return fmt.Sprintf(`<img src="%s" alt="%s" />`, highQualitySrc, cleanAlt)
 }
 
 // getTweetID extracts the tweet ID from the URL
