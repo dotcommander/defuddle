@@ -155,13 +155,7 @@ func (g *GitHubExtractor) extractIssue() *ExtractorResult {
 			`a[aria-label*="profile"]`,
 		})
 
-		issueTimeElement := issueContainer.Find("relative-time").First()
-		issueTimestamp := ""
-		if issueTimeElement.Length() > 0 {
-			if datetime, exists := issueTimeElement.Attr("datetime"); exists {
-				issueTimestamp = datetime
-			}
-		}
+		issueTimestamp := relativeTimeDatetime(issueContainer)
 
 		issueBodyElement := issueContainer.Find(`[data-testid="issue-body-viewer"] .markdown-body`).First()
 		if issueBodyElement.Length() > 0 {
@@ -201,13 +195,7 @@ func (g *GitHubExtractor) extractIssue() *ExtractorResult {
 			`a[href^="/"][data-hovercard-url*="/users/"]`,
 		})
 
-		timeElement := commentContainer.Find("relative-time").First()
-		timestamp := ""
-		if timeElement.Length() > 0 {
-			if datetime, exists := timeElement.Attr("datetime"); exists {
-				timestamp = datetime
-			}
-		}
+		timestamp := relativeTimeDatetime(commentContainer)
 
 		bodyElement := commentContainer.Find(".markdown-body").First()
 		if bodyElement.Length() > 0 {
@@ -428,4 +416,14 @@ func (g *GitHubExtractor) createDescription(content string) string {
 
 	slog.Debug("GitHub extractor: created description", "descriptionLength", len(text))
 	return text
+}
+
+// relativeTimeDatetime returns the datetime attribute of the first <relative-time>
+// element within sel, or "" if absent.
+func relativeTimeDatetime(sel *goquery.Selection) string {
+	el := sel.Find("relative-time").First()
+	if el.Length() == 0 {
+		return ""
+	}
+	return el.AttrOr("datetime", "")
 }
