@@ -141,27 +141,15 @@ func transformPicture(el *goquery.Selection) {
 
 	if img.Length() == 0 {
 		// No img fallback — try to create one from best source
-		best := selectBestSource(sources)
-		if best != nil {
-			if srcset, ok := best.Attr("srcset"); ok && srcset != "" {
-				firstURL := extractFirstURLFromSrcset(srcset)
-				if firstURL != "" && isValidImageURL(firstURL) {
-					el.SetHtml(`<img src="` + firstURL + `" srcset="` + srcset + `"/>`)
-				}
-			}
+		if srcset, firstURL := bestSourceSrcset(sources); firstURL != "" && isValidImageURL(firstURL) {
+			el.SetHtml(`<img src="` + firstURL + `" srcset="` + srcset + `"/>`)
 		}
 		return
 	}
 
 	var bestSrcset, bestSrc string
 	if len(sources) > 0 {
-		best := selectBestSource(sources)
-		if best != nil {
-			if srcset, ok := best.Attr("srcset"); ok && srcset != "" {
-				bestSrcset = srcset
-				bestSrc = extractFirstURLFromSrcset(bestSrcset)
-			}
-		}
+		bestSrcset, bestSrc = bestSourceSrcset(sources)
 	}
 
 	if bestSrcset != "" {
@@ -184,6 +172,19 @@ func transformPicture(el *goquery.Selection) {
 	for _, src := range sources {
 		src.Remove()
 	}
+}
+
+// bestSourceSrcset returns the srcset of the best <source> in sources and the
+// first URL within it, or empty strings if there is no usable source.
+func bestSourceSrcset(sources []*goquery.Selection) (srcset, firstURL string) {
+	best := selectBestSource(sources)
+	if best == nil {
+		return "", ""
+	}
+	if s, ok := best.Attr("srcset"); ok && s != "" {
+		return s, extractFirstURLFromSrcset(s)
+	}
+	return "", ""
 }
 
 // --- Transform 2: uni-image-full-width → figure ---
