@@ -212,14 +212,9 @@ func (y *YouTubeExtractor) getVideoDataFromSchema(schemaOrgData any) map[string]
 	// Handle both single object and array of objects
 	switch data := schemaOrgData.(type) {
 	case []any:
-		// Find VideoObject in array
-		for _, item := range data {
-			if itemMap, ok := item.(map[string]any); ok {
-				if itemType, exists := itemMap["@type"]; exists && itemType == "VideoObject" {
-					slog.Debug("YouTube extractor: found VideoObject in array", "hasVideoData", true)
-					return itemMap
-				}
-			}
+		if obj := videoObjectFromArray(data); obj != nil {
+			slog.Debug("YouTube extractor: found VideoObject in array", "hasVideoData", true)
+			return obj
 		}
 		slog.Debug("YouTube extractor: no VideoObject found in schema.org array")
 	case map[string]any:
@@ -236,6 +231,20 @@ func (y *YouTubeExtractor) getVideoDataFromSchema(schemaOrgData any) map[string]
 	}
 
 	return make(map[string]any)
+}
+
+// videoObjectFromArray returns the first VideoObject map in data, or nil.
+func videoObjectFromArray(data []any) map[string]any {
+	for _, item := range data {
+		itemMap, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if itemType, exists := itemMap["@type"]; exists && itemType == "VideoObject" {
+			return itemMap
+		}
+	}
+	return nil
 }
 
 func (y *YouTubeExtractor) getVideoDataFromLDJSONScripts() map[string]any {
