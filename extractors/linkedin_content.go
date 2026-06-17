@@ -68,8 +68,27 @@ func (e *LinkedInExtractor) cleanTextContent(el *goquery.Selection) string {
 	// Strip screen-reader-only spans and see-more toggles.
 	clone.Find(".visually-hidden, .feed-shared-inline-show-more-text__see-more-less-toggle").Remove()
 
-	// Simplify links: keep href+text, drop all LinkedIn tracking attributes.
-	clone.Find("a").Each(func(_ int, link *goquery.Selection) {
+	simplifyLinkedInLinks(clone)
+
+	rawHTML, _ := clone.Html()
+	rawHTML = linkedinHTMLCommentRe.ReplaceAllString(rawHTML, "")
+
+	var result []string
+	for _, p := range linkedinDoubleBrRe.Split(rawHTML, -1) {
+		p = linkedinSingleBrRe.ReplaceAllString(p, " ")
+		p = whitespaceRe.ReplaceAllString(strings.TrimSpace(p), " ")
+		if p != "" {
+			result = append(result, "<p>"+p+"</p>")
+		}
+	}
+	return strings.Join(result, "\n")
+}
+
+// simplifyLinkedInLinks rewrites anchors in sel: links with both href and text
+// keep only their href attribute (dropping LinkedIn tracking attributes); links
+// missing either are replaced by their escaped text.
+func simplifyLinkedInLinks(sel *goquery.Selection) {
+	sel.Find("a").Each(func(_ int, link *goquery.Selection) {
 		href, _ := link.Attr("href")
 		text := strings.TrimSpace(link.Text())
 		if href != "" && text != "" {
@@ -87,19 +106,6 @@ func (e *LinkedInExtractor) cleanTextContent(el *goquery.Selection) string {
 			link.ReplaceWithHtml(html.EscapeString(link.Text()))
 		}
 	})
-
-	rawHTML, _ := clone.Html()
-	rawHTML = linkedinHTMLCommentRe.ReplaceAllString(rawHTML, "")
-
-	var result []string
-	for _, p := range linkedinDoubleBrRe.Split(rawHTML, -1) {
-		p = linkedinSingleBrRe.ReplaceAllString(p, " ")
-		p = whitespaceRe.ReplaceAllString(strings.TrimSpace(p), " ")
-		if p != "" {
-			result = append(result, "<p>"+p+"</p>")
-		}
-	}
-	return strings.Join(result, "\n")
 }
 
 // extractQuotedPost renders a reposted/quoted LinkedIn post as a blockquote card.
