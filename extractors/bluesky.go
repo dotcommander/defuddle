@@ -199,12 +199,5 @@ func (e *BlueskyExtractor) getReplyDate(item *goquery.Selection) string {
 
 // getPermalink returns the absolute permalink for a post item.
 func (e *BlueskyExtractor) getPermalink(item *goquery.Selection) string {
-	href := item.Find(`a[href*="/post/"]`).First().AttrOr("href", "")
-	if href == "" {
-		return ""
-	}
-	if strings.HasPrefix(href, "http") {
-		return href
-	}
-	return "https://bsky.app" + href
+	return resolvePostPermalink(item, "https://bsky.app")
 }

@@ -3,6 +3,7 @@ package extractors
 
 import (
 	"regexp"
+	"strings"
 
 	"github.com/PuerkitoBio/goquery"
 )
@@ -102,4 +103,17 @@ func (e *ExtractorBase) GetURL() string {
 // GetSchemaOrgData returns the schema.org data
 func (e *ExtractorBase) GetSchemaOrgData() any {
 	return e.schemaOrgData
+}
+
+// resolvePostPermalink returns the absolute permalink for the first `/post/` link
+// in sel, prepending baseURL when the href is relative. Returns "" when absent.
+func resolvePostPermalink(sel *goquery.Selection, baseURL string) string {
+	href := sel.Find(`a[href*="/post/"]`).First().AttrOr("href", "")
+	if href == "" {
+		return ""
+	}
+	if strings.HasPrefix(href, "http") {
+		return href
+	}
+	return baseURL + href
 }

@@ -1,7 +1,6 @@
 package extractors
 
 import (
-	"strings"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
@@ -24,14 +23,7 @@ func (e *ThreadsExtractor) getDate(container *goquery.Selection) string {
 
 // getPermalink returns the absolute URL of the post's permalink.
 func (e *ThreadsExtractor) getPermalink(container *goquery.Selection) string {
-	href := container.Find(`a[href*="/post/"]`).First().AttrOr("href", "")
-	if href == "" {
-		return ""
-	}
-	if strings.HasPrefix(href, "http") {
-		return href
-	}
-	return "https://www.threads.com" + href
+	return resolvePostPermalink(container, "https://www.threads.com")
 }
 
 // getPostsFromPagelet extracts all top-level posts from a single pagelet.
