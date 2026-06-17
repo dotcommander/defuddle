@@ -128,22 +128,14 @@ func Extract(doc *goquery.Document, schemaOrgData any, metaTags []MetaTag, baseU
 
 	// If no base URL provided, try to extract from meta tags and canonical links
 	if documentURL == "" {
-		documentURL = getMetaContent(metaTags, "property", "og:url")
-		if documentURL == "" {
-			documentURL = getMetaContent(metaTags, "property", "twitter:url")
-		}
-		if documentURL == "" {
-			documentURL = getSchemaProperty(schemaOrgData, "url")
-		}
-		if documentURL == "" {
-			documentURL = getSchemaProperty(schemaOrgData, "mainEntityOfPage.url")
-		}
-		if documentURL == "" {
-			documentURL = getSchemaProperty(schemaOrgData, "mainEntity.url")
-		}
-		if documentURL == "" {
-			documentURL = getSchemaProperty(schemaOrgData, "WebSite.url")
-		}
+		documentURL = cmp.Or(
+			getMetaContent(metaTags, "property", "og:url"),
+			getMetaContent(metaTags, "property", "twitter:url"),
+			getSchemaProperty(schemaOrgData, "url"),
+			getSchemaProperty(schemaOrgData, "mainEntityOfPage.url"),
+			getSchemaProperty(schemaOrgData, "mainEntity.url"),
+			getSchemaProperty(schemaOrgData, "WebSite.url"),
+		)
 		if documentURL == "" {
 			canonical := doc.Find(`link[rel="canonical"]`).First()
 			if canonical.Length() > 0 {
