@@ -21,23 +21,8 @@ func (d *Defuddle) findSmallImages(doc *goquery.Document) map[string]bool {
 	// Process img and svg elements
 	doc.Find("img, svg").Each(func(_ int, element *goquery.Selection) {
 		// Get dimensions from attributes
-		widthStr, _ := element.Attr("width")
-		heightStr, _ := element.Attr("height")
-
-		width := 0
-		height := 0
-
-		if widthStr != "" {
-			if w, err := strconv.Atoi(widthStr); err == nil {
-				width = w
-			}
-		}
-
-		if heightStr != "" {
-			if h, err := strconv.Atoi(heightStr); err == nil {
-				height = h
-			}
-		}
+		width := parseDimensionAttr(element, "width")
+		height := parseDimensionAttr(element, "height")
 
 		// Check if dimensions are small
 		if (width > 0 && width < minDimension) || (height > 0 && height < minDimension) {
@@ -54,6 +39,18 @@ func (d *Defuddle) findSmallImages(doc *goquery.Document) map[string]bool {
 	}
 
 	return smallImages
+}
+
+// parseDimensionAttr returns the integer value of element's width/height attr,
+// or 0 when the attribute is absent or non-numeric.
+func parseDimensionAttr(element *goquery.Selection, attr string) int {
+	value, _ := element.Attr(attr)
+	if value != "" {
+		if n, err := strconv.Atoi(value); err == nil {
+			return n
+		}
+	}
+	return 0
 }
 
 // removeSmallImages removes small images from the document
