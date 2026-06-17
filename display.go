@@ -19,51 +19,9 @@ func (d *Defuddle) removeHiddenElements(doc *goquery.Document) {
 	var toRemove []*goquery.Selection
 
 	doc.Find("*").Each(func(_ int, element *goquery.Selection) {
-		// Protect math elements from removal
-		tag := goquery.NodeName(element)
-		if tag == "math" {
-			return
-		}
-		if _, hasMathML := element.Attr("data-mathml"); hasMathML {
-			return
-		}
-		className := element.AttrOr("class", "")
-		if strings.Contains(className, "katex-mathml") || strings.Contains(className, "MathJax") {
-			return
-		}
-
-		// Check inline styles for hidden elements
-		if style, exists := element.Attr("style"); exists {
-			lowerStyle := strings.ToLower(style)
-			if strings.Contains(lowerStyle, "display:none") ||
-				strings.Contains(lowerStyle, "display: none") ||
-				strings.Contains(lowerStyle, "visibility:hidden") ||
-				strings.Contains(lowerStyle, "visibility: hidden") ||
-				strings.Contains(lowerStyle, "opacity:0") ||
-				strings.Contains(lowerStyle, "opacity: 0") {
-				toRemove = append(toRemove, element)
-				count++
-				return
-			}
-		}
-
-		// Check class tokens for Tailwind/utility hidden classes
-		if className != "" {
-			for _, token := range strings.Fields(className) {
-				// Exact matches: "hidden", "invisible"
-				if token == "hidden" || token == "invisible" {
-					toRemove = append(toRemove, element)
-					count++
-					return
-				}
-				// Responsive variants: "sm:hidden", "md:hidden", "lg:hidden", etc.
-				// Also matches arbitrary prefix:hidden and prefix:invisible
-				if strings.HasSuffix(token, ":hidden") || strings.HasSuffix(token, ":invisible") {
-					toRemove = append(toRemove, element)
-					count++
-					return
-				}
-			}
+		if isHiddenElement(element) {
+			toRemove = append(toRemove, element)
+			count++
 		}
 	})
 
@@ -74,6 +32,55 @@ func (d *Defuddle) removeHiddenElements(doc *goquery.Document) {
 	if d.debug {
 		slog.Debug("Removed hidden elements", "count", count)
 	}
+}
+
+// isHiddenElement reports whether element should be removed as hidden: an inline
+// display:none / visibility:hidden / opacity:0 style, or a hidden/invisible utility
+// class (including responsive prefix:hidden variants). Math elements (math tag,
+// data-mathml, katex-mathml/MathJax classes) are never treated as hidden.
+func isHiddenElement(element *goquery.Selection) bool {
+	// Protect math elements from removal
+	tag := goquery.NodeName(element)
+	if tag == "math" {
+		return false
+	}
+	if _, hasMathML := element.Attr("data-mathml"); hasMathML {
+		return false
+	}
+	className := element.AttrOr("class", "")
+	if strings.Contains(className, "katex-mathml") || strings.Contains(className, "MathJax") {
+		return false
+	}
+
+	// Check inline styles for hidden elements
+	if style, exists := element.Attr("style"); exists {
+		lowerStyle := strings.ToLower(style)
+		if strings.Contains(lowerStyle, "display:none") ||
+			strings.Contains(lowerStyle, "display: none") ||
+			strings.Contains(lowerStyle, "visibility:hidden") ||
+			strings.Contains(lowerStyle, "visibility: hidden") ||
+			strings.Contains(lowerStyle, "opacity:0") ||
+			strings.Contains(lowerStyle, "opacity: 0") {
+			return true
+		}
+	}
+
+	// Check class tokens for Tailwind/utility hidden classes
+	if className != "" {
+		for _, token := range strings.Fields(className) {
+			// Exact matches: "hidden", "invisible"
+			if token == "hidden" || token == "invisible" {
+				return true
+			}
+			// Responsive variants: "sm:hidden", "md:hidden", "lg:hidden", etc.
+			// Also matches arbitrary prefix:hidden and prefix:invisible
+			if strings.HasSuffix(token, ":hidden") || strings.HasSuffix(token, ":invisible") {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 // resolveReactStreaming resolves React SSR streaming placeholders.
