@@ -924,15 +924,8 @@ func scoreNonContentBlock(_ context.Context, element *goquery.Selection) float64
 	}
 
 	// Check for social media profile links (author bios, social widgets)
-	if words < 80 {
-		element.Find("a").EachWithBreak(func(_ int, a *goquery.Selection) bool {
-			href := strings.ToLower(a.AttrOr("href", ""))
-			if socialProfileRe.MatchString(href) && !isSocialIntentURL(href) {
-				score -= 15
-				return false // break
-			}
-			return true
-		})
+	if words < 80 && hasSocialProfileLink(element) {
+		score -= 15
 	}
 
 	// Penalize very small blocks that look like standalone author bylines with dates
