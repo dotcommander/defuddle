@@ -198,6 +198,19 @@ func (c *ConversationExtractorBase) CreateContentHTML(messages []ConversationMes
 	}
 
 	// Add footnotes section if we have any
+	footnotesHTML := conversationFootnotesHTML(footnotes)
+
+	result := messagesHTML.String()
+	if footnotesHTML != "" {
+		result += "\n" + footnotesHTML
+	}
+
+	return strings.TrimSpace(result)
+}
+
+// conversationFootnotesHTML renders the numbered footnotes <div> for a
+// conversation, or "" when there are no footnotes.
+func conversationFootnotesHTML(footnotes []Footnote) string {
 	footnotesHTML := ""
 	if len(footnotes) > 0 {
 		var footnotesBuilder strings.Builder
@@ -221,13 +234,7 @@ func (c *ConversationExtractorBase) CreateContentHTML(messages []ConversationMes
 			</div>`)
 		footnotesHTML = footnotesBuilder.String()
 	}
-
-	result := messagesHTML.String()
-	if footnotesHTML != "" {
-		result += "\n" + footnotesHTML
-	}
-
-	return strings.TrimSpace(result)
+	return footnotesHTML
 }
 
 // ExtractWithDefuddle extracts conversation content similar to TypeScript implementation
