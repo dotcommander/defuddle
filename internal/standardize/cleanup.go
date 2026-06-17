@@ -330,36 +330,6 @@ func isRemovableEmptyElement(el *goquery.Selection) bool {
 //		});
 //	}
 func removeTrailingHeadings(element *goquery.Selection) {
-	// hasContentAfter checks siblings (including text nodes) and climbs to parent,
-	// matching the TS implementation that walks all sibling nodes and recurses up.
-	var hasContentAfter func(el *goquery.Selection) bool
-	hasContentAfter = func(el *goquery.Selection) bool {
-		// Check all following sibling nodes (elements AND text nodes)
-		if len(el.Nodes) > 0 {
-			for sib := el.Nodes[0].NextSibling; sib != nil; sib = sib.NextSibling {
-				switch sib.Type {
-				case html.ElementNode:
-					sibDoc := goquery.NewDocumentFromNode(sib)
-					if strings.TrimSpace(sibDoc.Text()) != "" {
-						return true
-					}
-				case html.TextNode:
-					if strings.TrimSpace(sib.Data) != "" {
-						return true
-					}
-				default:
-					// Ignore comment, doctype, and error nodes
-				}
-			}
-		}
-		// Climb to parent and check its following siblings
-		parent := el.Parent()
-		if parent.Length() > 0 && parent.Nodes[0] != element.Nodes[0] {
-			return hasContentAfter(parent)
-		}
-		return false
-	}
-
 	// Process headings in reverse order (deepest/last first) and break
 	// after finding the first heading with content after it.
 	headings := element.Find("h1, h2, h3, h4, h5, h6")
@@ -368,11 +338,41 @@ func removeTrailingHeadings(element *goquery.Selection) {
 		nodes = append(nodes, h)
 	})
 	for i := len(nodes) - 1; i >= 0; i-- {
-		if hasContentAfter(nodes[i]) {
+		if hasContentAfter(nodes[i], element) {
 			break
 		}
 		nodes[i].Remove()
 	}
+}
+
+// hasContentAfter reports whether el has any non-empty content in a following
+// sibling (element or text node), climbing to parents up to (but not including)
+// boundary and checking their following siblings too.
+func hasContentAfter(el, boundary *goquery.Selection) bool {
+	// Check all following sibling nodes (elements AND text nodes)
+	if len(el.Nodes) > 0 {
+		for sib := el.Nodes[0].NextSibling; sib != nil; sib = sib.NextSibling {
+			switch sib.Type {
+			case html.ElementNode:
+				sibDoc := goquery.NewDocumentFromNode(sib)
+				if strings.TrimSpace(sibDoc.Text()) != "" {
+					return true
+				}
+			case html.TextNode:
+				if strings.TrimSpace(sib.Data) != "" {
+					return true
+				}
+			default:
+				// Ignore comment, doctype, and error nodes
+			}
+		}
+	}
+	// Climb to parent and check its following siblings
+	parent := el.Parent()
+	if parent.Length() > 0 && parent.Nodes[0] != boundary.Nodes[0] {
+		return hasContentAfter(parent, boundary)
+	}
+	return false
 }
 
 // stripExtraBrElements removes excessive br elements
