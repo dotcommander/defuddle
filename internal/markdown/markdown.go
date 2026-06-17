@@ -788,27 +788,7 @@ func renderArXivEquationTable(_ converter.Context, w converter.Writer, n *html.N
 
 	// ArXiv equation tables → LaTeX
 	if hasExactClass(class, "ltx_equation") || hasExactClass(class, "ltx_eqn_table") {
-		var equations []string
-		walkChildren(n, func(child *html.Node) bool {
-			if child.Type == html.ElementNode && child.Data == "math" {
-				if alttext := getAttr(child, "alttext"); alttext != "" {
-					alttext = strings.TrimSpace(alttext)
-					isInline := false
-					for p := child.Parent; p != nil; p = p.Parent {
-						if p.Type == html.ElementNode && hasExactClass(getAttr(p, "class"), "ltx_eqn_inline") {
-							isInline = true
-							break
-						}
-					}
-					if isInline {
-						equations = append(equations, "$"+alttext+"$")
-					} else {
-						equations = append(equations, "\n$$\n"+alttext+"\n$$")
-					}
-				}
-			}
-			return true
-		})
+		equations := collectArXivEquations(n)
 		if len(equations) > 0 {
 			w.WriteString(strings.Join(equations, "\n\n"))
 			return converter.RenderSuccess
@@ -826,6 +806,34 @@ func renderArXivEquationTable(_ converter.Context, w converter.Writer, n *html.N
 	}
 
 	return converter.RenderTryNext
+}
+
+// collectArXivEquations returns the LaTeX equations from <math> alttext within an
+// ArXiv equation table, each wrapped inline ($...$) or display ($$...$$) per the
+// ltx_eqn_inline ancestor class.
+func collectArXivEquations(n *html.Node) []string {
+	var equations []string
+	walkChildren(n, func(child *html.Node) bool {
+		if child.Type == html.ElementNode && child.Data == "math" {
+			if alttext := getAttr(child, "alttext"); alttext != "" {
+				alttext = strings.TrimSpace(alttext)
+				isInline := false
+				for p := child.Parent; p != nil; p = p.Parent {
+					if p.Type == html.ElementNode && hasExactClass(getAttr(p, "class"), "ltx_eqn_inline") {
+						isInline = true
+						break
+					}
+				}
+				if isInline {
+					equations = append(equations, "$"+alttext+"$")
+				} else {
+					equations = append(equations, "\n$$\n"+alttext+"\n$$")
+				}
+			}
+		}
+		return true
+	})
+	return equations
 }
 
 // hasComplexTableStructure checks if any td/th has colspan or rowspan.
