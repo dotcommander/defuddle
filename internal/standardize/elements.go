@@ -186,6 +186,17 @@ func standardizeElements(element *goquery.Selection, doc *goquery.Document, debu
 	}
 
 	// Convert lite-youtube elements
+	processedCount += convertLiteYouTube(element)
+
+	if debug {
+		slog.Debug("Converted embedded elements", "count", processedCount)
+	}
+}
+
+// convertLiteYouTube replaces lite-youtube custom elements with iframe embeds
+// and returns the number converted.
+func convertLiteYouTube(element *goquery.Selection) int {
+	count := 0
 	element.Find("lite-youtube").Each(func(_ int, el *goquery.Selection) {
 		videoID, exists := el.Attr("videoid")
 		if !exists || videoID == "" {
@@ -205,12 +216,9 @@ func standardizeElements(element *goquery.Selection, doc *goquery.Document, debu
 			`allowfullscreen></iframe>`
 
 		el.ReplaceWithHtml(iframeHTML)
-		processedCount++
+		count++
 	})
-
-	if debug {
-		slog.Debug("Converted embedded elements", "count", processedCount)
-	}
+	return count
 }
 
 // writeAllowedAttributes appends ` key="val"` to b for each allow-listed attribute
