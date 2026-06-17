@@ -357,6 +357,44 @@ func renderKaTeX(_ converter.Context, w converter.Writer, n *html.Node) converte
 	}
 
 	// Extract LaTeX from various sources
+	latex := extractKaTeXLatex(n)
+	if latex == "" {
+		return converter.RenderTryNext
+	}
+
+	// Determine display mode
+	isBlock := hasExactClass(class, "katex-display") ||
+		strings.Contains(class, "mwe-math-fallback-image-display") ||
+		hasExactClass(class, "math-display")
+
+	if !isBlock {
+		// Check child math element
+		walkChildren(n, func(child *html.Node) bool {
+			if child.Type == html.ElementNode && child.Data == "math" &&
+				getAttr(child, "display") == "block" {
+				isBlock = true
+				return false
+			}
+			return true
+		})
+	}
+
+	if isBlock && !isInsideTable(n) {
+		w.WriteString("\n$$\n")
+		w.WriteString(latex)
+		w.WriteString("\n$$\n")
+	} else {
+		w.WriteString("$")
+		w.WriteString(latex)
+		w.WriteString("$")
+	}
+	return converter.RenderSuccess
+}
+
+// extractKaTeXLatex pulls LaTeX from a katex/math span: data-latex, then a KaTeX
+// annotation (application/x-tex), then a child <math>'s alttext/data-latex, then
+// the span's plain text. Returns "" if none found.
+func extractKaTeXLatex(n *html.Node) string {
 	latex := getAttr(n, "data-latex")
 	if latex == "" {
 		// KaTeX annotation
@@ -393,37 +431,7 @@ func renderKaTeX(_ converter.Context, w converter.Writer, n *html.Node) converte
 	if latex == "" {
 		latex = strings.TrimSpace(extractText(n))
 	}
-	if latex == "" {
-		return converter.RenderTryNext
-	}
-
-	// Determine display mode
-	isBlock := hasExactClass(class, "katex-display") ||
-		strings.Contains(class, "mwe-math-fallback-image-display") ||
-		hasExactClass(class, "math-display")
-
-	if !isBlock {
-		// Check child math element
-		walkChildren(n, func(child *html.Node) bool {
-			if child.Type == html.ElementNode && child.Data == "math" &&
-				getAttr(child, "display") == "block" {
-				isBlock = true
-				return false
-			}
-			return true
-		})
-	}
-
-	if isBlock && !isInsideTable(n) {
-		w.WriteString("\n$$\n")
-		w.WriteString(latex)
-		w.WriteString("\n$$\n")
-	} else {
-		w.WriteString("$")
-		w.WriteString(latex)
-		w.WriteString("$")
-	}
-	return converter.RenderSuccess
+	return latex
 }
 
 // extractLatexFromNode extracts LaTeX from a <math> node's data-latex or alttext attributes.
