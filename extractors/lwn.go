@@ -215,6 +215,29 @@ func (e *LWNExtractor) extractCommentData(box *goquery.Selection, depth int) *Co
 }
 
 // getCommentContent builds the HTML body for a comment box.
+// isStructuralCommentChild reports whether a comment box child is structural
+// (summary/details/form, a reply button, a comment anchor, or an empty <p>)
+// rather than content.
+func isStructuralCommentChild(child *goquery.Selection) bool {
+	tag := goquery.NodeName(child)
+	switch tag {
+	case "summary", "details", "form":
+		return true
+	}
+	if child.HasClass("CommentReplyButton") {
+		return true
+	}
+	if tag == "a" {
+		if name, _ := child.Attr("name"); strings.HasPrefix(name, "CommAnchor") {
+			return true
+		}
+	}
+	if tag == "p" && strings.TrimSpace(child.Text()) == "" {
+		return true
+	}
+	return false
+}
+
 func (e *LWNExtractor) getCommentContent(box *goquery.Selection, title string) string {
 	var b strings.Builder
 
@@ -229,20 +252,7 @@ func (e *LWNExtractor) getCommentContent(box *goquery.Selection, title string) s
 	} else {
 		// Collect direct content nodes, skipping structural elements.
 		box.Children().Each(func(_ int, child *goquery.Selection) {
-			tag := goquery.NodeName(child)
-			switch tag {
-			case "summary", "details", "form":
-				return
-			}
-			if child.HasClass("CommentReplyButton") {
-				return
-			}
-			if tag == "a" {
-				if name, _ := child.Attr("name"); strings.HasPrefix(name, "CommAnchor") {
-					return
-				}
-			}
-			if tag == "p" && strings.TrimSpace(child.Text()) == "" {
+			if isStructuralCommentChild(child) {
 				return
 			}
 			h, _ := goquery.OuterHtml(child)
