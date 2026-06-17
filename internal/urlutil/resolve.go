@@ -25,25 +25,31 @@ func ResolveRelativeURLs(element *goquery.Selection, pageURL string, docBaseHref
 		return
 	}
 
-	// Attributes that contain a single URL
-	urlAttrs := []string{"href", "src", "poster", "data-src", "data-srcset", "action"}
-
 	element.Find("*").Each(func(_ int, el *goquery.Selection) {
-		for _, attr := range urlAttrs {
-			val, exists := el.Attr(attr)
-			if !exists || val == "" {
-				continue
-			}
-			if resolved := resolveURL(val, baseURL); resolved != val {
-				el.SetAttr(attr, resolved)
-			}
-		}
-
-		// Handle srcset (comma-separated list of "url descriptor" pairs)
-		if srcset, exists := el.Attr("srcset"); exists && srcset != "" {
-			el.SetAttr("srcset", resolveSrcset(srcset, baseURL))
-		}
+		resolveElementURLs(el, baseURL)
 	})
+}
+
+// urlAttrs are the element attributes that contain a single resolvable URL.
+var urlAttrs = []string{"href", "src", "poster", "data-src", "data-srcset", "action"}
+
+// resolveElementURLs resolves every single-URL attribute and the srcset on el
+// against baseURL.
+func resolveElementURLs(el *goquery.Selection, baseURL *url.URL) {
+	for _, attr := range urlAttrs {
+		val, exists := el.Attr(attr)
+		if !exists || val == "" {
+			continue
+		}
+		if resolved := resolveURL(val, baseURL); resolved != val {
+			el.SetAttr(attr, resolved)
+		}
+	}
+
+	// Handle srcset (comma-separated list of "url descriptor" pairs)
+	if srcset, exists := el.Attr("srcset"); exists && srcset != "" {
+		el.SetAttr("srcset", resolveSrcset(srcset, baseURL))
+	}
 }
 
 // ExtractBaseHref finds the <base href="..."> value from the document.
