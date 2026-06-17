@@ -136,81 +136,6 @@ func flattenWrapperElements(element *goquery.Selection, _ *goquery.Document, deb
 	// Process in batches to maintain performance
 	keepProcessing := true
 
-	isWrapperElement := func(el *goquery.Selection) bool {
-		// If it directly contains inline content, it's NOT a wrapper
-		if hasDirectInlineContent(el) {
-			return false
-		}
-
-		// Check if it's just empty space
-		text := strings.TrimSpace(el.Text())
-		if text == "" {
-			return true
-		}
-
-		// Check if it only contains other block elements
-		children := el.Children()
-		if children.Length() == 0 {
-			return true
-		}
-
-		// Check if all children are block elements
-		allBlockElements := true
-
-		children.Each(func(_ int, child *goquery.Selection) {
-			tag := goquery.NodeName(child)
-			isBlock := slices.Contains(blockElements, tag)
-
-			// Check additional block elements
-			if !isBlock {
-				if slices.Contains(additionalBlockElements, tag) {
-					isBlock = true
-				}
-			}
-
-			if !isBlock {
-				allBlockElements = false
-			}
-		})
-
-		if allBlockElements {
-			return true
-		}
-
-		// Check for common wrapper patterns
-		className := strings.ToLower(el.AttrOr("class", ""))
-		if wrapperClassRe.MatchString(className) {
-			return true
-		}
-
-		// Check if it has excessive whitespace or empty text nodes
-		hasTextContent := false
-		el.Contents().Each(func(_ int, child *goquery.Selection) {
-			if goquery.NodeName(child) == "#text" {
-				childText := strings.TrimSpace(child.Text())
-				if childText != "" {
-					hasTextContent = true
-				}
-			}
-		})
-
-		if !hasTextContent {
-			return true
-		}
-
-		// Check if it only contains block elements (different check)
-		hasOnlyBlockElements := children.Length() > 0
-
-		children.Each(func(_ int, child *goquery.Selection) {
-			tag := goquery.NodeName(child)
-			if constants.IsInlineElement(tag) {
-				hasOnlyBlockElements = false
-			}
-		})
-
-		return hasOnlyBlockElements
-	}
-
 	// Function to process a single element
 	processElement := func(el *goquery.Selection) bool {
 		// Skip processing if element has been removed or should be preserved
@@ -249,7 +174,7 @@ func flattenWrapperElements(element *goquery.Selection, _ *goquery.Document, deb
 		}
 
 		// Case 3: Wrapper element - merge up aggressively
-		if isWrapperElement(el) {
+		if isWrapperElement(el, blockElements) {
 			// Special case: if element only contains block elements, merge them up
 			children := el.Children()
 			onlyBlockElements := true
@@ -400,7 +325,7 @@ func flattenWrapperElements(element *goquery.Selection, _ *goquery.Document, deb
 			})
 
 			// Unwrap if it only contains paragraphs OR is a non-preserved wrapper element
-			if onlyParagraphs || (!shouldPreserveElement(el) && isWrapperElement(el)) {
+			if onlyParagraphs || (!shouldPreserveElement(el) && isWrapperElement(el, blockElements)) {
 				html, _ := el.Html()
 				el.ReplaceWithHtml(html)
 				processedCount++
@@ -492,4 +417,81 @@ func shouldPreserveElement(el *goquery.Selection) bool {
 	})
 
 	return hasPreservedElements
+}
+
+// isWrapperElement reports whether el is a structural wrapper (no direct inline
+// content; empty, only block children, or a known wrapper class) and may be flattened.
+func isWrapperElement(el *goquery.Selection, blockElements []string) bool {
+	// If it directly contains inline content, it's NOT a wrapper
+	if hasDirectInlineContent(el) {
+		return false
+	}
+
+	// Check if it's just empty space
+	text := strings.TrimSpace(el.Text())
+	if text == "" {
+		return true
+	}
+
+	// Check if it only contains other block elements
+	children := el.Children()
+	if children.Length() == 0 {
+		return true
+	}
+
+	// Check if all children are block elements
+	allBlockElements := true
+
+	children.Each(func(_ int, child *goquery.Selection) {
+		tag := goquery.NodeName(child)
+		isBlock := slices.Contains(blockElements, tag)
+
+		// Check additional block elements
+		if !isBlock {
+			if slices.Contains(additionalBlockElements, tag) {
+				isBlock = true
+			}
+		}
+
+		if !isBlock {
+			allBlockElements = false
+		}
+	})
+
+	if allBlockElements {
+		return true
+	}
+
+	// Check for common wrapper patterns
+	className := strings.ToLower(el.AttrOr("class", ""))
+	if wrapperClassRe.MatchString(className) {
+		return true
+	}
+
+	// Check if it has excessive whitespace or empty text nodes
+	hasTextContent := false
+	el.Contents().Each(func(_ int, child *goquery.Selection) {
+		if goquery.NodeName(child) == "#text" {
+			childText := strings.TrimSpace(child.Text())
+			if childText != "" {
+				hasTextContent = true
+			}
+		}
+	})
+
+	if !hasTextContent {
+		return true
+	}
+
+	// Check if it only contains block elements (different check)
+	hasOnlyBlockElements := children.Length() > 0
+
+	children.Each(func(_ int, child *goquery.Selection) {
+		tag := goquery.NodeName(child)
+		if constants.IsInlineElement(tag) {
+			hasOnlyBlockElements = false
+		}
+	})
+
+	return hasOnlyBlockElements
 }
