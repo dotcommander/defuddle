@@ -51,6 +51,20 @@ func (e *DiscourseExtractor) CanExtract() bool {
 }
 
 // Extract returns the structured content for a Discourse topic page.
+// opDescription builds a 140-rune, whitespace-collapsed description from the
+// original post's cooked text, or "" when there is no OP.
+func opDescription(op *goquery.Selection) string {
+	if op == nil {
+		return ""
+	}
+	text := strings.TrimSpace(op.Find(".cooked").First().Text())
+	runes := []rune(text)
+	if len(runes) > 140 {
+		runes = runes[:140]
+	}
+	return whitespaceRe.ReplaceAllString(string(runes), " ")
+}
+
 func (e *DiscourseExtractor) Extract() *ExtractorResult {
 	doc := e.GetDocument()
 
@@ -91,15 +105,7 @@ func (e *DiscourseExtractor) Extract() *ExtractorResult {
 		author = e.getAuthor(posts.First())
 	}
 
-	description := ""
-	if op != nil {
-		text := strings.TrimSpace(op.Find(".cooked").First().Text())
-		runes := []rune(text)
-		if len(runes) > 140 {
-			runes = runes[:140]
-		}
-		description = whitespaceRe.ReplaceAllString(string(runes), " ")
-	}
+	description := opDescription(op)
 
 	topicID, _ := doc.Find("h1[data-topic-id]").First().Attr("data-topic-id")
 
