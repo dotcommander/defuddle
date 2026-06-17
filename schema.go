@@ -48,35 +48,7 @@ func (d *Defuddle) extractSchemaOrgData() any {
 	}
 
 	d.doc.Find(`script[type="application/ld+json"]`).Each(func(i int, script *goquery.Selection) {
-		jsonContent := strings.TrimSpace(script.Text())
-		if jsonContent == "" {
-			return
-		}
-
-		// Clean and validate JSON-LD content
-		cleanedContent := d.cleanJSONLDContent(jsonContent)
-		if cleanedContent == "" {
-			if d.debug {
-				slog.Debug("Empty JSON-LD content after cleaning", "index", i)
-			}
-			return
-		}
-
-		// Parse JSON — matching TS which uses JSON.parse() directly
-		var rawData any
-		if err := json.Unmarshal([]byte(cleanedContent), &rawData); err != nil {
-			if d.debug {
-				slog.Debug("Failed to parse schema.org JSON-LD",
-					"error", err,
-					"index", i,
-					"content_preview", cleanedContent[:min(len(cleanedContent), 100)])
-			}
-			return
-		}
-
-		// Extract items from parsed data
-		items := d.extractSchemaItems(rawData)
-		allSchemaItems = append(allSchemaItems, items...)
+		allSchemaItems = append(allSchemaItems, d.schemaItemsFromScript(script, i)...)
 	})
 
 	if d.debugger.IsEnabled() {
@@ -93,6 +65,39 @@ func (d *Defuddle) extractSchemaOrgData() any {
 	}
 
 	return allSchemaItems
+}
+
+// schemaItemsFromScript parses one ld+json <script> into schema.org items,
+// returning nil when the script is empty or unparseable.
+func (d *Defuddle) schemaItemsFromScript(script *goquery.Selection, i int) []any {
+	jsonContent := strings.TrimSpace(script.Text())
+	if jsonContent == "" {
+		return nil
+	}
+
+	// Clean and validate JSON-LD content
+	cleanedContent := d.cleanJSONLDContent(jsonContent)
+	if cleanedContent == "" {
+		if d.debug {
+			slog.Debug("Empty JSON-LD content after cleaning", "index", i)
+		}
+		return nil
+	}
+
+	// Parse JSON — matching TS which uses JSON.parse() directly
+	var rawData any
+	if err := json.Unmarshal([]byte(cleanedContent), &rawData); err != nil {
+		if d.debug {
+			slog.Debug("Failed to parse schema.org JSON-LD",
+				"error", err,
+				"index", i,
+				"content_preview", cleanedContent[:min(len(cleanedContent), 100)])
+		}
+		return nil
+	}
+
+	// Extract items from parsed data
+	return d.extractSchemaItems(rawData)
 }
 
 // cleanJSONLDContent cleans and normalizes JSON-LD content
