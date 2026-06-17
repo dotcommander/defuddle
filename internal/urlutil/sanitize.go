@@ -54,37 +54,47 @@ func sanitizeNode(n *html.Node) {
 
 	cleaned := n.Attr[:0]
 	for _, attr := range n.Attr {
-		key := strings.ToLower(attr.Key)
-
-		// Strip on* event handlers (onclick, onerror, onload, etc.)
-		if strings.HasPrefix(key, eventHandlerPrefix) && len(key) > 2 {
-			continue
+		if kept, ok := keepAttr(attr); ok {
+			cleaned = append(cleaned, kept)
 		}
-
-		// Strip srcdoc (can embed arbitrary HTML)
-		if key == "srcdoc" {
-			continue
-		}
-
-		// Strip dangerous URL schemes in single-URL attributes
-		if _, ok := singleURLAttrs[key]; ok {
-			if isDangerousURL(attr.Val) {
-				continue
-			}
-		}
-
-		// Filter dangerous entries from srcset-style comma-separated lists
-		if _, ok := srcsetAttrs[key]; ok {
-			safe := sanitizeSrcset(attr.Val)
-			if safe == "" {
-				continue
-			}
-			attr.Val = safe
-		}
-
-		cleaned = append(cleaned, attr)
 	}
 	n.Attr = cleaned
+}
+
+// keepAttr reports whether an attribute survives sanitization, returning the
+// (possibly rewritten) attribute to keep. Drops on* event handlers, srcdoc,
+// dangerous single-URL schemes, and fully-dangerous srcset values; rewrites a
+// srcset attribute to its safe subset.
+func keepAttr(attr html.Attribute) (html.Attribute, bool) {
+	key := strings.ToLower(attr.Key)
+
+	// Strip on* event handlers (onclick, onerror, onload, etc.)
+	if strings.HasPrefix(key, eventHandlerPrefix) && len(key) > 2 {
+		return attr, false
+	}
+
+	// Strip srcdoc (can embed arbitrary HTML)
+	if key == "srcdoc" {
+		return attr, false
+	}
+
+	// Strip dangerous URL schemes in single-URL attributes
+	if _, ok := singleURLAttrs[key]; ok {
+		if isDangerousURL(attr.Val) {
+			return attr, false
+		}
+	}
+
+	// Filter dangerous entries from srcset-style comma-separated lists
+	if _, ok := srcsetAttrs[key]; ok {
+		safe := sanitizeSrcset(attr.Val)
+		if safe == "" {
+			return attr, false
+		}
+		attr.Val = safe
+	}
+
+	return attr, true
 }
 
 // sanitizeSrcset filters a comma-separated srcset value, dropping any entry
