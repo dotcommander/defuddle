@@ -593,25 +593,27 @@ func (t *TwitterExtractor) extractUserInfo(tweet *goquery.Selection) UserInfo {
 	}
 
 	// Get timestamp information
-	timestamp := tweet.Find("time").First()
-	if timestamp.Length() > 0 {
-		if datetime, exists := timestamp.Attr("datetime"); exists {
-			// Parse datetime and extract date part
-			if len(datetime) >= 10 {
-				userInfo.Date = datetime[:10] // YYYY-MM-DD format
-			}
-		}
-
-		// Get permalink from parent link
-		timestampLink := timestamp.Closest("a")
-		if timestampLink.Length() > 0 {
-			if href, exists := timestampLink.Attr("href"); exists {
-				userInfo.Permalink = href
-			}
-		}
-	}
+	userInfo.Date, userInfo.Permalink = tweetTimestampInfo(tweet)
 
 	return userInfo
+}
+
+// tweetTimestampInfo returns the date (YYYY-MM-DD) and permalink from a tweet's
+// time element, or empty strings when either is absent.
+func tweetTimestampInfo(tweet *goquery.Selection) (date, permalink string) {
+	timestamp := tweet.Find("time").First()
+	if timestamp.Length() == 0 {
+		return "", ""
+	}
+	if datetime, exists := timestamp.Attr("datetime"); exists && len(datetime) >= 10 {
+		date = datetime[:10] // YYYY-MM-DD format
+	}
+	if timestampLink := timestamp.Closest("a"); timestampLink.Length() > 0 {
+		if href, exists := timestampLink.Attr("href"); exists {
+			permalink = href
+		}
+	}
+	return date, permalink
 }
 
 // extractImages extracts images from a tweet
