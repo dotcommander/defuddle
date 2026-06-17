@@ -240,6 +240,12 @@ func isBreadcrumbList(list *html.Node) bool {
 		return false
 	}
 
+	return linksLookLikeBreadcrumb(links)
+}
+
+// linksLookLikeBreadcrumb reports whether links are all internal, include at
+// least one breadcrumb-style link, and all have short (at most 5-word) text.
+func linksLookLikeBreadcrumb(links []*html.Node) bool {
 	allInternal := true
 	hasBreadcrumbLink := false
 	shortLinkTexts := true
