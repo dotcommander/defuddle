@@ -165,7 +165,12 @@ func (e *MediumExtractor) cleanArticle() {
 	// Remove author photo, name, and read time UI elements.
 	e.article.Find(`[data-testid="authorPhoto"], [data-testid="authorName"], [data-testid="storyReadTime"]`).Remove()
 
-	// Remove standalone UI noise: dates, read-times, and sentinel text.
+	e.removeUITextNoise()
+}
+
+// removeUITextNoise removes p/span/div elements whose text is a known UI label,
+// a date, a relative time, or a read-time estimate.
+func (e *MediumExtractor) removeUITextNoise() {
 	e.article.Find("p, span, div").Each(func(_ int, el *goquery.Selection) {
 		text := strings.TrimSpace(el.Text())
 		if text == "" {
