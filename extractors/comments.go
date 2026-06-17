@@ -56,21 +56,7 @@ func renderCommentThread(comments []CommentData) string {
 			// Same depth: no blockquote change.
 		}
 
-		b.WriteString(`<div class="comment">`)
-		b.WriteString(`<div class="comment-metadata">`)
-		fmt.Fprintf(&b, `<span class="comment-author"><strong>%s</strong></span> •`, c.Author)
-		if c.URL != "" {
-			fmt.Fprintf(&b, ` <a href="%s" class="comment-link">%s</a> •`, c.URL, c.LinkText)
-		}
-		if c.Date != "" || c.RenderDateSpan {
-			fmt.Fprintf(&b, ` <span class="comment-date">%s</span>`, c.Date)
-		}
-		if c.Extra != "" {
-			b.WriteString(c.Extra)
-		}
-		b.WriteString(`</div>`)
-		fmt.Fprintf(&b, `<div class="comment-content">%s</div>`, c.Content)
-		b.WriteString(`</div>`)
+		b.WriteString(commentHTML(c))
 
 		currentDepth = c.Depth
 	}
@@ -81,6 +67,27 @@ func renderCommentThread(comments []CommentData) string {
 		blockquoteStack = blockquoteStack[:len(blockquoteStack)-1]
 	}
 
+	return b.String()
+}
+
+// commentHTML renders a single comment's metadata + content div block.
+func commentHTML(c CommentData) string {
+	var b strings.Builder
+	b.WriteString(`<div class="comment">`)
+	b.WriteString(`<div class="comment-metadata">`)
+	fmt.Fprintf(&b, `<span class="comment-author"><strong>%s</strong></span> •`, c.Author)
+	if c.URL != "" {
+		fmt.Fprintf(&b, ` <a href="%s" class="comment-link">%s</a> •`, c.URL, c.LinkText)
+	}
+	if c.Date != "" || c.RenderDateSpan {
+		fmt.Fprintf(&b, ` <span class="comment-date">%s</span>`, c.Date)
+	}
+	if c.Extra != "" {
+		b.WriteString(c.Extra)
+	}
+	b.WriteString(`</div>`)
+	fmt.Fprintf(&b, `<div class="comment-content">%s</div>`, c.Content)
+	b.WriteString(`</div>`)
 	return b.String()
 }
 
