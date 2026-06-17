@@ -172,6 +172,38 @@ func (g *GitHubExtractor) extractIssue() *ExtractorResult {
 	}
 
 	// Extract comments
+	g.appendIssueComments(&content)
+
+	contentHTML := content.String()
+	description := g.createDescription(contentHTML)
+	title := g.document.Find("title").Text()
+
+	slog.Debug("GitHub issue extraction completed",
+		"title", title,
+		"issueNumber", issueNumber,
+		"repo", fmt.Sprintf("%s/%s", repoInfo["owner"], repoInfo["repo"]),
+		"contentLength", len(contentHTML))
+
+	return &ExtractorResult{
+		Content:     contentHTML,
+		ContentHTML: contentHTML,
+		ExtractedContent: map[string]any{
+			"type":        "issue",
+			"issueNumber": issueNumber,
+			"repository":  repoInfo["repo"],
+			"owner":       repoInfo["owner"],
+		},
+		Variables: map[string]string{
+			"title":       title,
+			"author":      "",
+			"site":        fmt.Sprintf("GitHub - %s/%s", repoInfo["owner"], repoInfo["repo"]),
+			"description": description,
+		},
+	}
+}
+
+// appendIssueComments writes each unique issue comment (author, date, body) to content.
+func (g *GitHubExtractor) appendIssueComments(content *strings.Builder) {
 	commentElements := g.document.Find(`[data-wrapper-timeline-id]`)
 	processedComments := make(map[string]bool)
 
@@ -200,43 +232,16 @@ func (g *GitHubExtractor) extractIssue() *ExtractorResult {
 			bodyContent := g.cleanBodyContent(bodyElement)
 			if bodyContent != "" {
 				content.WriteString(`<div class="comment">\n`)
-				fmt.Fprintf(&content, `<div class="comment-header"><strong>%s</strong>`, author)
+				fmt.Fprintf(content, `<div class="comment-header"><strong>%s</strong>`, author)
 				if d := formatGitHubDate(timestamp); d != "" {
-					fmt.Fprintf(&content, ` commented on %s`, d)
+					fmt.Fprintf(content, ` commented on %s`, d)
 				}
 				content.WriteString(`</div>\n`)
-				fmt.Fprintf(&content, `<div class="comment-body">%s</div>\n`, bodyContent)
+				fmt.Fprintf(content, `<div class="comment-body">%s</div>\n`, bodyContent)
 				content.WriteString(`</div>\n\n`)
 			}
 		}
 	})
-
-	contentHTML := content.String()
-	description := g.createDescription(contentHTML)
-	title := g.document.Find("title").Text()
-
-	slog.Debug("GitHub issue extraction completed",
-		"title", title,
-		"issueNumber", issueNumber,
-		"repo", fmt.Sprintf("%s/%s", repoInfo["owner"], repoInfo["repo"]),
-		"contentLength", len(contentHTML))
-
-	return &ExtractorResult{
-		Content:     contentHTML,
-		ContentHTML: contentHTML,
-		ExtractedContent: map[string]any{
-			"type":        "issue",
-			"issueNumber": issueNumber,
-			"repository":  repoInfo["repo"],
-			"owner":       repoInfo["owner"],
-		},
-		Variables: map[string]string{
-			"title":       title,
-			"author":      "",
-			"site":        fmt.Sprintf("GitHub - %s/%s", repoInfo["owner"], repoInfo["repo"]),
-			"description": description,
-		},
-	}
 }
 
 // extractAuthor extracts author from a container using multiple selectors
