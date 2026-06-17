@@ -584,12 +584,20 @@ const captionSelectors = `[class*="caption"], [class*="description"], [class*="c
 
 // findCaption finds a caption element near an image.
 func findCaption(el *goquery.Selection) *goquery.Selection {
-	// Check for figcaption
 	if fc := el.Find("figcaption").First(); fc.Length() > 0 {
 		return fc
 	}
+	if c := captionByClass(el); c != nil {
+		return c
+	}
+	if c := captionFromSibling(el); c != nil {
+		return c
+	}
+	return captionFromFollowingText(el)
+}
 
-	// Check for caption-class elements (skip image elements)
+// captionByClass finds a non-media descendant matching a caption-class selector.
+func captionByClass(el *goquery.Selection) *goquery.Selection {
 	var found *goquery.Selection
 	el.Find(captionSelectors).Each(func(_ int, capEl *goquery.Selection) {
 		if found != nil {
@@ -603,33 +611,35 @@ func findCaption(el *goquery.Selection) *goquery.Selection {
 			found = capEl
 		}
 	})
-	if found != nil {
-		return found
-	}
+	return found
+}
 
-	// Check sibling elements with caption classes
-	if el.Length() > 0 && el.Get(0).Parent != nil {
-		parent := el.Parent()
-		parent.Children().Each(func(_ int, sib *goquery.Selection) {
-			if found != nil {
-				return
-			}
-			if sib.Get(0) == el.Get(0) {
-				return
-			}
-			class := strings.ToLower(sib.AttrOr("class", ""))
-			if strings.Contains(class, "caption") || strings.Contains(class, "credit") || strings.Contains(class, "description") {
-				if text := strings.TrimSpace(sib.Text()); text != "" {
-					found = sib
-				}
-			}
-		})
+// captionFromSibling finds a sibling element whose class indicates a caption, credit, or description.
+func captionFromSibling(el *goquery.Selection) *goquery.Selection {
+	if el.Length() == 0 || el.Get(0).Parent == nil {
+		return nil
 	}
-	if found != nil {
-		return found
-	}
+	var found *goquery.Selection
+	el.Parent().Children().Each(func(_ int, sib *goquery.Selection) {
+		if found != nil {
+			return
+		}
+		if sib.Get(0) == el.Get(0) {
+			return
+		}
+		class := strings.ToLower(sib.AttrOr("class", ""))
+		if strings.Contains(class, "caption") || strings.Contains(class, "credit") || strings.Contains(class, "description") {
+			if text := strings.TrimSpace(sib.Text()); text != "" {
+				found = sib
+			}
+		}
+	})
+	return found
+}
 
-	// Check text elements following images within the element
+// captionFromFollowingText finds an inline text element (em/strong/span/...) following an image.
+func captionFromFollowingText(el *goquery.Selection) *goquery.Selection {
+	var found *goquery.Selection
 	el.Find("img").Each(func(_ int, img *goquery.Selection) {
 		if found != nil {
 			return
@@ -654,7 +664,6 @@ func findCaption(el *goquery.Selection) *goquery.Selection {
 			}
 		}
 	})
-
 	return found
 }
 
