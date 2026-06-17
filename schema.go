@@ -225,30 +225,41 @@ func (d *Defuddle) isValidSchemaItem(item any) bool {
 //	// Helper for debugging and logging
 func (d *Defuddle) countSchemaTypes(items []any) int {
 	typeSet := make(map[string]bool)
-
 	for _, item := range items {
-		if itemMap, ok := item.(map[string]any); ok {
-			// Check both @type and type (after JSON-LD processing)
-			var itemType any
-			var exists bool
-			if itemType, exists = itemMap["@type"]; !exists {
-				itemType, exists = itemMap["type"]
-			}
-
-			if exists {
-				switch typedValue := itemType.(type) {
-				case string:
-					typeSet[typedValue] = true
-				case []any:
-					for _, t := range typedValue {
-						if typeStr, ok := t.(string); ok {
-							typeSet[typeStr] = true
-						}
-					}
-				}
-			}
+		for _, t := range schemaItemTypes(item) {
+			typeSet[t] = true
 		}
 	}
-
 	return len(typeSet)
+}
+
+// schemaItemTypes returns the JSON-LD type values of a schema item: read from
+// @type or (post-JSON-LD-processing) type, each of which may be a single string
+// or an array of strings. Returns nil when item is not a typed object.
+func schemaItemTypes(item any) []string {
+	itemMap, ok := item.(map[string]any)
+	if !ok {
+		return nil
+	}
+	// Check both @type and type (after JSON-LD processing)
+	itemType, exists := itemMap["@type"]
+	if !exists {
+		itemType, exists = itemMap["type"]
+	}
+	if !exists {
+		return nil
+	}
+	switch typedValue := itemType.(type) {
+	case string:
+		return []string{typedValue}
+	case []any:
+		var types []string
+		for _, t := range typedValue {
+			if typeStr, ok := t.(string); ok {
+				types = append(types, typeStr)
+			}
+		}
+		return types
+	}
+	return nil
 }
