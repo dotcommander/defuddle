@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -58,7 +59,15 @@ func RenderHTML(ctx context.Context, url string, cfg Config) (string, error) {
 
 	allocCtx, cancelAlloc := chromedp.NewExecAllocator(ctx, allocOpts...)
 	defer cancelAlloc()
-	browserCtx, cancelBrowser := chromedp.NewContext(allocCtx)
+	browserCtx, cancelBrowser := chromedp.NewContext(allocCtx,
+		chromedp.WithErrorf(func(format string, args ...any) {
+			msg := fmt.Sprintf(format, args...)
+			if strings.Contains(msg, "could not unmarshal event") {
+				return
+			}
+			fmt.Fprintf(os.Stderr, "%s\n", msg)
+		}),
+	)
 	defer cancelBrowser()
 
 	var html string
