@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"runtime/debug"
 
 	"github.com/dotcommander/defuddle/extractors"
 	"github.com/spf13/cobra"
@@ -16,6 +17,19 @@ var (
 	commit  = "unknown"
 	date    = "unknown"
 )
+
+func resolvedVersion() string {
+	if version != "dev" {
+		return version
+	}
+
+	info, ok := debug.ReadBuildInfo()
+	if ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		return info.Main.Version
+	}
+
+	return version
+}
 
 // Define static errors to avoid dynamic error creation
 var (
@@ -32,7 +46,7 @@ var (
 var rootCmd = &cobra.Command{
 	Use:     "defuddle",
 	Short:   "Extract and structure content from web pages",
-	Version: fmt.Sprintf("%s (commit: %s, built: %s)", version, commit, date),
+	Version: fmt.Sprintf("%s (commit: %s, built: %s)", resolvedVersion(), commit, date),
 	Long: `defuddle is a CLI tool for extracting and structuring content from web pages.
 It can parse HTML, extract metadata, and convert content to various formats.`,
 }
