@@ -4,12 +4,9 @@
 # Check documentation at https://goreleaser.com
 version: 2
 
-before:
-  hooks:
-    # You may remove this if you don't use go modules.
-    - go mod tidy
-    # You may remove this if you don't need go generate
-    - go generate ./...
+# before-hooks intentionally omitted: deps are committed and there is no code
+# generation. Do NOT add `go mod tidy` here — it mutates go.work.sum and trips
+# GoReleaser's dirty-tree check under the multi-module workspace (see go.work).
 
 builds:
   - id: defuddle
