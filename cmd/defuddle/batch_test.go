@@ -97,7 +97,8 @@ func TestScanURLs_CommentOnlyInput(t *testing.T) {
 func TestBatchCmd_TimeoutFlagRegistered(t *testing.T) {
 	t.Parallel()
 
-	flag := batchCmd.Flags().Lookup("timeout")
+	cmd := newBatchCmd()
+	flag := cmd.Flags().Lookup("timeout")
 	if flag == nil {
 		t.Fatalf("batchCmd: --timeout flag not registered")
 	}
@@ -106,15 +107,10 @@ func TestBatchCmd_TimeoutFlagRegistered(t *testing.T) {
 	}
 
 	// Round-trip a parse to confirm the value is wired as a duration.
-	if err := batchCmd.Flags().Set("timeout", "1500ms"); err != nil {
+	if err := cmd.Flags().Set("timeout", "1500ms"); err != nil {
 		t.Fatalf("set --timeout: %v", err)
 	}
-	defer func() {
-		// Reset to default so other tests see a clean flag set.
-		_ = batchCmd.Flags().Set("timeout", "0s")
-	}()
-
-	got, err := batchCmd.Flags().GetDuration("timeout")
+	got, err := cmd.Flags().GetDuration("timeout")
 	if err != nil {
 		t.Fatalf("get --timeout: %v", err)
 	}

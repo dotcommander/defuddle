@@ -4,8 +4,7 @@ package main
 //
 // The handler writes to os.Stdout/os.Stderr directly (not cmd.OutOrStdout()),
 // so these tests swap the global os.Stdout/os.Stderr via os.Pipe().
-// captureOutput swaps global file descriptors — tests that use it CANNOT
-// call t.Parallel() because they share process-wide state.
+// captureOutput serializes that process-wide mutation.
 
 import (
 	"errors"
@@ -22,10 +21,12 @@ import (
 // captureOutput swaps os.Stdout and os.Stderr for the duration of fn,
 // returning everything each received.
 //
-// WARNING: mutates os.Stdout and os.Stderr — callers must NOT call
-// t.Parallel(). Tests that use this helper are sequentially ordered.
+// WARNING: mutates os.Stdout and os.Stderr under stdioCaptureMu.
 func captureOutput(t *testing.T, fn func() error) (stdout, stderr string, err error) {
 	t.Helper()
+
+	stdioCaptureMu.Lock()
+	defer stdioCaptureMu.Unlock()
 
 	origOut, origErr := os.Stdout, os.Stderr
 
@@ -49,23 +50,17 @@ func captureOutput(t *testing.T, fn func() error) (stdout, stderr string, err er
 	return string(outBytes), string(errBytes), err
 }
 
-// resetMatchFlag restores the --match flag to empty so sequential tests
-// start from a clean state.
-func resetMatchFlag(t *testing.T) {
-	t.Helper()
-	require.NoError(t, extractorsCmd.Flags().Set("match", ""))
-}
-
 // TestExtractorsCmd_RunE_ListMode verifies that running extractors with no
 // --match flag prints >0 lines including a known extractor and the catchall label.
 //
-// NOTE: no t.Parallel() — captureOutput mutates os.Stdout/os.Stderr.
+// NOTE: captureOutput serializes os.Stdout/os.Stderr mutation.
 func TestExtractorsCmd_RunE_ListMode(t *testing.T) {
+	t.Parallel()
 	extractors.InitializeBuiltins()
-	resetMatchFlag(t)
+	cmd := newExtractorsCmd()
 
 	stdout, stderr, err := captureOutput(t, func() error {
-		return extractorsCmd.RunE(extractorsCmd, nil)
+		return cmd.RunE(cmd, nil)
 	})
 
 	require.NoError(t, err)
@@ -82,16 +77,16 @@ func TestExtractorsCmd_RunE_ListMode(t *testing.T) {
 // TestExtractorsCmd_RunE_MatchSuccess verifies that --match with a URL that has
 // a site-specific extractor prints a MATCH: line to stdout and nothing to stderr.
 //
-// NOTE: no t.Parallel() — captureOutput mutates os.Stdout/os.Stderr.
+// NOTE: captureOutput serializes os.Stdout/os.Stderr mutation.
 func TestExtractorsCmd_RunE_MatchSuccess(t *testing.T) {
+	t.Parallel()
 	extractors.InitializeBuiltins()
-	resetMatchFlag(t)
+	cmd := newExtractorsCmd()
 
-	require.NoError(t, extractorsCmd.Flags().Set("match", "https://github.com/dotcommander/defuddle/issues/1"))
-	defer resetMatchFlag(t)
+	require.NoError(t, cmd.Flags().Set("match", "https://github.com/dotcommander/defuddle/issues/1"))
 
 	stdout, stderr, err := captureOutput(t, func() error {
-		return extractorsCmd.RunE(extractorsCmd, nil)
+		return cmd.RunE(cmd, nil)
 	})
 
 	require.NoError(t, err)
@@ -105,16 +100,16 @@ func TestExtractorsCmd_RunE_MatchSuccess(t *testing.T) {
 // TestExtractorsCmd_RunE_MatchInvalidURL verifies that --match with a malformed
 // URL returns ErrInvalidMatchURL without printing anything.
 //
-// NOTE: no t.Parallel() — captureOutput mutates os.Stdout/os.Stderr.
+// NOTE: captureOutput serializes os.Stdout/os.Stderr mutation.
 func TestExtractorsCmd_RunE_MatchInvalidURL(t *testing.T) {
+	t.Parallel()
 	extractors.InitializeBuiltins()
-	resetMatchFlag(t)
+	cmd := newExtractorsCmd()
 
-	require.NoError(t, extractorsCmd.Flags().Set("match", ":bad-url"))
-	defer resetMatchFlag(t)
+	require.NoError(t, cmd.Flags().Set("match", ":bad-url"))
 
 	stdout, stderr, err := captureOutput(t, func() error {
-		return extractorsCmd.RunE(extractorsCmd, nil)
+		return cmd.RunE(cmd, nil)
 	})
 
 	require.Error(t, err)
@@ -128,16 +123,16 @@ func TestExtractorsCmd_RunE_MatchInvalidURL(t *testing.T) {
 // no registered extractor returns nil, writes nothing to stdout, and writes the
 // "no URL-specific extractor" message to stderr.
 //
-// NOTE: no t.Parallel() — captureOutput mutates os.Stdout/os.Stderr.
+// NOTE: captureOutput serializes os.Stdout/os.Stderr mutation.
 func TestExtractorsCmd_RunE_MatchNoMatch(t *testing.T) {
+	t.Parallel()
 	extractors.InitializeBuiltins()
-	resetMatchFlag(t)
+	cmd := newExtractorsCmd()
 
-	require.NoError(t, extractorsCmd.Flags().Set("match", "https://no-extractor-for-this.example.invalid/path"))
-	defer resetMatchFlag(t)
+	require.NoError(t, cmd.Flags().Set("match", "https://no-extractor-for-this.example.invalid/path"))
 
 	stdout, stderr, err := captureOutput(t, func() error {
-		return extractorsCmd.RunE(extractorsCmd, nil)
+		return cmd.RunE(cmd, nil)
 	})
 
 	require.NoError(t, err)

@@ -4,7 +4,7 @@ package main
 //
 // runBatch writes to os.Stdout directly (not cmd.OutOrStdout()), so these
 // tests swap the global os.Stdout via os.Pipe().
-// captureBatchOutput swaps os.Stdout; tests cannot t.Parallel().
+// captureBatchOutput serializes that process-wide mutation.
 
 import (
 	"encoding/json"
@@ -24,9 +24,12 @@ import (
 // captureBatchOutput swaps os.Stdout for the duration of fn, returning
 // everything written to it.
 //
-// WARNING: mutates os.Stdout — callers must NOT call t.Parallel().
+// WARNING: mutates os.Stdout under stdioCaptureMu.
 func captureBatchOutput(t *testing.T, fn func() error) (stdout string, err error) {
 	t.Helper()
+
+	stdioCaptureMu.Lock()
+	defer stdioCaptureMu.Unlock()
 
 	origOut := os.Stdout
 
@@ -44,17 +47,6 @@ func captureBatchOutput(t *testing.T, fn func() error) (stdout string, err error
 	return string(outBytes), err
 }
 
-// resetBatchFlags restores all batch flags to their defaults so sequential
-// tests start from a clean state.
-func resetBatchFlags(t *testing.T) {
-	t.Helper()
-	require.NoError(t, batchCmd.Flags().Set("input", ""))
-	require.NoError(t, batchCmd.Flags().Set("concurrency", "5"))
-	require.NoError(t, batchCmd.Flags().Set("markdown", "false"))
-	require.NoError(t, batchCmd.Flags().Set("continue-on-error", "false"))
-	require.NoError(t, batchCmd.Flags().Set("timeout", "0s"))
-}
-
 // minimalHTML is a valid HTML article used by httptest servers in batch tests.
 const minimalHTML = `<html><head><title>Page T</title></head><body><article><p>hello world content for extraction test</p></article></body></html>`
 
@@ -62,8 +54,9 @@ const minimalHTML = `<html><head><title>Page T</title></head><body><article><p>h
 // minimal valid HTML and verifies that two URLs produce exactly two
 // newline-terminated JSON objects, each with a non-empty title field.
 //
-// NOTE: no t.Parallel() — captureBatchOutput mutates os.Stdout.
+// NOTE: captureBatchOutput serializes os.Stdout mutation.
 func TestRunBatch_ProducesJSONLForEachURL(t *testing.T) {
+	t.Parallel()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_, _ = io.WriteString(w, minimalHTML)
@@ -77,14 +70,13 @@ func TestRunBatch_ProducesJSONLForEachURL(t *testing.T) {
 	f := filepath.Join(t.TempDir(), "urls.txt")
 	require.NoError(t, os.WriteFile(f, []byte(input), 0o600))
 
-	resetBatchFlags(t)
-	t.Cleanup(func() { resetBatchFlags(t) })
+	cmd := newBatchCmd()
 
-	require.NoError(t, batchCmd.Flags().Set("input", f))
-	require.NoError(t, batchCmd.Flags().Set("concurrency", "2"))
+	require.NoError(t, cmd.Flags().Set("input", f))
+	require.NoError(t, cmd.Flags().Set("concurrency", "2"))
 
 	stdout, err := captureBatchOutput(t, func() error {
-		return runBatch(batchCmd, nil)
+		return runBatch(cmd, nil)
 	})
 	require.NoError(t, err)
 
@@ -109,19 +101,19 @@ func TestRunBatch_ProducesJSONLForEachURL(t *testing.T) {
 // TestRunBatch_NoURLsReturnsErrNoURLs verifies that an input file consisting
 // only of blanks and comments returns ErrNoURLs with no stdout output.
 //
-// NOTE: no t.Parallel() — captureBatchOutput mutates os.Stdout.
+// NOTE: captureBatchOutput serializes os.Stdout mutation.
 func TestRunBatch_NoURLsReturnsErrNoURLs(t *testing.T) {
+	t.Parallel()
 	input := "# comment\n\n   \n# another\n"
 	f := filepath.Join(t.TempDir(), "urls.txt")
 	require.NoError(t, os.WriteFile(f, []byte(input), 0o600))
 
-	resetBatchFlags(t)
-	t.Cleanup(func() { resetBatchFlags(t) })
+	cmd := newBatchCmd()
 
-	require.NoError(t, batchCmd.Flags().Set("input", f))
+	require.NoError(t, cmd.Flags().Set("input", f))
 
 	stdout, err := captureBatchOutput(t, func() error {
-		return runBatch(batchCmd, nil)
+		return runBatch(cmd, nil)
 	})
 
 	require.Error(t, err)
@@ -144,8 +136,9 @@ func badURL(t *testing.T) string {
 // with a network-level error (connection refused) — with --continue-on-error.
 // All three produce a JSON line; the bad one has both "url" and "error" keys.
 //
-// NOTE: no t.Parallel() — captureBatchOutput mutates os.Stdout.
+// NOTE: captureBatchOutput serializes os.Stdout mutation.
 func TestRunBatch_ContinueOnErrorMixedResults(t *testing.T) {
+	t.Parallel()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_, _ = io.WriteString(w, minimalHTML)
@@ -159,14 +152,13 @@ func TestRunBatch_ContinueOnErrorMixedResults(t *testing.T) {
 	f := filepath.Join(t.TempDir(), "urls.txt")
 	require.NoError(t, os.WriteFile(f, []byte(input), 0o600))
 
-	resetBatchFlags(t)
-	t.Cleanup(func() { resetBatchFlags(t) })
+	cmd := newBatchCmd()
 
-	require.NoError(t, batchCmd.Flags().Set("input", f))
-	require.NoError(t, batchCmd.Flags().Set("continue-on-error", "true"))
+	require.NoError(t, cmd.Flags().Set("input", f))
+	require.NoError(t, cmd.Flags().Set("continue-on-error", "true"))
 
 	stdout, err := captureBatchOutput(t, func() error {
-		return runBatch(batchCmd, nil)
+		return runBatch(cmd, nil)
 	})
 	require.NoError(t, err)
 
@@ -198,8 +190,9 @@ func TestRunBatch_ContinueOnErrorMixedResults(t *testing.T) {
 // first (connection refused), without --continue-on-error. Expects a non-nil
 // error whose message contains the bad URL, and fewer JSON lines than total inputs.
 //
-// NOTE: no t.Parallel() — captureBatchOutput mutates os.Stdout.
+// NOTE: captureBatchOutput serializes os.Stdout mutation.
 func TestRunBatch_AbortsOnFirstErrorWithoutContinueFlag(t *testing.T) {
+	t.Parallel()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_, _ = io.WriteString(w, minimalHTML)
@@ -214,14 +207,13 @@ func TestRunBatch_AbortsOnFirstErrorWithoutContinueFlag(t *testing.T) {
 	f := filepath.Join(t.TempDir(), "urls.txt")
 	require.NoError(t, os.WriteFile(f, []byte(input), 0o600))
 
-	resetBatchFlags(t)
-	t.Cleanup(func() { resetBatchFlags(t) })
+	cmd := newBatchCmd()
 
-	require.NoError(t, batchCmd.Flags().Set("input", f))
+	require.NoError(t, cmd.Flags().Set("input", f))
 	// continue-on-error deliberately left false (default).
 
 	stdout, err := captureBatchOutput(t, func() error {
-		return runBatch(batchCmd, nil)
+		return runBatch(cmd, nil)
 	})
 
 	require.Error(t, err, "expected non-nil error when bad URL encountered without --continue-on-error")
@@ -240,8 +232,9 @@ func TestRunBatch_AbortsOnFirstErrorWithoutContinueFlag(t *testing.T) {
 // TestRunBatch_RejectsZeroConcurrency verifies that --concurrency 0 returns
 // ErrInvalidConcurrency before any HTTP requests are made.
 //
-// NOTE: no t.Parallel() — captureBatchOutput mutates os.Stdout.
+// NOTE: captureBatchOutput serializes os.Stdout mutation.
 func TestRunBatch_RejectsZeroConcurrency(t *testing.T) {
+	t.Parallel()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_, _ = io.WriteString(w, minimalHTML)
@@ -252,14 +245,13 @@ func TestRunBatch_RejectsZeroConcurrency(t *testing.T) {
 	f := filepath.Join(t.TempDir(), "urls.txt")
 	require.NoError(t, os.WriteFile(f, []byte(input), 0o600))
 
-	resetBatchFlags(t)
-	t.Cleanup(func() { resetBatchFlags(t) })
+	cmd := newBatchCmd()
 
-	require.NoError(t, batchCmd.Flags().Set("input", f))
-	require.NoError(t, batchCmd.Flags().Set("concurrency", "0"))
+	require.NoError(t, cmd.Flags().Set("input", f))
+	require.NoError(t, cmd.Flags().Set("concurrency", "0"))
 
 	stdout, err := captureBatchOutput(t, func() error {
-		return runBatch(batchCmd, nil)
+		return runBatch(cmd, nil)
 	})
 
 	require.Error(t, err)
