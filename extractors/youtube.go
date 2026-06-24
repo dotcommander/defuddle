@@ -519,17 +519,17 @@ func parseGlobalJSON(text, globalName string) map[string]any {
 		case '{':
 			depth++
 		case '}':
-				depth--
-				if depth == 0 {
-					jsonText := text[startIndex : i+1]
-					var parsed map[string]any
-					if err := json.Unmarshal([]byte(jsonText), &parsed); err != nil {
-						slog.Debug("YouTube: failed to parse inline JSON", "error", err)
-						return nil
-					}
-					return parsed
+			depth--
+			if depth == 0 {
+				jsonText := text[startIndex : i+1]
+				var parsed map[string]any
+				if err := json.Unmarshal([]byte(jsonText), &parsed); err != nil {
+					slog.Debug("YouTube: failed to parse inline JSON", "error", err)
+					return nil
 				}
+				return parsed
 			}
+		}
 	}
 	return nil
 }

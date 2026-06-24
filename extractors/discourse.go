@@ -65,6 +65,7 @@ func opDescription(op *goquery.Selection) string {
 	return whitespaceRe.ReplaceAllString(string(runes), " ")
 }
 
+// Extract pulls the Discourse topic/post content into an ExtractorResult.
 func (e *DiscourseExtractor) Extract() *ExtractorResult {
 	doc := e.GetDocument()
 
