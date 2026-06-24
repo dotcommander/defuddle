@@ -62,6 +62,7 @@ TODO.md
 .Trashes
 ._*
 .cache/
+*.env
 .env
 .env.*.local
 .env.local
@@ -92,3 +93,4 @@ AGENTS.md
 .agents/
 .claude/
 .reference/
+.work/
