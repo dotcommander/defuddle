@@ -6,6 +6,18 @@ All notable changes to this project will be documented in this file. The format 
 
 ---
 
+## [v0.10.0] — 2026-06-24
+
+### Added
+
+- `ErrNotModified` sentinel: `ParseFromURL` now returns `ErrNotModified` (test with `errors.Is`) when a conditional request — a caller-supplied `If-None-Match` / `If-Modified-Since` header — gets an HTTP 304 response, instead of surfacing it as a generic `HTTPStatusError`.
+
+### Security
+
+- Block `data:image/svg+xml` URIs in the content sanitizer. An SVG data-URI (which can embed `<script>`) in an attribute such as `<img src>` previously passed through `Result.Content` verbatim; it is now stripped, matching the existing handling of other dangerous `data:` subtypes (`data:text/html`, `data:text/javascript`, `data:application/javascript`). Benign image data-URIs (`data:image/png`, etc.) are preserved.
+
+---
+
 ## [v0.8.0] — 2026-06-16
 
 ### Added
