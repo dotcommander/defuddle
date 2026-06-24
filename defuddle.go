@@ -253,6 +253,10 @@ func fetchCapped(ctx context.Context, client *requests.Client, rawURL string) (*
 		responseURL = resp.Request.URL.String()
 	}
 
+	if resp.StatusCode == http.StatusNotModified {
+		return nil, ErrNotModified
+	}
+
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return nil, &HTTPStatusError{
 			URL:        responseURL,

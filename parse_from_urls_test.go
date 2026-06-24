@@ -91,6 +91,21 @@ func TestParseFromURL_ReturnsHTTPStatusError(t *testing.T) {
 	assert.Equal(t, "503 Service Unavailable", statusErr.Status)
 }
 
+func TestParseFromURL_NotModified(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotModified)
+	}))
+	t.Cleanup(srv.Close)
+
+	result, err := ParseFromURL(context.Background(), srv.URL, &Options{Client: testClient()})
+
+	require.Error(t, err)
+	require.True(t, errors.Is(err, ErrNotModified), "got %v, want ErrNotModified", err)
+	assert.Nil(t, result)
+}
+
 func TestParseFromURL_UsesRedirectTargetForImplicitMetadataURL(t *testing.T) {
 	t.Parallel()
 

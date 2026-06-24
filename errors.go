@@ -10,6 +10,12 @@ var (
 	// ErrNotHTML is returned when the fetched content is not HTML.
 	ErrNotHTML = errors.New("defuddle: content is not HTML")
 
+	// ErrNotModified is returned by the URL fetch path when the server responds
+	// with HTTP 304 Not Modified (e.g. in response to a caller-supplied
+	// If-None-Match / If-Modified-Since header). It is a non-error signal that
+	// the resource is unchanged, distinct from a fetch failure.
+	ErrNotModified = errors.New("resource not modified")
+
 	// ErrTooLarge is returned when the fetched content exceeds the size limit.
 	ErrTooLarge = errors.New("defuddle: content exceeds size limit")
 
