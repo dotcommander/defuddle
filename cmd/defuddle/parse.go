@@ -20,11 +20,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var parseCmd = &cobra.Command{
-	Use:     "parse [source]",
-	Aliases: []string{"p"},
-	Short:   "Parse and extract content from a URL, HTML file, or stdin",
-	Long: `Parse content from a URL, local HTML file, or HTML piped via stdin
+func newParseCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "parse [source]",
+		Aliases: []string{"p"},
+		Short:   "Parse and extract content from a URL, HTML file, or stdin",
+		Long: `Parse content from a URL, local HTML file, or HTML piped via stdin
 and extract structured information.
 
 Examples:
@@ -33,8 +34,11 @@ Examples:
   curl -s https://example.com/article | defuddle parse --markdown
 
 You can output the content in different formats and extract specific properties.`,
-	Args: cobra.MaximumNArgs(1),
-	RunE: parseContent,
+		Args: cobra.MaximumNArgs(1),
+		RunE: parseContent,
+	}
+	registerParseFlags(cmd)
+	return cmd
 }
 
 type ParseOptions struct {
@@ -58,27 +62,27 @@ type ParseOptions struct {
 	RenderTimeout    time.Duration
 }
 
-// registerParseCmd attaches parse-mode flags. Called from init() in main.go.
-func registerParseCmd() {
-	parseCmd.Flags().BoolP("json", "j", false, "Output as JSON with metadata and content")
-	parseCmd.Flags().BoolP("markdown", "m", false, "Convert content to markdown format")
-	parseCmd.Flags().Bool("md", false, "Alias for --markdown")
-	parseCmd.Flags().StringP("property", "p", "", "Extract a specific property (e.g., title, description, domain)")
-	parseCmd.Flags().StringP("output", "o", "", "Output file path (default: stdout)")
-	parseCmd.Flags().String("user-agent", "", "Custom user agent string")
-	parseCmd.Flags().StringArrayP("header", "H", []string{}, "Custom headers in format 'Key: Value'")
-	parseCmd.Flags().Duration("timeout", 30*time.Second, "Request timeout")
-	parseCmd.Flags().Bool("debug", false, "Enable debug mode")
-	parseCmd.Flags().String("proxy", "", "Proxy URL (e.g., http://localhost:8080, socks5://localhost:1080)")
-	parseCmd.Flags().Bool("remove-images", false, "Remove images from extracted content")
-	parseCmd.Flags().String("content-selector", "", "CSS selector for content root (bypasses auto-detection)")
-	parseCmd.Flags().Bool("no-clutter-removal", false, "Disable all clutter removal heuristics")
-	parseCmd.Flags().Bool("render", false, "Render JavaScript via headless Chrome before extracting (requires Chrome/Chromium)")
-	parseCmd.Flags().Bool("js", false, "Alias for --render")
-	parseCmd.Flags().String("render-wait", "load", "Render wait strategy: 'load' or 'networkidle'")
-	parseCmd.Flags().String("render-user-agent", "", "User-agent for the render stage (default: Chrome default)")
-	parseCmd.Flags().String("chrome-path", "", "Path to a Chrome/Chromium executable (default: auto-detect)")
-	parseCmd.Flags().Duration("render-timeout", 30*time.Second, "Maximum time to spend rendering the page")
+// registerParseFlags attaches parse-mode flags.
+func registerParseFlags(cmd *cobra.Command) {
+	cmd.Flags().BoolP("json", "j", false, "Output as JSON with metadata and content")
+	cmd.Flags().BoolP("markdown", "m", false, "Convert content to markdown format")
+	cmd.Flags().Bool("md", false, "Alias for --markdown")
+	cmd.Flags().StringP("property", "p", "", "Extract a specific property (e.g., title, description, domain)")
+	cmd.Flags().StringP("output", "o", "", "Output file path (default: stdout)")
+	cmd.Flags().String("user-agent", "", "Custom user agent string")
+	cmd.Flags().StringArrayP("header", "H", []string{}, "Custom headers in format 'Key: Value'")
+	cmd.Flags().Duration("timeout", 30*time.Second, "Request timeout")
+	cmd.Flags().Bool("debug", false, "Enable debug mode")
+	cmd.Flags().String("proxy", "", "Proxy URL (e.g., http://localhost:8080, socks5://localhost:1080)")
+	cmd.Flags().Bool("remove-images", false, "Remove images from extracted content")
+	cmd.Flags().String("content-selector", "", "CSS selector for content root (bypasses auto-detection)")
+	cmd.Flags().Bool("no-clutter-removal", false, "Disable all clutter removal heuristics")
+	cmd.Flags().Bool("render", false, "Render JavaScript via headless Chrome before extracting (requires Chrome/Chromium)")
+	cmd.Flags().Bool("js", false, "Alias for --render")
+	cmd.Flags().String("render-wait", "load", "Render wait strategy: 'load' or 'networkidle'")
+	cmd.Flags().String("render-user-agent", "", "User-agent for the render stage (default: Chrome default)")
+	cmd.Flags().String("chrome-path", "", "Path to a Chrome/Chromium executable (default: auto-detect)")
+	cmd.Flags().Duration("render-timeout", 30*time.Second, "Maximum time to spend rendering the page")
 }
 
 func parseContent(cmd *cobra.Command, args []string) error {

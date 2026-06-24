@@ -24,20 +24,24 @@ import (
 // surfaced as a bufio.ErrTooLong error rather than silently truncated.
 const maxURLLineSize = 64 * 1024
 
-var batchCmd = &cobra.Command{
-	Use:   "batch",
-	Short: "Parse multiple URLs, output JSONL",
-	Long:  `Reads one URL per line from stdin (default) or --input file. Outputs one JSON object per line to stdout.`,
-	RunE:  runBatch,
+func newBatchCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "batch",
+		Short: "Parse multiple URLs, output JSONL",
+		Long:  `Reads one URL per line from stdin (default) or --input file. Outputs one JSON object per line to stdout.`,
+		RunE:  runBatch,
+	}
+	registerBatchFlags(cmd)
+	return cmd
 }
 
-// registerBatchCmd attaches batch-mode flags. Called from init() in main.go.
-func registerBatchCmd() {
-	batchCmd.Flags().StringP("input", "i", "", "Read URLs from file instead of stdin")
-	batchCmd.Flags().IntP("concurrency", "c", 5, "Maximum concurrent requests")
-	batchCmd.Flags().BoolP("markdown", "m", false, "Include markdown in output")
-	batchCmd.Flags().Bool("continue-on-error", false, "Continue processing on individual URL errors")
-	batchCmd.Flags().Duration("timeout", 0, "Overall batch timeout (e.g. 30s, 2m); 0 disables")
+// registerBatchFlags attaches batch-mode flags.
+func registerBatchFlags(cmd *cobra.Command) {
+	cmd.Flags().StringP("input", "i", "", "Read URLs from file instead of stdin")
+	cmd.Flags().IntP("concurrency", "c", 5, "Maximum concurrent requests")
+	cmd.Flags().BoolP("markdown", "m", false, "Include markdown in output")
+	cmd.Flags().Bool("continue-on-error", false, "Continue processing on individual URL errors")
+	cmd.Flags().Duration("timeout", 0, "Overall batch timeout (e.g. 30s, 2m); 0 disables")
 }
 
 // scanURLs reads one URL per line from r, skipping blank lines and lines that
