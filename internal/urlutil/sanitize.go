@@ -142,6 +142,7 @@ func hasDangerousScheme(raw string) bool {
 		strings.Contains(lower, "vbscript:") ||
 		strings.Contains(lower, "data:text/html") ||
 		strings.Contains(lower, "data:text/javascript") ||
+		strings.Contains(lower, "data:image/svg+xml") ||
 		strings.Contains(lower, "data:application/javascript")
 }
 
@@ -157,6 +158,9 @@ func isDangerousURL(raw string) bool {
 		return true
 	}
 	if strings.HasPrefix(lower, "data:text/javascript") {
+		return true
+	}
+	if strings.HasPrefix(lower, "data:image/svg+xml") {
 		return true
 	}
 	if strings.HasPrefix(lower, "data:application/javascript") {

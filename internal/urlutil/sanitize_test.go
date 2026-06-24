@@ -98,6 +98,21 @@ func TestSanitizeUnsafe_StripsDangerousURLs(t *testing.T) {
 	}
 }
 
+func TestSanitizeUnsafe_StripsSVGDataImageOnly(t *testing.T) {
+	t.Parallel()
+
+	dangerous := parseSelection(t, `<div><img src="data:image/svg+xml;base64,PHN2Zz48c2NyaXB0PmFsZXJ0KDEpPC9zY3JpcHQ+PC9zdmc="></div>`)
+	SanitizeUnsafe(dangerous)
+	_, ok := dangerous.Find("img").Attr("src")
+	assert.False(t, ok)
+
+	benign := parseSelection(t, `<div><img src="data:image/png;base64,iVBORw0KGgo="></div>`)
+	SanitizeUnsafe(benign)
+	src, ok := benign.Find("img").Attr("src")
+	require.True(t, ok)
+	assert.Equal(t, "data:image/png;base64,iVBORw0KGgo=", src)
+}
+
 func TestSanitizeUnsafe_PreservesSafeContent(t *testing.T) {
 	t.Parallel()
 
@@ -132,9 +147,11 @@ func TestIsDangerousURL(t *testing.T) {
 		{"  javascript:void(0)", true},
 		{"data:text/html,<script>alert(1)</script>", true},
 		{"data:text/html;base64,abc", true},
+		{"data:image/svg+xml;base64,xxx", true},
 		{"vbscript:MsgBox('XSS')", true},
 		{"https://example.com", false},
 		{"/path/to/page", false},
+		{"data:image/png;base64,xxx", false},
 		{"data:image/png;base64,abc", false},
 		{"mailto:user@example.com", false},
 		{"", false},
