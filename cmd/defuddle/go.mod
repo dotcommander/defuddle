@@ -1,11 +1,11 @@
 module github.com/dotcommander/defuddle/cmd/defuddle
 
-go 1.26.2
+go 1.26.4
 
 require (
 	github.com/chromedp/chromedp v0.13.6
 	github.com/dotcommander/defuddle v0.11.0
-	github.com/kaptinlin/requests v0.6.0
+	github.com/kaptinlin/requests v0.6.4
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
 )
@@ -18,14 +18,14 @@ require (
 	github.com/chromedp/cdproto v0.0.0-20250403032234-65de8f5d025b // indirect
 	github.com/chromedp/sysutil v1.1.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/go-json-experiment/json v0.0.0-20260505212615-e40f80bf6836 // indirect
+	github.com/go-json-experiment/json v0.0.0-20260601182631-00ed12fed2a6 // indirect
 	github.com/gobwas/httphead v0.1.0 // indirect
 	github.com/gobwas/pool v0.2.1 // indirect
 	github.com/gobwas/ws v1.4.0 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/google/go-querystring v1.2.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
-	github.com/kaptinlin/orderedobject v0.2.13 // indirect
+	github.com/kaptinlin/orderedobject v0.2.14 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
