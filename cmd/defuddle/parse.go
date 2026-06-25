@@ -58,6 +58,7 @@ type ParseOptions struct {
 	NoClutterRemoval bool
 	Render           bool
 	RenderWait       string
+	RenderWaitFor    string
 	RenderUA         string
 	ChromePath       string
 	RenderTimeout    time.Duration
@@ -82,6 +83,7 @@ func registerParseFlags(cmd *cobra.Command) {
 	cmd.Flags().Bool("render", false, "Render JavaScript via headless Chrome before extracting (requires Chrome/Chromium)")
 	cmd.Flags().Bool("js", false, "Alias for --render")
 	cmd.Flags().String("render-wait", "load", "Render wait strategy: 'load' or 'networkidle'")
+	cmd.Flags().String("render-wait-for", "", "CSS selector to wait for (visible) before snapshot, e.g. 'table tbody tr' (requires --render)")
 	cmd.Flags().String("render-user-agent", "", "User-agent for the render stage (default: Chrome default)")
 	cmd.Flags().String("chrome-path", "", "Path to a Chrome/Chromium executable (default: auto-detect)")
 	cmd.Flags().Duration("render-timeout", 30*time.Second, "Maximum time to spend rendering the page")
@@ -119,6 +121,7 @@ func parseContent(cmd *cobra.Command, args []string) error {
 	renderFlag, _ := cmd.Flags().GetBool("render")
 	jsAlias, _ := cmd.Flags().GetBool("js")
 	renderWait, _ := cmd.Flags().GetString("render-wait")
+	renderWaitFor, _ := cmd.Flags().GetString("render-wait-for")
 	renderUA, _ := cmd.Flags().GetString("render-user-agent")
 	chromePath, _ := cmd.Flags().GetString("chrome-path")
 	renderTimeout, _ := cmd.Flags().GetDuration("render-timeout")
@@ -148,6 +151,7 @@ func parseContent(cmd *cobra.Command, args []string) error {
 		NoClutterRemoval: noClutterRemoval,
 		Render:           renderFlag,
 		RenderWait:       renderWait,
+		RenderWaitFor:    renderWaitFor,
 		RenderUA:         renderUA,
 		ChromePath:       chromePath,
 		RenderTimeout:    renderTimeout,

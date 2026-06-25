@@ -16,10 +16,11 @@ func renderAndParse(ctx context.Context, opts *ParseOptions, defuddleOpts *defud
 	defer cancel()
 
 	cfg := render.Config{
-		ChromePath:   opts.ChromePath,
-		UserAgent:    opts.RenderUA,
-		Wait:         render.WaitStrategy(opts.RenderWait),
-		MaxHTMLBytes: maxInputSize,
+		ChromePath:      opts.ChromePath,
+		UserAgent:       opts.RenderUA,
+		Wait:            render.WaitStrategy(opts.RenderWait),
+		WaitForSelector: opts.RenderWaitFor,
+		MaxHTMLBytes:    maxInputSize,
 	}
 	html, err := render.RenderHTML(renderCtx, opts.Source, cfg)
 	if err != nil {

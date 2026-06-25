@@ -39,6 +39,10 @@ type Config struct {
 	Wait WaitStrategy
 	// IdleDelay is the settle delay applied for WaitIdle. Zero => 500ms when WaitIdle.
 	IdleDelay time.Duration
+	// WaitForSelector, when non-empty, blocks until a node matching this CSS
+	// selector becomes visible before the snapshot (bounded by the render
+	// timeout). Useful for tables hydrated by JS after the load event.
+	WaitForSelector string
 	// MaxHTMLBytes caps the rendered HTML returned. Zero => no extra cap
 	// (the library applies its own 5 MiB ceiling downstream).
 	MaxHTMLBytes int
@@ -78,6 +82,9 @@ func RenderHTML(ctx context.Context, url string, cfg Config) (string, error) {
 			delay = 500 * time.Millisecond
 		}
 		tasks = append(tasks, chromedp.Sleep(delay))
+	}
+	if cfg.WaitForSelector != "" {
+		tasks = append(tasks, chromedp.WaitVisible(cfg.WaitForSelector, chromedp.ByQuery))
 	}
 	tasks = append(tasks, chromedp.OuterHTML("html", &html, chromedp.ByQuery))
 
