@@ -6,6 +6,16 @@ All notable changes to this project will be documented in this file. The format 
 
 ---
 
+## [v0.11.0] — 2026-06-24
+
+### Added
+- `ExtractTables(html string) ([]Table, error)` plus the `Table` type (`{Caption, Headers, Rows}`): parse an HTML fragment into structured tables, reading header text directly from `<thead>`/`<th>` cells (falling back to the first row of `<th>` cells).
+- CLI `--tables-json`: emit every table detected in the parsed content as structured JSON (`[{caption, headers, rows}]`), so consumers can select columns by header name instead of by position.
+- CLI `--render-wait-for <css-selector>`: block the `--render` snapshot until a node matching the selector becomes visible (bounded by the render timeout) — for tables hydrated by JS after the load event.
+- CLI `--render-settle <dur>`: extra settle delay applied after load before the `--render` snapshot, for SPAs that have no stable selector to wait on.
+
+---
+
 ## [v0.10.0] — 2026-06-24
 
 ### Added
