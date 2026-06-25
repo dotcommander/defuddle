@@ -20,6 +20,7 @@ func renderAndParse(ctx context.Context, opts *ParseOptions, defuddleOpts *defud
 		UserAgent:       opts.RenderUA,
 		Wait:            render.WaitStrategy(opts.RenderWait),
 		WaitForSelector: opts.RenderWaitFor,
+		Settle:          opts.RenderSettle,
 		MaxHTMLBytes:    maxInputSize,
 	}
 	html, err := render.RenderHTML(renderCtx, opts.Source, cfg)

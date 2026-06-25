@@ -43,6 +43,10 @@ type Config struct {
 	// selector becomes visible before the snapshot (bounded by the render
 	// timeout). Useful for tables hydrated by JS after the load event.
 	WaitForSelector string
+	// Settle, when > 0, sleeps this long after the wait strategy and before the
+	// snapshot — a crude delay for SPAs that have no stable selector to wait on.
+	// Applies regardless of Wait strategy and independently of IdleDelay.
+	Settle time.Duration
 	// MaxHTMLBytes caps the rendered HTML returned. Zero => no extra cap
 	// (the library applies its own 5 MiB ceiling downstream).
 	MaxHTMLBytes int
@@ -82,6 +86,9 @@ func RenderHTML(ctx context.Context, url string, cfg Config) (string, error) {
 			delay = 500 * time.Millisecond
 		}
 		tasks = append(tasks, chromedp.Sleep(delay))
+	}
+	if cfg.Settle > 0 {
+		tasks = append(tasks, chromedp.Sleep(cfg.Settle))
 	}
 	if cfg.WaitForSelector != "" {
 		tasks = append(tasks, chromedp.WaitVisible(cfg.WaitForSelector, chromedp.ByQuery))
