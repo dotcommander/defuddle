@@ -4,7 +4,7 @@ go 1.26.2
 
 require (
 	github.com/chromedp/chromedp v0.13.6
-	github.com/dotcommander/defuddle v0.10.0
+	github.com/dotcommander/defuddle v0.11.0
 	github.com/kaptinlin/requests v0.6.0
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
