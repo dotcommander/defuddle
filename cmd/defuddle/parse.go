@@ -44,6 +44,7 @@ You can output the content in different formats and extract specific properties.
 type ParseOptions struct {
 	Source           string
 	JSON             bool
+	TablesJSON       bool
 	Markdown         bool
 	Property         string
 	Output           string
@@ -69,6 +70,7 @@ func registerParseFlags(cmd *cobra.Command) {
 	cmd.Flags().Bool("md", false, "Alias for --markdown")
 	cmd.Flags().StringP("property", "p", "", "Extract a specific property (e.g., title, description, domain)")
 	cmd.Flags().StringP("output", "o", "", "Output file path (default: stdout)")
+	cmd.Flags().Bool("tables-json", false, "Output detected tables as structured JSON ({caption, headers, rows})")
 	cmd.Flags().String("user-agent", "", "Custom user agent string")
 	cmd.Flags().StringArrayP("header", "H", []string{}, "Custom headers in format 'Key: Value'")
 	cmd.Flags().Duration("timeout", 30*time.Second, "Request timeout")
@@ -101,6 +103,7 @@ func parseContent(cmd *cobra.Command, args []string) error {
 	}
 
 	jsonOutput, _ := cmd.Flags().GetBool("json")
+	tablesJSON, _ := cmd.Flags().GetBool("tables-json")
 	markdown, _ := cmd.Flags().GetBool("markdown")
 	mdAlias, _ := cmd.Flags().GetBool("md")
 	property, _ := cmd.Flags().GetString("property")
@@ -131,6 +134,7 @@ func parseContent(cmd *cobra.Command, args []string) error {
 	opts := &ParseOptions{
 		Source:           source,
 		JSON:             jsonOutput,
+		TablesJSON:       tablesJSON,
 		Markdown:         markdown,
 		Property:         property,
 		Output:           output,
@@ -255,6 +259,16 @@ func renderOutput(result *defuddle.Result, opts *ParseOptions) (string, error) {
 	}
 
 	switch {
+	case opts.TablesJSON:
+		tables, err := defuddle.ExtractTables(result.Content)
+		if err != nil {
+			return "", fmt.Errorf("error extracting tables: %w", err)
+		}
+		jsonData, err := json.MarshalIndent(tables, "", "  ")
+		if err != nil {
+			return "", fmt.Errorf("error marshaling tables JSON: %w", err)
+		}
+		return string(jsonData), nil
 	case opts.JSON:
 		jsonData, err := json.MarshalIndent(result, "", "  ")
 		if err != nil {
