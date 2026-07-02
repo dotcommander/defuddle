@@ -7,15 +7,19 @@ import (
 	"github.com/dotcommander/defuddle/cmd/defuddle/internal/render"
 )
 
-// renderAndParse drives the chromedp render stage, then feeds the rendered
-// HTML into the UNCHANGED library entrypoint defuddle.ParseFromString. The
-// render deadline comes from opts.RenderTimeout (its own bounded context),
-// independent of the fetch --timeout.
-func renderAndParse(ctx context.Context, opts *ParseOptions, defuddleOpts *defuddle.Options) (*defuddle.Result, error) {
+// renderToHTML renders opts.Source to fully-rendered HTML under its own
+// render-timeout context (independent of the fetch --timeout). Shared by the
+// explicit --render path (renderAndParse) and the auto path (autoRenderAndParse)
+// so the two never drift.
+func renderToHTML(opts *ParseOptions) (string, error) {
 	renderCtx, cancel := buildContext(opts.RenderTimeout)
 	defer cancel()
+	return render.RenderHTML(renderCtx, opts.Source, buildRenderConfig(opts))
+}
 
-	cfg := render.Config{
+// buildRenderConfig maps ParseOptions render flags into a render.Config.
+func buildRenderConfig(opts *ParseOptions) render.Config {
+	return render.Config{
 		ChromePath:      opts.ChromePath,
 		UserAgent:       opts.RenderUA,
 		Wait:            render.WaitStrategy(opts.RenderWait),
@@ -23,7 +27,13 @@ func renderAndParse(ctx context.Context, opts *ParseOptions, defuddleOpts *defud
 		Settle:          opts.RenderSettle,
 		MaxHTMLBytes:    maxInputSize,
 	}
-	html, err := render.RenderHTML(renderCtx, opts.Source, cfg)
+}
+
+// renderAndParse drives the chromedp render stage, then feeds the rendered HTML
+// into the UNCHANGED library entrypoint defuddle.ParseFromString. The render
+// deadline comes from opts.RenderTimeout, independent of the fetch --timeout.
+func renderAndParse(ctx context.Context, opts *ParseOptions, defuddleOpts *defuddle.Options) (*defuddle.Result, error) {
+	html, err := renderToHTML(opts)
 	if err != nil {
 		return nil, err
 	}
