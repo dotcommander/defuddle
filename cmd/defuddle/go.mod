@@ -5,7 +5,7 @@ go 1.26.4
 require (
 	github.com/PuerkitoBio/goquery v1.12.0
 	github.com/chromedp/chromedp v0.15.1
-	github.com/dotcommander/defuddle v0.11.0
+	github.com/dotcommander/defuddle v0.12.0
 	github.com/kaptinlin/requests v0.6.4
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1

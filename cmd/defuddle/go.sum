@@ -15,8 +15,8 @@ github.com/chromedp/sysutil v1.1.0/go.mod h1:WiThHUdltqCNKGc4gaU50XgYjwjYIhKWoHG
 github.com/cpuguy83/go-md2man/v2 v2.0.6/go.mod h1:oOW0eioCTA6cOiMLiUPZOpcVxMig6NIQQ7OS05n1F4g=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-github.com/dotcommander/defuddle v0.11.0 h1:wJuj4Dja+NNbfZ/jGPt+nglnn/SAIjNKOJG4ysDTxB8=
-github.com/dotcommander/defuddle v0.11.0/go.mod h1:O7kxr04chhIV4lV5Zj3lqRI9iKYyeQjZLUhlqVpCerQ=
+github.com/dotcommander/defuddle v0.12.0 h1:mSH7U6JKvJkO8YFpzbWN7uE7lYXGB6fYg6nsGazIGYI=
+github.com/dotcommander/defuddle v0.12.0/go.mod h1:AQAgI7VYwqEe9+1UPhsF/sWuxd+6FMEFpYgTdMQZ5qk=
 github.com/go-json-experiment/json v0.0.0-20260623181947-01eb4420fa68 h1:KZaTBSyshWX3MP5jukJcNSuXDQTO+rNpt0J564dX/eg=
 github.com/go-json-experiment/json v0.0.0-20260623181947-01eb4420fa68/go.mod h1:tphK2c80bpPhMOI4v6bIc2xWywPfbqi1Z06+RcrMkDg=
 github.com/gobwas/httphead v0.1.0 h1:exrUm0f4YX0L7EBwZHuCF4GDp8aJfVeBrlLQrs6NqWU=
