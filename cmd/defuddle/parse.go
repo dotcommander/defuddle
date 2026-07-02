@@ -57,6 +57,7 @@ type ParseOptions struct {
 	ContentSelector  string
 	NoClutterRemoval bool
 	Render           bool
+	RenderAuto       bool
 	RenderWait       string
 	RenderWaitFor    string
 	RenderSettle     time.Duration
@@ -82,6 +83,7 @@ func registerParseFlags(cmd *cobra.Command) {
 	cmd.Flags().String("content-selector", "", "CSS selector for content root (bypasses auto-detection)")
 	cmd.Flags().Bool("no-clutter-removal", false, "Disable all clutter removal heuristics")
 	cmd.Flags().Bool("render", false, "Render JavaScript via headless Chrome before extracting (requires Chrome/Chromium)")
+	cmd.Flags().Bool("render-auto", false, "Auto-detect JS-heavy pages and render only when needed; unlike --render it degrades to plain-HTML parse if Chrome is unavailable")
 	cmd.Flags().Bool("js", false, "Alias for --render")
 	cmd.Flags().String("render-wait", "load", "Render wait strategy: 'load' or 'networkidle'")
 	cmd.Flags().String("render-wait-for", "", "CSS selector to wait for (visible) before snapshot, e.g. 'table tbody tr' (requires --render)")
@@ -121,6 +123,7 @@ func parseContent(cmd *cobra.Command, args []string) error {
 	contentSelector, _ := cmd.Flags().GetString("content-selector")
 	noClutterRemoval, _ := cmd.Flags().GetBool("no-clutter-removal")
 	renderFlag, _ := cmd.Flags().GetBool("render")
+	renderAuto, _ := cmd.Flags().GetBool("render-auto")
 	jsAlias, _ := cmd.Flags().GetBool("js")
 	renderWait, _ := cmd.Flags().GetString("render-wait")
 	renderWaitFor, _ := cmd.Flags().GetString("render-wait-for")
@@ -153,6 +156,7 @@ func parseContent(cmd *cobra.Command, args []string) error {
 		ContentSelector:  contentSelector,
 		NoClutterRemoval: noClutterRemoval,
 		Render:           renderFlag,
+		RenderAuto:       renderAuto,
 		RenderWait:       renderWait,
 		RenderWaitFor:    renderWaitFor,
 		RenderSettle:     renderSettle,
@@ -241,6 +245,9 @@ func loadResult(ctx context.Context, opts *ParseOptions, defuddleOpts *defuddle.
 	case strings.HasPrefix(opts.Source, "http://") || strings.HasPrefix(opts.Source, "https://"):
 		if opts.Render {
 			return renderAndParse(ctx, opts, defuddleOpts)
+		}
+		if opts.RenderAuto {
+			return autoRenderAndParse(ctx, opts, defuddleOpts)
 		}
 		return defuddle.ParseFromURL(ctx, opts.Source, defuddleOpts)
 	default:
