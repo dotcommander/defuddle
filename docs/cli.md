@@ -237,8 +237,19 @@ defuddle parse https://example.com --json | jq '{title, author, wordCount}'
 ## Exit codes & output streams
 
 - Extracted content is written to **stdout**; status notices (e.g. `Output written to <file>`) and error messages go to **stderr**, so a piped stdout stays clean.
-- Exit code is `0` on success and `1` on any error, with the message printed to stderr.
-- `--render` on a machine without Chrome exits `1` with `chrome/chromium not found: install Google Chrome or Chromium, or set --chrome-path to an existing executable`.
+- The exit code classifies the failure so a calling script or agent can branch without parsing stderr. `0` is success; any error the CLI does not recognize stays `1` (unchanged from prior behavior). Recognized failure categories use codes `2`–`6`:
+
+| Code | Category | Meaning | Example |
+|------|----------|---------|---------|
+| `0` | success | Command completed | — |
+| `1` | error | Unclassified error (fallback) | JSON marshal failure, HTTP client build failure |
+| `2` | validation | Bad flags, arguments, or input | Malformed `-H` header, unknown `--property`, non-HTML input, input over the 5 MiB cap |
+| `3` | not_found | Source file / input file missing | `defuddle parse ./missing.html`, `batch --input missing.txt` |
+| `4` | upstream | Fetch / HTTP / network failure | Non-2xx HTTP status, `304 Not Modified` |
+| `5` | precondition | Operator action needed | `--render` with no Chrome/Chromium installed |
+| `6` | cancelled | Context cancelled or timeout | `--timeout` / `--render-timeout` exceeded, interrupted |
+
+- The classification is applied to the single top-level error via `errors.Is`; the error message is printed to stderr regardless of code. Example: `--render` on a machine without Chrome exits `5` with `chrome/chromium not found: install Google Chrome or Chromium, or set --chrome-path to an existing executable`.
 
 ## Version
 
