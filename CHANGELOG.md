@@ -10,6 +10,16 @@ All notable changes to this project will be documented in this file. The format 
 
 ---
 
+## [v0.13.1] — 2026-07-14
+
+### Fixed
+
+- Run root-release CLI tests against the tagged workspace. Standalone
+  `GOWORK=off` verification remains the post-publication gate before the CLI
+  module tag, when the new root module checksum is available.
+
+---
+
 ## [v0.13.0] — 2026-07-14
 
 ### Added

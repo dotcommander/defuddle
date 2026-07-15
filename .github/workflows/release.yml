@@ -36,9 +36,7 @@ jobs:
 
       - name: Run CLI tests
         working-directory: cmd/defuddle
-        env:
-          GOPROXY: direct
-        run: GOWORK=off go test -race -v ./...
+        run: go test -race -v ./...
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v7
