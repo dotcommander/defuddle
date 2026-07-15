@@ -38,6 +38,9 @@ jobs:
         working-directory: cmd/defuddle
         run: go test -race -v ./...
 
+      - name: Restore generated workspace checksum
+        run: git restore go.work.sum
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v7
         with:

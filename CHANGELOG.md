@@ -10,6 +10,15 @@ All notable changes to this project will be documented in this file. The format 
 
 ---
 
+## [v0.13.2] — 2026-07-14
+
+### Fixed
+
+- Restore the transient `go.work.sum` update produced by tagged-workspace CLI
+  tests before GoReleaser's clean-tree validation.
+
+---
+
 ## [v0.13.1] — 2026-07-14
 
 ### Fixed
