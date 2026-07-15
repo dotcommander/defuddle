@@ -1,7 +1,6 @@
 // Package main: `defuddle parse` subcommand and its supporting helpers.
 //
-// parseCmd is the cobra wrapper; parseContent reads flags into a ParseOptions
-// struct and hands off to executeParseContent, which drives the load → render
+// ParseOptions is Kong's parse command and hands off to executeParseContent, which drives the load → render
 // → write pipeline. loadResult routes stdin / URL / file inputs through the
 // defuddle library; renderOutput formats the Result for JSON, markdown, raw
 // content, or a single --property accessor.
@@ -17,155 +16,52 @@ import (
 	"time"
 
 	"github.com/dotcommander/defuddle"
-	"github.com/spf13/cobra"
 )
 
-func newParseCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:     "parse [source]",
-		Aliases: []string{"p"},
-		Short:   "Parse and extract content from a URL, HTML file, or stdin",
-		Long: `Parse content from a URL, local HTML file, or HTML piped via stdin
-and extract structured information.
-
-Examples:
-  defuddle parse https://example.com/article
-  defuddle parse article.html
-  curl -s https://example.com/article | defuddle parse --markdown
-
-You can output the content in different formats and extract specific properties.`,
-		Args: cobra.MaximumNArgs(1),
-		RunE: parseContent,
-	}
-	registerParseFlags(cmd)
-	return cmd
-}
-
 type ParseOptions struct {
-	Source           string
-	JSON             bool
-	TablesJSON       bool
-	Markdown         bool
-	Property         string
-	Output           string
-	UserAgent        string
-	Headers          []string
-	Timeout          time.Duration
-	Debug            bool
-	Proxy            string
-	RemoveImages     bool
-	ContentSelector  string
-	NoClutterRemoval bool
-	Render           bool
-	RenderAuto       bool
-	RenderWait       string
-	RenderWaitFor    string
-	RenderSettle     time.Duration
-	RenderUA         string
-	ChromePath       string
-	RenderTimeout    time.Duration
+	Source           string        `arg:"" optional:"" name:"source" help:"URL or HTML file; reads stdin when omitted."`
+	JSON             bool          `short:"j" help:"Output as JSON with metadata and content."`
+	TablesJSON       bool          `name:"tables-json" help:"Output detected tables as structured JSON."`
+	Markdown         bool          `short:"m" help:"Convert content to markdown format."`
+	MD               bool          `name:"md" help:"Alias for --markdown."`
+	Property         string        `short:"p" help:"Extract a specific property."`
+	Output           string        `short:"o" help:"Output file path (default: stdout)."`
+	UserAgent        string        `name:"user-agent" help:"Custom user agent string."`
+	Headers          []string      `short:"H" name:"header" help:"Custom header in format 'Key: Value'."`
+	Timeout          time.Duration `default:"30s" help:"Request timeout."`
+	Debug            bool          `help:"Enable debug mode."`
+	Proxy            string        `help:"Proxy URL."`
+	RemoveImages     bool          `name:"remove-images" help:"Remove images from extracted content."`
+	ContentSelector  string        `name:"content-selector" help:"CSS selector for content root."`
+	NoClutterRemoval bool          `name:"no-clutter-removal" help:"Disable all clutter removal heuristics."`
+	Render           bool          `help:"Render JavaScript via headless Chrome before extracting."`
+	RenderAuto       bool          `name:"render-auto" help:"Render only pages detected as JavaScript-heavy."`
+	JS               bool          `name:"js" help:"Alias for --render."`
+	RenderWait       string        `name:"render-wait" default:"load" enum:"load,networkidle" help:"Render wait strategy."`
+	RenderWaitFor    string        `name:"render-wait-for" help:"CSS selector to wait for before snapshot."`
+	RenderSettle     time.Duration `name:"render-settle" help:"Extra settle delay after load."`
+	RenderUA         string        `name:"render-user-agent" help:"User-agent for the render stage."`
+	ChromePath       string        `name:"chrome-path" help:"Path to a Chrome/Chromium executable."`
+	RenderTimeout    time.Duration `name:"render-timeout" default:"30s" help:"Maximum rendering time."`
 }
 
-// registerParseFlags attaches parse-mode flags.
-func registerParseFlags(cmd *cobra.Command) {
-	cmd.Flags().BoolP("json", "j", false, "Output as JSON with metadata and content")
-	cmd.Flags().BoolP("markdown", "m", false, "Convert content to markdown format")
-	cmd.Flags().Bool("md", false, "Alias for --markdown")
-	cmd.Flags().StringP("property", "p", "", "Extract a specific property (e.g., title, description, domain)")
-	cmd.Flags().StringP("output", "o", "", "Output file path (default: stdout)")
-	cmd.Flags().Bool("tables-json", false, "Output detected tables as structured JSON ({caption, headers, rows})")
-	cmd.Flags().String("user-agent", "", "Custom user agent string")
-	cmd.Flags().StringArrayP("header", "H", []string{}, "Custom headers in format 'Key: Value'")
-	cmd.Flags().Duration("timeout", 30*time.Second, "Request timeout")
-	cmd.Flags().Bool("debug", false, "Enable debug mode")
-	cmd.Flags().String("proxy", "", "Proxy URL (e.g., http://localhost:8080, socks5://localhost:1080)")
-	cmd.Flags().Bool("remove-images", false, "Remove images from extracted content")
-	cmd.Flags().String("content-selector", "", "CSS selector for content root (bypasses auto-detection)")
-	cmd.Flags().Bool("no-clutter-removal", false, "Disable all clutter removal heuristics")
-	cmd.Flags().Bool("render", false, "Render JavaScript via headless Chrome before extracting (requires Chrome/Chromium)")
-	cmd.Flags().Bool("render-auto", false, "Auto-detect JS-heavy pages and render only when needed; unlike --render it degrades to plain-HTML parse if Chrome is unavailable")
-	cmd.Flags().Bool("js", false, "Alias for --render")
-	cmd.Flags().String("render-wait", "load", "Render wait strategy: 'load' or 'networkidle'")
-	cmd.Flags().String("render-wait-for", "", "CSS selector to wait for (visible) before snapshot, e.g. 'table tbody tr' (requires --render)")
-	cmd.Flags().Duration("render-settle", 0, "Extra settle delay after load before snapshot, e.g. 2s; for SPAs without a stable selector (requires --render)")
-	cmd.Flags().String("render-user-agent", "", "User-agent for the render stage (default: Chrome default)")
-	cmd.Flags().String("chrome-path", "", "Path to a Chrome/Chromium executable (default: auto-detect)")
-	cmd.Flags().Duration("render-timeout", 30*time.Second, "Maximum time to spend rendering the page")
-}
-
-func parseContent(cmd *cobra.Command, args []string) error {
-	cmd.SilenceUsage = true
-
+func (opts *ParseOptions) Run() error {
 	// Resolve source: positional arg, or "-" sentinel when stdin is piped.
 	// loadResult (below) already handles the "-" → os.Stdin branch.
 	var source string
 	switch {
-	case len(args) == 1:
-		source = args[0]
+	case opts.Source != "":
+		source = opts.Source
 	case isStdinPiped():
 		source = "-"
 	default:
 		return ErrParseUsage
 	}
 
-	jsonOutput, _ := cmd.Flags().GetBool("json")
-	tablesJSON, _ := cmd.Flags().GetBool("tables-json")
-	markdown, _ := cmd.Flags().GetBool("markdown")
-	mdAlias, _ := cmd.Flags().GetBool("md")
-	property, _ := cmd.Flags().GetString("property")
-	output, _ := cmd.Flags().GetString("output")
-	userAgent, _ := cmd.Flags().GetString("user-agent")
-	headers, _ := cmd.Flags().GetStringArray("header")
-	timeout, _ := cmd.Flags().GetDuration("timeout")
-	debug, _ := cmd.Flags().GetBool("debug")
-	proxy, _ := cmd.Flags().GetString("proxy")
-	removeImages, _ := cmd.Flags().GetBool("remove-images")
-	contentSelector, _ := cmd.Flags().GetString("content-selector")
-	noClutterRemoval, _ := cmd.Flags().GetBool("no-clutter-removal")
-	renderFlag, _ := cmd.Flags().GetBool("render")
-	renderAuto, _ := cmd.Flags().GetBool("render-auto")
-	jsAlias, _ := cmd.Flags().GetBool("js")
-	renderWait, _ := cmd.Flags().GetString("render-wait")
-	renderWaitFor, _ := cmd.Flags().GetString("render-wait-for")
-	renderSettle, _ := cmd.Flags().GetDuration("render-settle")
-	renderUA, _ := cmd.Flags().GetString("render-user-agent")
-	chromePath, _ := cmd.Flags().GetString("chrome-path")
-	renderTimeout, _ := cmd.Flags().GetDuration("render-timeout")
-
-	// Handle markdown alias
-	if mdAlias {
-		markdown = true
-	}
-	if jsAlias {
-		renderFlag = true
-	}
-
-	opts := &ParseOptions{
-		Source:           source,
-		JSON:             jsonOutput,
-		TablesJSON:       tablesJSON,
-		Markdown:         markdown,
-		Property:         property,
-		Output:           output,
-		UserAgent:        userAgent,
-		Headers:          headers,
-		Timeout:          timeout,
-		Debug:            debug,
-		Proxy:            proxy,
-		RemoveImages:     removeImages,
-		ContentSelector:  contentSelector,
-		NoClutterRemoval: noClutterRemoval,
-		Render:           renderFlag,
-		RenderAuto:       renderAuto,
-		RenderWait:       renderWait,
-		RenderWaitFor:    renderWaitFor,
-		RenderSettle:     renderSettle,
-		RenderUA:         renderUA,
-		ChromePath:       chromePath,
-		RenderTimeout:    renderTimeout,
-	}
-
-	if debug {
+	opts.Source = source
+	opts.Markdown = opts.Markdown || opts.MD
+	opts.Render = opts.Render || opts.JS
+	if opts.Debug {
 		slog.SetLogLoggerLevel(slog.LevelDebug)
 	}
 
@@ -185,13 +81,16 @@ func buildContext(timeout time.Duration) (context.Context, context.CancelFunc) {
 func executeParseContent(opts *ParseOptions) error {
 	// Build HTTP client from fetch flags (validates headers, applies UA/proxy/timeout).
 	// Returns nil client when no flags are set, so defuddle uses its hardened default.
-	client, err := buildHTTPClient(opts.UserAgent, opts.Headers, opts.Proxy, opts.Timeout)
+	fetch, err := buildHTTPClient(opts.UserAgent, opts.Headers, opts.Proxy, opts.Timeout)
 	if err != nil {
 		return err
 	}
 
 	defuddleOpts := buildDefuddleOptions(opts)
-	defuddleOpts.Client = client
+	if fetch != nil {
+		defuddleOpts.Client = fetch.client
+		defuddleOpts.Headers = fetch.headers
+	}
 
 	ctx, cancel := buildContext(opts.Timeout)
 	defer cancel()

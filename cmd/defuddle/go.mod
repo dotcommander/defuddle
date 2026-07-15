@@ -6,14 +6,15 @@ require (
 	github.com/PuerkitoBio/goquery v1.12.0
 	github.com/chromedp/chromedp v0.15.1
 	github.com/dotcommander/defuddle v0.12.0
-	github.com/kaptinlin/requests v0.6.4
-	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
 )
+
+require github.com/kaptinlin/requests v0.6.4 // indirect
 
 require (
 	github.com/JohannesKaufmann/dom v0.3.1 // indirect
 	github.com/JohannesKaufmann/html-to-markdown/v2 v2.5.2 // indirect
+	github.com/alecthomas/kong v1.15.0
 	github.com/andybalholm/cascadia v1.3.4 // indirect
 	github.com/chromedp/cdproto v0.0.0-20260427013145-5737772c319b // indirect
 	github.com/chromedp/sysutil v1.1.0 // indirect
@@ -24,10 +25,8 @@ require (
 	github.com/gobwas/ws v1.4.0 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/google/go-querystring v1.2.0 // indirect
-	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/kaptinlin/orderedobject v0.2.14 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	golang.org/x/net v0.56.0 // indirect
 	golang.org/x/sync v0.21.0 // indirect

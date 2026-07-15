@@ -98,7 +98,7 @@ func RenderHTML(ctx context.Context, url string, cfg Config) (string, error) {
 	if err := chromedp.Run(browserCtx, tasks); err != nil {
 		// chromedp surfaces a missing/unstartable browser as an exec error.
 		if isChromeStartFailure(err) {
-			return "", fmt.Errorf("%w: %v", ErrChromeNotFound, err)
+			return "", fmt.Errorf("%w: %w", ErrChromeNotFound, err)
 		}
 		if ctx.Err() != nil {
 			return "", fmt.Errorf("render %s timed out: %w", url, ctx.Err())

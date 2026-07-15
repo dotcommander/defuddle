@@ -10,46 +10,34 @@ import (
 	"strings"
 
 	"github.com/dotcommander/defuddle/extractors"
-	"github.com/spf13/cobra"
 )
 
-func newExtractorsCmd() *cobra.Command {
-	extractors.InitializeBuiltins()
-	cmd := &cobra.Command{
-		Use:   "extractors",
-		Short: "List registered site-specific extractors",
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			cmd.SilenceUsage = true
-
-			matchURL, _ := cmd.Flags().GetString("match")
-			mappings := extractors.DefaultRegistry.GetMappings()
-
-			if matchURL != "" {
-				label, ok, err := findMatchingExtractorLabel(matchURL, mappings)
-				if err != nil {
-					return err
-				}
-				if ok {
-					fmt.Println("MATCH:", label)
-				} else {
-					fmt.Fprintln(os.Stderr, "no URL-specific extractor matches the given URL")
-				}
-				return nil
-			}
-
-			for _, m := range mappings {
-				fmt.Println(mappingLabel(m))
-			}
-			return nil
-		},
-	}
-	registerExtractorsFlags(cmd)
-	return cmd
+type ExtractorsOptions struct {
+	Match string `help:"Show which extractor matches the given URL."`
 }
 
-// registerExtractorsFlags attaches extractors-mode flags.
-func registerExtractorsFlags(cmd *cobra.Command) {
-	cmd.Flags().String("match", "", "Show which extractor matches the given URL")
+func (opts *ExtractorsOptions) Run() error {
+	extractors.InitializeBuiltins()
+	matchURL := opts.Match
+	mappings := extractors.DefaultRegistry.GetMappings()
+
+	if matchURL != "" {
+		label, ok, err := findMatchingExtractorLabel(matchURL, mappings)
+		if err != nil {
+			return err
+		}
+		if ok {
+			fmt.Println("MATCH:", label)
+		} else {
+			fmt.Fprintln(os.Stderr, "no URL-specific extractor matches the given URL")
+		}
+		return nil
+	}
+
+	for _, m := range mappings {
+		fmt.Println(mappingLabel(m))
+	}
+	return nil
 }
 
 // mappingLabel returns a human-readable string listing the patterns for an extractor mapping.

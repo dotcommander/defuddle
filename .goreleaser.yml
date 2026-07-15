@@ -117,8 +117,8 @@ release:
     #### Install from Source
     ```bash
     git clone https://github.com/dotcommander/defuddle.git
-    cd defuddle-go
-    make build-cli
+    cd defuddle
+    task build-cli
     ```
   footer: |
 

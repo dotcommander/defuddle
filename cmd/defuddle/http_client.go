@@ -1,18 +1,23 @@
 // Package main: HTTP client construction for the parse command.
 //
-// buildHTTPClient assembles a *requests.Client from CLI fetch flags
+// buildHTTPClient assembles standard-library HTTP settings from CLI fetch flags
 // (--user-agent, --header, --proxy, --timeout). It returns nil when all
 // flags are unset so callers can fall through to defuddle's built-in
 // default client (preserves prior behavior).
 package main
 
 import (
+	"net/http"
+	"net/url"
 	"time"
-
-	"github.com/kaptinlin/requests"
 )
 
-// buildHTTPClient returns a *requests.Client configured from CLI fetch flags,
+type fetchClient struct {
+	client  *http.Client
+	headers http.Header
+}
+
+// buildHTTPClient returns standard-library client settings from CLI fetch flags,
 // or nil if no fetch flag overrides are present (so the defuddle library uses
 // its hardened default client).
 //
@@ -21,7 +26,7 @@ import (
 // but does not itself force creation when no other flag is set (defuddle's
 // default client already uses 30s and the request context carries the
 // timeout for cancellation).
-func buildHTTPClient(userAgent string, headers []string, proxy string, timeout time.Duration) (*requests.Client, error) {
+func buildHTTPClient(userAgent string, headers []string, proxy string, timeout time.Duration) (*fetchClient, error) {
 	// Validate headers up front; surface parse errors before constructing the client.
 	parsed := make([][2]string, 0, len(headers))
 	for _, h := range headers {
@@ -37,23 +42,23 @@ func buildHTTPClient(userAgent string, headers []string, proxy string, timeout t
 		return nil, nil
 	}
 
-	opts := make([]requests.ClientOption, 0, 4+len(parsed))
+	requestHeaders := make(http.Header)
 	if userAgent != "" {
-		opts = append(opts, requests.WithUserAgent(userAgent))
+		requestHeaders.Set("User-Agent", userAgent)
 	}
 	for _, kv := range parsed {
-		opts = append(opts, requests.WithHeader(kv[0], kv[1]))
+		requestHeaders.Add(kv[0], kv[1])
 	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
 	if proxy != "" {
-		opts = append(opts, requests.WithProxy(proxy))
+		proxyURL, err := url.Parse(proxy)
+		if err != nil {
+			return nil, err
+		}
+		transport.Proxy = http.ProxyURL(proxyURL)
 	}
-	if timeout > 0 {
-		opts = append(opts, requests.WithTimeout(timeout))
-	}
-
-	client := requests.New(opts...)
-	if client == nil {
-		return nil, ErrHTTPClientBuild
-	}
-	return client, nil
+	return &fetchClient{
+		client:  &http.Client{Transport: transport, Timeout: timeout},
+		headers: requestHeaders,
+	}, nil
 }

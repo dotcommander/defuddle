@@ -91,34 +91,6 @@ func TestScanURLs_CommentOnlyInput(t *testing.T) {
 	}
 }
 
-// TestBatchCmd_TimeoutFlagRegistered verifies that the batch subcommand
-// exposes a --timeout flag with the expected default and that durations
-// parse cleanly.
-func TestBatchCmd_TimeoutFlagRegistered(t *testing.T) {
-	t.Parallel()
-
-	cmd := newBatchCmd()
-	flag := cmd.Flags().Lookup("timeout")
-	if flag == nil {
-		t.Fatalf("batchCmd: --timeout flag not registered")
-	}
-	if flag.DefValue != "0s" {
-		t.Errorf("batchCmd --timeout default: got %q, want %q", flag.DefValue, "0s")
-	}
-
-	// Round-trip a parse to confirm the value is wired as a duration.
-	if err := cmd.Flags().Set("timeout", "1500ms"); err != nil {
-		t.Fatalf("set --timeout: %v", err)
-	}
-	got, err := cmd.Flags().GetDuration("timeout")
-	if err != nil {
-		t.Fatalf("get --timeout: %v", err)
-	}
-	if got.String() != "1.5s" {
-		t.Errorf("batchCmd --timeout parsed: got %s, want 1.5s", got)
-	}
-}
-
 func TestValidateConcurrency(t *testing.T) {
 	t.Parallel()
 

@@ -93,7 +93,7 @@ func Classify(html string) Classification {
 	weakScript := contentLen > 0 && scriptLen >= weakScriptRatio*contentLen
 
 	// Enough real content and no JS-shell tell => static.
-	if contentLen >= minVisibleText && !jsRequired && !(shellMarker && strongScript) {
+	if contentLen >= minVisibleText && !jsRequired && (!shellMarker || !strongScript) {
 		return Static
 	}
 	// The rendered content IS a JS-required notice => definitely a shell.

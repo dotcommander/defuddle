@@ -70,7 +70,7 @@ func TestBuildHTTPClient_InvalidHeader(t *testing.T) {
 	}
 }
 
-// TestParseFromURL_UsesCustomClient verifies that a *requests.Client built
+// TestParseFromURL_UsesCustomClient verifies that standard HTTP settings built
 // from CLI flags (User-Agent, custom header) actually reaches the upstream
 // request when passed via defuddle.Options.Client.
 func TestParseFromURL_UsesCustomClient(t *testing.T) {
@@ -86,15 +86,15 @@ func TestParseFromURL_UsesCustomClient(t *testing.T) {
 	defer srv.Close()
 
 	const customUA = "DefuddleCLITest/1.0"
-	client, err := buildHTTPClient(customUA, []string{"X-Test: yes"}, "", 5*time.Second)
+	fetch, err := buildHTTPClient(customUA, []string{"X-Test: yes"}, "", 5*time.Second)
 	if err != nil {
 		t.Fatalf("buildHTTPClient: %v", err)
 	}
-	if client == nil {
+	if fetch == nil {
 		t.Fatalf("expected non-nil client when flags set")
 	}
 
-	opts := &defuddle.Options{Client: client}
+	opts := &defuddle.Options{Client: fetch.client, Headers: fetch.headers}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -125,15 +125,15 @@ func TestParseFromURL_DefaultsPreservedWhenNoFlags(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client, err := buildHTTPClient("", nil, "", 30*time.Second)
+	fetch, err := buildHTTPClient("", nil, "", 30*time.Second)
 	if err != nil {
 		t.Fatalf("buildHTTPClient: %v", err)
 	}
-	if client != nil {
-		t.Fatalf("expected nil client for no-flags case, got %v", client)
+	if fetch != nil {
+		t.Fatalf("expected nil client for no-flags case, got %v", fetch)
 	}
 
-	opts := &defuddle.Options{Client: client} // nil — defuddle uses its default
+	opts := &defuddle.Options{} // nil — defuddle uses its default
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

@@ -6,6 +6,50 @@ All notable changes to this project will be documented in this file. The format 
 
 ---
 
+## [Unreleased]
+
+---
+
+## [v0.13.0] — 2026-07-14
+
+### Added
+
+- `Options.Headers` for request headers shared by `ParseFromURL` and
+  `ParseFromURLs`, including conditional cache validators.
+
+### Changed
+
+- `Options.Client` now accepts the standard library's `*http.Client`, removing
+  the public dependency on `github.com/kaptinlin/requests`. This is a breaking
+  API change for callers that supplied a custom requests client.
+- The CLI now uses Kong instead of Cobra while preserving the `parse` (`p`),
+  `batch`, and `extractors` commands, their flags, and typed exit behavior.
+- Release automation now verifies the CLI module with `GOWORK=off` after it is
+  pinned to the newly published library version and before its module tag is
+  created.
+
+### Removed
+
+- The library's `github.com/kaptinlin/requests` dependency and the CLI's Cobra
+  dependency.
+
+---
+
+## [v0.12.0] — 2026-07-02
+
+### Added
+
+- Typed CLI exit codes for usage, input, network, render, and extraction
+  failures.
+- `--render-auto` to detect JavaScript shell pages and render them only when
+  needed, with a static-HTML fallback when Chrome is unavailable.
+
+### Changed
+
+- Updated library dependencies and the Go toolchain requirement to 1.26.4.
+
+---
+
 ## [v0.11.0] — 2026-06-24
 
 ### Added
@@ -59,10 +103,6 @@ All notable changes to this project will be documented in this file. The format 
 ### Changed
 
 - `task verify` now runs `govulncheck ./...` through the new `task vuln` gate.
-
----
-
-## [Unreleased]
 
 ---
 

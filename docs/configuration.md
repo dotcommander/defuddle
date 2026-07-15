@@ -103,13 +103,16 @@ opts := &defuddle.Options{RemoveImages: true}
 ### Custom Client
 
 ```go
-import "github.com/kaptinlin/requests"
-
-client := requests.New(
-    requests.WithUserAgent("MyBot/1.0"),
-    requests.WithTimeout(60 * time.Second),
+import (
+    "net/http"
+    "time"
 )
-opts := &defuddle.Options{Client: client}
+
+client := &http.Client{Timeout: 60 * time.Second}
+opts := &defuddle.Options{
+    Client: client,
+    Headers: http.Header{"User-Agent": []string{"MyBot/1.0"}},
+}
 ```
 
 ### MaxConcurrency

@@ -193,9 +193,9 @@ Replace `VectorStore` and `Document` with your store's types (pgvector, chromem-
 
 ## 5. Custom HTTP Client with Cookies
 
-For login-gated content, build a `*requests.Client` with a cookie jar populated from a browser session export.
+For login-gated content, build an `*http.Client` with a cookie jar populated from a browser session export.
 
-Dependencies: `github.com/kaptinlin/requests` (transitive via defuddle), `golang.org/x/net` (transitive via defuddle).
+Dependency: `golang.org/x/net` for the public suffix list (or use a plain standard-library jar).
 
 ```go
 package main
@@ -208,7 +208,6 @@ import (
     "time"
 
     "github.com/dotcommander/defuddle"
-    "github.com/kaptinlin/requests"
     "golang.org/x/net/publicsuffix"
 )
 
@@ -221,14 +220,11 @@ func parseWithCookies(ctx context.Context, targetURL string, cookies []*http.Coo
     }
     jar.SetCookies(u, cookies)
 
-    client := requests.New(
-        requests.WithTimeout(30*time.Second),
-        requests.WithCookieJar(jar),
-        requests.WithUserAgent("Mozilla/5.0 (compatible; MyBot/1.0)"),
-    )
+    client := &http.Client{Timeout: 30*time.Second, Jar: jar}
 
     return defuddle.ParseFromURL(ctx, targetURL, &defuddle.Options{
         Client: client,
+        Headers: http.Header{"User-Agent": []string{"Mozilla/5.0 (compatible; MyBot/1.0)"}},
     })
 }
 ```

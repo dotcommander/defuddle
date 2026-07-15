@@ -6,7 +6,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io/fs"
 	"testing"
@@ -25,7 +24,7 @@ func TestExitCodeFor(t *testing.T) {
 		want int
 	}{
 		{"nil is success", nil, exitOK},
-		{"unclassified falls back", errors.New("boom"), exitError},
+		{"unclassified falls back", assert.AnError, exitError},
 		{"invalid header is validation", fmt.Errorf("wrap: %w", ErrInvalidHeaderFormat), exitValidation},
 		{"directory traversal is validation", ErrDirectoryTraversal, exitValidation},
 		{"no urls is validation", ErrNoURLs, exitValidation},

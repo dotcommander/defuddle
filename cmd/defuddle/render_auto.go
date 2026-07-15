@@ -16,7 +16,7 @@ import (
 // parsing the already-fetched plain HTML (with a one-line stderr note), so an
 // auto run without Chrome still produces best-effort output instead of exit 5.
 func autoRenderAndParse(ctx context.Context, opts *ParseOptions, defuddleOpts *defuddle.Options) (*defuddle.Result, error) {
-	html, err := fetchHTML(ctx, opts.Source, defuddleOpts.Client)
+	html, err := fetchHTML(ctx, opts.Source, defuddleOpts.Client, defuddleOpts.Headers)
 	if err != nil {
 		return nil, err
 	}

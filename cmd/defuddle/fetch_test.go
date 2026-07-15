@@ -18,7 +18,7 @@ func TestFetchHTML_Success(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	body, err := fetchHTML(t.Context(), ts.URL, nil)
+	body, err := fetchHTML(t.Context(), ts.URL, nil, nil)
 	if err != nil {
 		t.Fatalf("fetchHTML: unexpected error: %v", err)
 	}
@@ -34,7 +34,7 @@ func TestFetchHTML_HTTPStatusError(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	_, err := fetchHTML(t.Context(), ts.URL, nil)
+	_, err := fetchHTML(t.Context(), ts.URL, nil, nil)
 	if !errors.Is(err, defuddle.ErrHTTPStatus) {
 		t.Fatalf("fetchHTML on 404: want ErrHTTPStatus, got %v", err)
 	}
@@ -48,7 +48,7 @@ func TestFetchHTML_NonHTMLContentType(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	_, err := fetchHTML(t.Context(), ts.URL, nil)
+	_, err := fetchHTML(t.Context(), ts.URL, nil, nil)
 	if !errors.Is(err, defuddle.ErrNotHTML) {
 		t.Fatalf("fetchHTML on octet-stream: want ErrNotHTML, got %v", err)
 	}

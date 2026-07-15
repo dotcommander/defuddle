@@ -49,6 +49,7 @@ func exitCodeFor(err error) int {
 	case errors.Is(err, fs.ErrNotExist):
 		return exitNotFound
 	case errors.Is(err, ErrInvalidHeaderFormat),
+		errors.Is(err, ErrCLIUsage),
 		errors.Is(err, ErrDirectoryTraversal),
 		errors.Is(err, ErrNoURLs),
 		errors.Is(err, ErrPropertyNotFound),

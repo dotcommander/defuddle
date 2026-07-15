@@ -119,6 +119,10 @@ result, err := defuddle.ParseFromURL(ctx, "https://example.com/article", &defudd
 })
 ```
 
+For cache validation, pass `If-None-Match` or `If-Modified-Since` through
+`Options.Headers`; a server `304 Not Modified` response is returned as
+`ErrNotModified` and can be checked with `errors.Is`.
+
 ### Multiple URLs (concurrent)
 
 ```go
@@ -301,7 +305,8 @@ opts := &defuddle.Options{
     ProcessRoles:     false, // Convert ARIA roles to semantic HTML
 
     // HTTP (for ParseFromURL / ParseFromURLs)
-    Client:         nil, // Custom *requests.Client; default uses 30s timeout
+    Client:         nil, // Custom *http.Client; use its transport, jar, and timeout
+    Headers:        nil, // Request headers cloned onto each fetch
     MaxConcurrency: 5,   // Parallel limit for ParseFromURLs
     Debug:          false,
 }
@@ -464,7 +469,7 @@ Defuddle works best on static, article-style HTML. Several categories of pages w
 
 **JS-rendered pages.** If a site uses client-side rendering (React, Vue, Svelte without SSR), defuddle receives the shell HTML before JavaScript runs — usually near-empty. Use the built-in `--render` (alias `--js`) flag to render the page in headless Chrome before extraction (see [JavaScript rendering](#javascript-rendering-opt-in)). For library use, or to drive rendering yourself, pre-render with a headless browser and pass the HTML to `ParseFromString`.
 
-**Paywalled and login-gated content.** Defuddle fetches exactly what an unauthenticated request returns. For login-gated content, pass an authenticated `*requests.Client` with session cookies. For hard paywalls, you get the paywall HTML.
+**Paywalled and login-gated content.** Defuddle fetches exactly what an unauthenticated request returns. For login-gated content, pass an authenticated `*http.Client` with a cookie jar. For hard paywalls, you get the paywall HTML.
 
 **PDFs and binary content.** Any response whose `Content-Type` is not HTML, XML, or text returns `ErrNotHTML`. Sniff the content type before calling defuddle.
 

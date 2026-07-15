@@ -4,6 +4,7 @@ package defuddle
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -27,11 +28,12 @@ import (
 	"github.com/dotcommander/defuddle/internal/standardize"
 	"github.com/dotcommander/defuddle/internal/text"
 	"github.com/dotcommander/defuddle/internal/urlutil"
-	"github.com/kaptinlin/requests"
 )
 
 // headingTags lists the HTML heading tag names used for heading detection.
 var headingTags = []string{"h1", "h2", "h3", "h4", "h5", "h6"}
+
+var errInvalidRequestURL = errors.New("URL must be absolute HTTP(S)")
 
 // headingSelector is a CSS selector string derived from headingTags.
 var headingSelector = strings.Join(headingTags, ", ")
@@ -184,12 +186,9 @@ func ParseFromURL(ctx context.Context, url string, options *Options) (*Result, e
 	// Create HTTP client with hardened defaults
 	client := options.Client
 	if client == nil {
-		client = requests.New(
-			requests.WithUserAgent(fmt.Sprintf("Mozilla/5.0 (compatible; Defuddle/%s; +https://github.com/dotcommander/defuddle)", Version)),
-			requests.WithTimeout(30*time.Second),
-		)
+		client = &http.Client{Timeout: 30 * time.Second}
 	}
-	fetched, err := fetchCapped(ctx, client, url)
+	fetched, err := fetchCapped(ctx, client, options.Headers, url)
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, fmt.Errorf("fetch %s: %w", url, ErrTimeout)
@@ -221,8 +220,8 @@ type fetchResult struct {
 	URL         string
 }
 
-func fetchCapped(ctx context.Context, client *requests.Client, rawURL string) (*fetchResult, error) {
-	reqURL, err := buildRequestURL(client, rawURL)
+func fetchCapped(ctx context.Context, client *http.Client, headers http.Header, rawURL string) (*fetchResult, error) {
+	reqURL, err := validateRequestURL(rawURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch URL %s: %w", rawURL, err)
 	}
@@ -231,14 +230,16 @@ func fetchCapped(ctx context.Context, client *requests.Client, rawURL string) (*
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch URL %s: %w", rawURL, err)
 	}
-	applyRequestDefaults(req, client)
-
-	httpClient := http.DefaultClient
-	if client != nil && client.HTTPClient != nil {
-		httpClient = client.HTTPClient
+	for key, values := range headers {
+		for _, value := range values {
+			req.Header.Add(key, value)
+		}
+	}
+	if req.Header.Get("User-Agent") == "" {
+		req.Header.Set("User-Agent", fmt.Sprintf("Mozilla/5.0 (compatible; Defuddle/%s; +https://github.com/dotcommander/defuddle)", Version))
 	}
 
-	resp, err := httpClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch URL %s: %w", rawURL, err)
 	}
@@ -283,39 +284,18 @@ func fetchCapped(ctx context.Context, client *requests.Client, rawURL string) (*
 	return &fetchResult{Body: body, ContentType: ct, URL: responseURL}, nil
 }
 
-func buildRequestURL(client *requests.Client, rawURL string) (string, error) {
-	if client == nil || client.BaseURL == "" {
-		_, err := url.Parse(rawURL)
-		return rawURL, err
-	}
+func validateRequestURL(rawURL string) (string, error) {
 	parsed, err := url.Parse(rawURL)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("%w: %w", errInvalidRequestURL, err)
 	}
-	if parsed.IsAbs() {
-		return rawURL, nil
+	if !parsed.IsAbs() ||
+		(!strings.EqualFold(parsed.Scheme, "http") && !strings.EqualFold(parsed.Scheme, "https")) ||
+		parsed.Host == "" {
+		return "", errInvalidRequestURL
 	}
-	base, err := url.Parse(client.BaseURL)
-	if err != nil {
-		return "", err
-	}
-	return base.ResolveReference(parsed).String(), nil
-}
-
-func applyRequestDefaults(req *http.Request, client *requests.Client) {
-	if client == nil {
-		return
-	}
-	if client.Headers != nil {
-		for key, values := range *client.Headers {
-			for _, value := range values {
-				req.Header.Add(key, value)
-			}
-		}
-	}
-	for _, cookie := range client.Cookies {
-		req.AddCookie(cookie)
-	}
+	parsed.Scheme = strings.ToLower(parsed.Scheme)
+	return parsed.String(), nil
 }
 
 // ParseFromString parses HTML content directly from a string

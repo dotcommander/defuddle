@@ -4,11 +4,12 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"runtime/debug"
 
+	"github.com/alecthomas/kong"
 	"github.com/dotcommander/defuddle/extractors"
-	"github.com/spf13/cobra"
 )
 
 // Build-injected via ldflags (goreleaser, go build -ldflags "-X main.version=...")
@@ -37,29 +38,44 @@ var (
 	ErrDirectoryTraversal  = fmt.Errorf("invalid file path: directory traversal detected")
 	ErrNoURLs              = errors.New("no URLs provided")
 	ErrPropertyNotFound    = fmt.Errorf("property not found in response")
-	ErrHTTPClientBuild     = errors.New("failed to construct HTTP client")
 	ErrParseUsage          = errors.New("usage: defuddle parse <url|file> (or pipe HTML via stdin)")
 	ErrInvalidMatchURL     = errors.New("invalid match URL")
 	ErrInvalidConcurrency  = errors.New("concurrency must be at least 1")
+	ErrCLIUsage            = errors.New("invalid command line")
 )
 
-func newRootCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:     "defuddle",
-		Short:   "Extract and structure content from web pages",
-		Version: fmt.Sprintf("%s (commit: %s, built: %s)", resolvedVersion(), commit, date),
-		Long: `defuddle is a CLI tool for extracting and structuring content from web pages.
-It can parse HTML, extract metadata, and convert content to various formats.`,
-	}
-	cmd.AddCommand(newParseCmd(), newExtractorsCmd(), newBatchCmd())
-	return cmd
+type CLI struct {
+	Parse      ParseOptions      `cmd:"" aliases:"p" help:"Parse and extract content from a URL, HTML file, or stdin."`
+	Extractors ExtractorsOptions `cmd:"" help:"List registered site-specific extractors."`
+	Batch      BatchOptions      `cmd:"" help:"Parse multiple URLs, output JSONL."`
+	Version    kong.VersionFlag  `name:"version" help:"Print version information and quit."`
+}
+
+func newParser(cli *CLI, stdout, stderr io.Writer) (*kong.Kong, error) {
+	return kong.New(cli,
+		kong.Name("defuddle"),
+		kong.Description("Extract and structure content from web pages."),
+		kong.Vars{"version": fmt.Sprintf("%s (commit: %s, built: %s)", resolvedVersion(), commit, date)},
+		kong.Writers(stdout, stderr),
+	)
 }
 
 func main() {
 	extractors.InitializeBuiltins()
-	rootCmd := newRootCmd()
-	rootCmd.SilenceErrors = true
-	if err := rootCmd.Execute(); err != nil {
+	cli := &CLI{}
+	parser, err := newParser(cli, os.Stdout, os.Stderr)
+	if err == nil {
+		var ctx *kong.Context
+		ctx, err = parser.Parse(os.Args[1:])
+		if err != nil {
+			err = fmt.Errorf("%w: %w", ErrCLIUsage, err)
+		} else {
+			err = ctx.Run()
+		}
+	} else {
+		err = fmt.Errorf("constructing command parser: %w", err)
+	}
+	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(exitCodeFor(err))
 	}

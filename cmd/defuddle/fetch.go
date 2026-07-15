@@ -18,33 +18,25 @@ import (
 	"strings"
 
 	"github.com/dotcommander/defuddle"
-	"github.com/kaptinlin/requests"
 )
 
 // fetchHTML GETs rawURL and returns the response body. client carries the CLI's
 // --user-agent/--header/--proxy/--timeout overrides (may be nil, in which case
 // http.DefaultClient is used and the request context bounds the fetch).
-func fetchHTML(ctx context.Context, rawURL string, client *requests.Client) (string, error) {
+func fetchHTML(ctx context.Context, rawURL string, client *http.Client, headers http.Header) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return "", fmt.Errorf("fetch %s: %w", rawURL, err)
 	}
 
-	httpClient := http.DefaultClient
-	if client != nil {
-		if client.Headers != nil {
-			for key, values := range *client.Headers {
-				for _, value := range values {
-					req.Header.Add(key, value)
-				}
-			}
+	for key, values := range headers {
+		for _, value := range values {
+			req.Header.Add(key, value)
 		}
-		for _, cookie := range client.Cookies {
-			req.AddCookie(cookie)
-		}
-		if client.HTTPClient != nil {
-			httpClient = client.HTTPClient
-		}
+	}
+	httpClient := client
+	if httpClient == nil {
+		httpClient = http.DefaultClient
 	}
 
 	resp, err := httpClient.Do(req)

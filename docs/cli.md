@@ -8,11 +8,9 @@
 defuddle <command> [flags]
 
 Commands:
-  parse [source]   Extract content from a URL, HTML file, or stdin   (alias: p)
+  parse (p) [source] Extract content from a URL, HTML file, or stdin
   batch            Parse many URLs concurrently, emit JSONL
   extractors       List registered site-specific extractors
-  help             Help about any command
-  completion       Generate a shell completion script
 
 Global:
   --version        Print version, commit, and build date
@@ -87,7 +85,12 @@ defuddle parse --render \
   https://example.com
 ```
 
-`--render-wait` accepts `load` (default; snapshot after the load event) or `networkidle` (snapshot after a brief network-idle settle). Render flags only take effect together with `--render`/`--js`; without it, behavior is unchanged (static fetch, no JS).
+`--render-auto` first fetches the static HTML and escalates to Chrome only when
+the page looks like a JavaScript shell. If Chrome is unavailable, it falls back
+to parsing the static HTML. `--render-wait` accepts `load` (default; snapshot
+after the load event) or `networkidle` (snapshot after a brief network-idle
+settle). Use `--render-wait-for` for a stable CSS selector, or `--render-settle`
+for a fixed post-load delay. Render tuning flags only affect a render path.
 
 ### HTTP flags
 
@@ -130,6 +133,7 @@ defuddle parse https://example.com --debug
 | Flag | Short | Type | Default | Description |
 |------|-------|------|---------|-------------|
 | `--json` | `-j` | bool | false | Output as JSON with metadata and content |
+| `--tables-json` | | bool | false | Output detected tables as structured JSON |
 | `--markdown` | `-m` | bool | false | Convert content to markdown format |
 | `--md` | | bool | false | Alias for `--markdown` |
 | `--property` | `-p` | string | | Extract a single property (e.g. `title`, `author`) |
@@ -143,8 +147,11 @@ defuddle parse https://example.com --debug
 | `--content-selector` | | string | | CSS selector for content root (bypasses auto-detection) |
 | `--no-clutter-removal` | | bool | false | Disable all clutter removal heuristics |
 | `--render` | | bool | false | Render JavaScript via headless Chrome before extracting |
+| `--render-auto` | | bool | false | Render only pages detected as JavaScript-heavy |
 | `--js` | | bool | false | Alias for `--render` |
 | `--render-wait` | | string | load | Render wait strategy: `load` or `networkidle` |
+| `--render-wait-for` | | string | | Wait for a visible CSS selector before snapshot |
+| `--render-settle` | | duration | 0 | Extra post-load delay before snapshot |
 | `--render-user-agent` | | string | | User agent for the render stage (default: Chrome default) |
 | `--chrome-path` | | string | | Path to a Chrome/Chromium executable (default: auto-detect) |
 | `--render-timeout` | | duration | 30s | Maximum time to spend rendering the page |

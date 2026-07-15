@@ -1,10 +1,11 @@
 package defuddle
 
 import (
+	"net/http"
+
 	"github.com/dotcommander/defuddle/internal/debug"
 	"github.com/dotcommander/defuddle/internal/elements"
 	"github.com/dotcommander/defuddle/internal/metadata"
-	"github.com/kaptinlin/requests"
 )
 
 // MetaTag represents a meta tag item from HTML
@@ -78,7 +79,10 @@ type Options struct {
 
 	// Client is a custom HTTP client for fetching URLs.
 	// If nil, a default client with standard User-Agent and 30s timeout is created.
-	Client *requests.Client `json:"-"`
+	Client *http.Client `json:"-"`
+
+	// Headers are cloned onto every URL fetch request.
+	Headers http.Header `json:"-"`
 
 	// MaxConcurrency limits parallel URL fetches in ParseFromURLs.
 	// Defaults to 5 if zero.

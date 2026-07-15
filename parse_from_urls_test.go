@@ -7,12 +7,12 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/kaptinlin/requests"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -45,13 +45,10 @@ func newTestServer(t *testing.T, preHandler func(w http.ResponseWriter, r *http.
 	return srv
 }
 
-// testClient builds a requests.Client wired to the httptest server.  Short
+// testClient builds a standard client. Short
 // timeouts keep cancellation tests responsive without flaking healthy paths.
-func testClient() *requests.Client {
-	return requests.New(
-		requests.WithUserAgent("defuddle-test"),
-		requests.WithTimeout(10*time.Second),
-	)
+func testClient() *http.Client {
+	return &http.Client{Timeout: 10 * time.Second}
 }
 
 func TestParseFromURL_RejectsOversizedResponse(t *testing.T) {
@@ -67,6 +64,33 @@ func TestParseFromURL_RejectsOversizedResponse(t *testing.T) {
 	_, err := ParseFromURL(context.Background(), srv.URL, &Options{Client: testClient()})
 	require.Error(t, err)
 	require.True(t, errors.Is(err, ErrTooLarge), "got %v, want ErrTooLarge", err)
+}
+
+func TestParseFromURL_RequiresAbsoluteHTTPURL(t *testing.T) {
+	t.Parallel()
+
+	for _, rawURL := range []string{"/relative", "file:///tmp/page.html", "ftp://example.com/page"} {
+		t.Run(rawURL, func(t *testing.T) {
+			t.Parallel()
+			_, err := ParseFromURL(t.Context(), rawURL, &Options{Client: testClient()})
+			require.ErrorContains(t, err, "absolute HTTP(S)")
+		})
+	}
+}
+
+func TestParseFromURL_PreservesURLSemantics(t *testing.T) {
+	t.Parallel()
+
+	requestedPath := make(chan string, 1)
+	srv := newTestServer(t, func(_ http.ResponseWriter, r *http.Request) {
+		requestedPath <- r.URL.RequestURI()
+	})
+
+	uppercaseScheme := "HTTP" + strings.TrimPrefix(srv.URL, "http")
+	result, err := ParseFromURL(t.Context(), uppercaseScheme+"/article#section", &Options{Client: srv.Client()})
+	require.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, "/article", <-requestedPath)
 }
 
 func TestParseFromURL_ReturnsHTTPStatusError(t *testing.T) {
@@ -95,11 +119,15 @@ func TestParseFromURL_NotModified(t *testing.T) {
 	t.Parallel()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, `"v1"`, r.Header.Get("If-None-Match"))
 		w.WriteHeader(http.StatusNotModified)
 	}))
 	t.Cleanup(srv.Close)
 
-	result, err := ParseFromURL(context.Background(), srv.URL, &Options{Client: testClient()})
+	result, err := ParseFromURL(context.Background(), srv.URL, &Options{
+		Client:  srv.Client(),
+		Headers: http.Header{"If-None-Match": []string{`"v1"`}},
+	})
 
 	require.Error(t, err)
 	require.True(t, errors.Is(err, ErrNotModified), "got %v, want ErrNotModified", err)

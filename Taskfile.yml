@@ -62,6 +62,7 @@ tasks:
     cmds:
       - echo "Running all tests..."
       - go test -race ./...
+      - cd {{.CLI_FOLDER}} && go test -race ./...
 
   test-unit:
     desc: Run unit tests only
@@ -116,6 +117,7 @@ tasks:
       - '{{.GOLANGCI_LINT_BINARY}} version'
       - echo "Running golangci-lint..."
       - '{{.GOLANGCI_LINT_BINARY}} run --timeout=10m --path-prefix .'
+      - 'cd {{.CLI_FOLDER}} && {{.GOLANGCI_LINT_BINARY}} run --timeout=10m --path-prefix {{.CLI_FOLDER}}'
 
   tidy-lint:
     desc: Check if go.mod and go.sum are tidy
@@ -136,6 +138,7 @@ tasks:
     cmds:
       - echo "Running go vet..."
       - go vet ./...
+      - cd {{.CLI_FOLDER}} && go vet ./...
 
   vuln:
     desc: Run govulncheck
@@ -186,7 +189,9 @@ tasks:
     desc: Test release build locally
     cmds:
       - echo "Testing release build..."
-      - goreleaser release --snapshot --skip=publish --clean
+      # HEAD also carries cmd/defuddle/v* tags, which are not valid root SemVer
+      # inputs for GoReleaser's snapshot template. Select the latest root tag.
+      - 'GORELEASER_CURRENT_TAG="$(git tag --list ''v*'' --sort=-v:refname | head -1)" goreleaser release --snapshot --skip=publish --clean'
 
   release-test:
     desc: Test release build without publishing (alias for snapshot)
@@ -206,26 +211,32 @@ tasks:
 
   tag:
     desc: Create and push a new tag (usage - task tag VERSION=v0.1.0)
-    deps:
-      - verify
     cmds:
       - |
         if [ -z "{{.VERSION}}" ]; then
           echo "VERSION is required. Usage: task tag VERSION=v1.0.0"
           exit 1
         fi
+      - 'test -z "$(git status --porcelain)" || (echo "release requires a clean worktree" && exit 1)'
       # Phase 1: tag and publish the library module FIRST — the nested CLI
       # module's go.mod requires it, so it must be on the remote before the
       # CLI module can `go mod tidy` against it.
+      # The full workspace gate and snapshot must run before the release pin is
+      # committed, because an unpublished module version cannot be resolved.
+      - GOWORK=off go test -race ./...
+      - GOWORK=off go vet ./...
+      - GOWORK=off govulncheck ./...
+      - goreleaser check
       - echo "Tagging library {{.VERSION}}..."
+      - 'grep -Eq "github.com/dotcommander/defuddle {{.VERSION}}$$" {{.CLI_FOLDER}}/go.mod || (echo "{{.CLI_FOLDER}}/go.mod must require github.com/dotcommander/defuddle {{.VERSION}} before tagging" && exit 1)'
       - git tag -a {{.VERSION}} -m "Release {{.VERSION}}"
       - git push origin {{.VERSION}}
-      # Phase 2: point the nested CLI module at the just-published library
-      # version, then commit + tag + push the CLI module. (go.work keeps local
-      # dev building against the local library; the published module has no
-      # replace directive so `go install ...@latest` works.)
+      # Phase 2: resolve the already-pinned nested CLI module against the
+      # published library version, then commit checksums, tag, and push it.
       - echo "Releasing CLI module cmd/defuddle/{{.VERSION}}..."
-      - cd {{.CLI_FOLDER}} && go mod edit -require=github.com/dotcommander/defuddle@{{.VERSION}} && GOWORK=off go mod tidy
+      - cd {{.CLI_FOLDER}} && GOWORK=off go mod tidy
+      - cd {{.CLI_FOLDER}} && GOWORK=off go test -race ./...
+      - cd {{.CLI_FOLDER}} && GOWORK=off go build ./...
       - 'git add {{.CLI_FOLDER}}/go.mod {{.CLI_FOLDER}}/go.sum && (git diff --cached --quiet || git commit -m "build(cli): require defuddle {{.VERSION}}")'
       - git tag -a cmd/defuddle/{{.VERSION}} -m "Release cmd/defuddle {{.VERSION}}"
       - git push origin HEAD cmd/defuddle/{{.VERSION}}

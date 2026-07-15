@@ -49,19 +49,17 @@ result, err := defuddle.ParseFromString(ctx, html, &defuddle.Options{URL: url})
 
 **What to do instead:**
 
-Pass an authenticated `*requests.Client` with session cookies from a valid subscription:
+Pass an authenticated `*http.Client` with session cookies from a valid subscription:
 
 ```go
-import "github.com/kaptinlin/requests"
+import "net/http"
 
 jar := createCookieJar() // load session cookies from browser or login flow
-client := requests.New(
-    requests.WithCookieJar(jar),
-    requests.WithUserAgent("Mozilla/5.0 ..."),
-)
+client := &http.Client{Jar: jar}
 
 result, err := defuddle.ParseFromURL(ctx, url, &defuddle.Options{
     Client: client,
+    Headers: http.Header{"User-Agent": []string{"Mozilla/5.0 ..."}},
 })
 ```
 
@@ -155,7 +153,7 @@ result, err := defuddle.ParseFromURL(ctx, url, &defuddle.Options{
 | Problem | Workaround |
 |---------|-----------|
 | JS-rendered page | CLI: `defuddle parse --render`; Library: pre-render (e.g. chromedp) then `ParseFromString` |
-| Paywall / login wall | Pass authenticated `*requests.Client` with session cookies |
+| Paywall / login wall | Pass authenticated `*http.Client` with a cookie jar |
 | PDF / binary | Check `Content-Type` before calling defuddle; route separately |
 | Over 5 MB | Skip, or truncate before `ParseFromString` |
 | CAPTCHA / bot-detection | Headless browser with stealth mode; official API if available |

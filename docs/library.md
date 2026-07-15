@@ -106,23 +106,33 @@ if result.ContentMarkdown != nil {
 
 ## Custom HTTP Client
 
-Pass your own `*requests.Client` to control timeouts, headers, proxies, and retry behavior:
+Pass your own `*http.Client` to control timeouts, cookies, redirects, and proxies. Pass request defaults through `Options.Headers`:
 
 ```go
-import "github.com/kaptinlin/requests"
-
-client := requests.New(
-    requests.WithUserAgent("MyApp/1.0"),
-    requests.WithTimeout(60 * time.Second),
-    requests.WithProxy("http://proxy.example.com:8080"),
+import (
+    "net/http"
+    "net/url"
+    "time"
 )
+
+proxyURL, _ := url.Parse("http://proxy.example.com:8080")
+transport := http.DefaultTransport.(*http.Transport).Clone()
+transport.Proxy = http.ProxyURL(proxyURL)
+client := &http.Client{Transport: transport, Timeout: 60 * time.Second}
 
 result, err := defuddle.ParseFromURL(ctx, url, &defuddle.Options{
     Client: client,
+    Headers: http.Header{"User-Agent": []string{"MyApp/1.0"}},
 })
 ```
 
-Default HTTP client timeout: 30 seconds (both library and CLI). Override by passing `Options.Client` with a custom `*requests.Client`.
+Default HTTP client timeout: 30 seconds (both library and CLI). Override it with `Options.Client`.
+
+Conditional requests are also caller-owned. If your cache has an ETag or
+Last-Modified value, add `If-None-Match` or `If-Modified-Since` to
+`Options.Headers`. When the server responds with `304 Not Modified`,
+`ParseFromURL` returns `ErrNotModified` so callers can reuse their cached
+result.
 
 ## Result Structure
 

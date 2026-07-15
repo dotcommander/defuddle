@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/dotcommander/defuddle"
-	"github.com/spf13/cobra"
 )
 
 // maxURLLineSize bounds one input line for batch mode. URLs in practice are
@@ -24,24 +23,12 @@ import (
 // surfaced as a bufio.ErrTooLong error rather than silently truncated.
 const maxURLLineSize = 64 * 1024
 
-func newBatchCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "batch",
-		Short: "Parse multiple URLs, output JSONL",
-		Long:  `Reads one URL per line from stdin (default) or --input file. Outputs one JSON object per line to stdout.`,
-		RunE:  runBatch,
-	}
-	registerBatchFlags(cmd)
-	return cmd
-}
-
-// registerBatchFlags attaches batch-mode flags.
-func registerBatchFlags(cmd *cobra.Command) {
-	cmd.Flags().StringP("input", "i", "", "Read URLs from file instead of stdin")
-	cmd.Flags().IntP("concurrency", "c", 5, "Maximum concurrent requests")
-	cmd.Flags().BoolP("markdown", "m", false, "Include markdown in output")
-	cmd.Flags().Bool("continue-on-error", false, "Continue processing on individual URL errors")
-	cmd.Flags().Duration("timeout", 0, "Overall batch timeout (e.g. 30s, 2m); 0 disables")
+type BatchOptions struct {
+	Input           string        `short:"i" help:"Read URLs from file instead of stdin."`
+	Concurrency     int           `short:"c" default:"5" help:"Maximum concurrent requests."`
+	Markdown        bool          `short:"m" help:"Include markdown in output."`
+	ContinueOnError bool          `name:"continue-on-error" help:"Continue processing on individual URL errors."`
+	Timeout         time.Duration `help:"Overall batch timeout; 0 disables."`
 }
 
 // scanURLs reads one URL per line from r, skipping blank lines and lines that
@@ -66,22 +53,14 @@ func scanURLs(r io.Reader) ([]string, error) {
 	return urls, nil
 }
 
-func runBatch(cmd *cobra.Command, _ []string) error {
-	cmd.SilenceUsage = true
-
-	inputFile, _ := cmd.Flags().GetString("input")
-	concurrency, _ := cmd.Flags().GetInt("concurrency")
-	markdown, _ := cmd.Flags().GetBool("markdown")
-	continueOnError, _ := cmd.Flags().GetBool("continue-on-error")
-	timeout, _ := cmd.Flags().GetDuration("timeout")
-
-	if err := validateConcurrency(concurrency); err != nil {
+func (opts *BatchOptions) Run() error {
+	if err := validateConcurrency(opts.Concurrency); err != nil {
 		return err
 	}
 
 	var reader io.Reader = os.Stdin
-	if inputFile != "" {
-		f, err := os.Open(inputFile) // #nosec G304 - user-provided input file
+	if opts.Input != "" {
+		f, err := os.Open(opts.Input) // #nosec G304 - user-provided input file
 		if err != nil {
 			return fmt.Errorf("opening input file: %w", err)
 		}
@@ -98,18 +77,18 @@ func runBatch(cmd *cobra.Command, _ []string) error {
 		return ErrNoURLs
 	}
 
-	opts := &defuddle.Options{
-		Markdown:         markdown,
-		SeparateMarkdown: markdown,
-		MaxConcurrency:   concurrency,
+	parseOpts := &defuddle.Options{
+		Markdown:         opts.Markdown,
+		SeparateMarkdown: opts.Markdown,
+		MaxConcurrency:   opts.Concurrency,
 	}
 
-	ctx, cancel := batchContext(timeout)
+	ctx, cancel := batchContext(opts.Timeout)
 	defer cancel()
 
-	results := defuddle.ParseFromURLs(ctx, urls, opts)
+	results := defuddle.ParseFromURLs(ctx, urls, parseOpts)
 
-	return encodeBatchResults(results, continueOnError)
+	return encodeBatchResults(results, opts.ContinueOnError)
 }
 
 // encodeBatchResults writes each parse result to stdout as JSON. On a parse
