@@ -1,6 +1,6 @@
 module github.com/dotcommander/defuddle/cmd/defuddle
 
-go 1.26.4
+go 1.26.5
 
 require (
 	github.com/PuerkitoBio/goquery v1.12.0
@@ -9,7 +9,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 )
 
-require github.com/kaptinlin/requests v0.6.4 // indirect
+require github.com/kr/text v0.2.0 // indirect
 
 require (
 	github.com/JohannesKaufmann/dom v0.3.1 // indirect
@@ -23,14 +23,10 @@ require (
 	github.com/gobwas/httphead v0.1.0 // indirect
 	github.com/gobwas/pool v0.2.1 // indirect
 	github.com/gobwas/ws v1.4.0 // indirect
-	github.com/goccy/go-yaml v1.19.2 // indirect
-	github.com/google/go-querystring v1.2.0 // indirect
-	github.com/kaptinlin/orderedobject v0.2.14 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/valyala/bytebufferpool v1.0.0 // indirect
-	golang.org/x/net v0.56.0 // indirect
-	golang.org/x/sync v0.21.0 // indirect
-	golang.org/x/sys v0.46.0 // indirect
-	golang.org/x/text v0.38.0 // indirect
+	golang.org/x/net v0.57.0 // indirect
+	golang.org/x/sync v0.22.0 // indirect
+	golang.org/x/sys v0.47.0 // indirect
+	golang.org/x/text v0.40.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
