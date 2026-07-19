@@ -69,9 +69,10 @@ func TestSanitizeUnsafe_SrcsetFiltersDangerousEntries(t *testing.T) {
 			wantNot: []string{`srcset="`, "javascript", "vbscript"},
 		},
 		{
-			name:    "any dangerous drops whole attribute",
+			name:    "mixed candidates retain safe entry",
 			html:    `<div><img srcset="javascript:alert(1) 1x, /safe.jpg 2x" alt="x"></div>`,
-			wantNot: []string{`srcset="`, "javascript"},
+			wantHas: []string{`srcset="/safe.jpg 2x"`},
+			wantNot: []string{"javascript"},
 		},
 		{
 			name:    "all safe preserved",
@@ -89,14 +90,16 @@ func TestSanitizeUnsafe_SrcsetFiltersDangerousEntries(t *testing.T) {
 			wantNot: []string{`data-srcset="`, "javascript"},
 		},
 		{
-			name:    "data-srcset any dangerous drops all",
+			name:    "data-srcset mixed candidates retain safe entry",
 			html:    `<div><img data-srcset="vbscript:x 1x, /ok.jpg 2x" alt="x"></div>`,
-			wantNot: []string{`data-srcset="`, "vbscript"},
+			wantHas: []string{`data-srcset="/ok.jpg 2x"`},
+			wantNot: []string{"vbscript"},
 		},
 		{
 			name:    "case insensitive dangerous scheme",
 			html:    `<div><img srcset="JAVASCRIPT:alert(1) 1x, /ok.jpg 2x" alt="x"></div>`,
-			wantNot: []string{`srcset="`, "javascript"},
+			wantHas: []string{`srcset="/ok.jpg 2x"`},
+			wantNot: []string{"javascript"},
 		},
 		{
 			name:    "data:image preserved in srcset",
@@ -125,9 +128,6 @@ func TestSanitizeUnsafe_SrcsetFiltersDangerousEntries(t *testing.T) {
 func TestSanitizeSrcset(t *testing.T) {
 	t.Parallel()
 
-	// Defensive shortcut: if any dangerous scheme appears anywhere in the
-	// value the whole attribute is dropped, since WHATWG srcset allows commas
-	// inside data: URLs that a naive split cannot disambiguate safely.
 	tests := []struct {
 		name string
 		in   string
@@ -135,16 +135,19 @@ func TestSanitizeSrcset(t *testing.T) {
 	}{
 		{"all safe", "a.jpg 1x, b.jpg 2x", "a.jpg 1x, b.jpg 2x"},
 		{"all dangerous", "javascript:alert(1) 1x, vbscript:x 2x", ""},
-		{"mixed any-dangerous drops all", "javascript:alert(1) 1x, /safe.jpg 2x", ""},
+		{"mixed retains safe", "javascript:alert(1) 1x, /safe.jpg 2x", "/safe.jpg 2x"},
 		{"empty", "", ""},
 		{"single safe no descriptor", "image.jpg", "image.jpg"},
 		{"single dangerous no descriptor", "javascript:alert(1)", ""},
 		{"whitespace before dangerous", "  javascript:alert(1) 1x", ""},
 		{"data:image safe", "data:image/png;base64,abc 1x", "data:image/png;base64,abc 1x"},
-		{"data:text/html anywhere drops all", "data:text/html,x 1x, ok.jpg 2x", ""},
-		{"data:application/xhtml+xml anywhere drops all", "data:application/xhtml+xml,x 1x, ok.jpg 2x", ""},
+		{"data:text/html filters candidate", "data:text/html,x 1x, ok.jpg 2x", "ok.jpg 2x"},
+		{"data:application/xhtml+xml filters candidate", "data:application/xhtml+xml,x 1x, ok.jpg 2x", "ok.jpg 2x"},
 		{"width descriptors", "small.jpg 100w, large.jpg 200w", "small.jpg 100w, large.jpg 200w"},
-		{"case-insensitive dangerous", "JAVASCRIPT:x 1x, ok.jpg 2x", ""},
+		{"case-insensitive dangerous", "JAVASCRIPT:x 1x, ok.jpg 2x", "ok.jpg 2x"},
+		{"embedded tab dangerous", "java\tscript:x 1x, ok.jpg 2x", "ok.jpg 2x"},
+		{"retained safe whitespace preserved", "safe.jpg\t2x, javascript:x 1x", "safe.jpg\t2x"},
+		{"safe data candidate unchanged", "data:text/plain,hello 1x, ok.jpg 2x", "data:text/plain,hello 1x, ok.jpg 2x"},
 	}
 
 	for _, tt := range tests {

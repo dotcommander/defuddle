@@ -14,15 +14,20 @@ All notable changes to this project will be documented in this file. The format 
 
 ### Security
 
-- Block executable `data:application/xhtml+xml` URIs in URL and `srcset`
-  attributes, using one shared policy for executable data URI media types.
+- Harden URL sanitization against whitespace-obfuscated schemes and executable
+  HTML, XML, SVG, PDF, and JavaScript `data:` media types across ordinary URL
+  attributes and `srcset` candidates.
+- Remove active HTML elements and unsafe root attributes consistently from
+  generic, fallback, and site-extractor output while preserving MathML scripts.
 
 ### Changed
 
 - Render compact tree-style CLI help with command summaries and
-  command-specific flags grouped last.
+  command-specific flags grouped last, with regression coverage against the
+  documented synopsis.
 - Split oversized parser, extractor, and internal implementation files into
-  focused source units without changing the public library API.
+  focused source units, consolidate partial selectors, and use domain-oriented
+  filenames without changing the public library API.
 
 ---
 

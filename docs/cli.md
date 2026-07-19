@@ -5,7 +5,7 @@
 ## Synopsis
 
 ```
-defuddle <command> [flags]
+Usage: defuddle <command> [flags]
 
 Extract and structure content from web pages.
 
