@@ -79,6 +79,7 @@ func TestSanitizeUnsafe_StripsDangerousURLs(t *testing.T) {
 		{"javascript href", `<div><a href="javascript:alert(1)">XSS</a></div>`, "href"},
 		{"javascript src", `<div><iframe src="javascript:alert(1)"></iframe></div>`, "src"},
 		{"data:text/html src", `<div><iframe src="data:text/html,<script>alert(1)</script>"></iframe></div>`, "src"},
+		{"data:application/xhtml+xml src", `<div><iframe src="data:application/xhtml+xml,<script>alert(1)</script>"></iframe></div>`, "src"},
 		{"vbscript href", `<div><a href="vbscript:MsgBox('XSS')">VBS</a></div>`, "href"},
 		{"javascript action", `<div><form action="javascript:void(0)"></form></div>`, "action"},
 		{"case insensitive", `<div><a href="JAVASCRIPT:alert(1)">XSS</a></div>`, "href"},
@@ -90,6 +91,8 @@ func TestSanitizeUnsafe_StripsDangerousURLs(t *testing.T) {
 			t.Parallel()
 			sel := parseSelection(t, tt.html)
 			SanitizeUnsafe(sel)
+			_, ok := sel.Find("[" + tt.attr + "]").Attr(tt.attr)
+			assert.False(t, ok, "expected dangerous %s attribute to be removed", tt.attr)
 			out, _ := sel.Html()
 			assert.NotContains(t, strings.ToLower(out), tt.attr+`="javascript`)
 			assert.NotContains(t, strings.ToLower(out), tt.attr+`="data:text/html`)
@@ -147,6 +150,7 @@ func TestIsDangerousURL(t *testing.T) {
 		{"  javascript:void(0)", true},
 		{"data:text/html,<script>alert(1)</script>", true},
 		{"data:text/html;base64,abc", true},
+		{"data:application/xhtml+xml,<script>alert(1)</script>", true},
 		{"data:image/svg+xml;base64,xxx", true},
 		{"vbscript:MsgBox('XSS')", true},
 		{"https://example.com", false},

@@ -142,6 +142,7 @@ func TestSanitizeSrcset(t *testing.T) {
 		{"whitespace before dangerous", "  javascript:alert(1) 1x", ""},
 		{"data:image safe", "data:image/png;base64,abc 1x", "data:image/png;base64,abc 1x"},
 		{"data:text/html anywhere drops all", "data:text/html,x 1x, ok.jpg 2x", ""},
+		{"data:application/xhtml+xml anywhere drops all", "data:application/xhtml+xml,x 1x, ok.jpg 2x", ""},
 		{"width descriptors", "small.jpg 100w, large.jpg 200w", "small.jpg 100w, large.jpg 200w"},
 		{"case-insensitive dangerous", "JAVASCRIPT:x 1x, ok.jpg 2x", ""},
 	}

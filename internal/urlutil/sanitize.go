@@ -13,6 +13,17 @@ var unsafeElements = []string{"object", "embed", "applet", "frame", "frameset"}
 // eventHandlerPrefix matches on* event attributes (onclick, onerror, etc.).
 const eventHandlerPrefix = "on"
 
+// executableDataPrefixes are data URI media types that browsers may execute
+// as active content. Both single-URL and multi-URL attributes use this list so
+// their security policy cannot drift.
+var executableDataPrefixes = []string{
+	"data:text/html",
+	"data:text/javascript",
+	"data:image/svg+xml",
+	"data:application/javascript",
+	"data:application/xhtml+xml",
+}
+
 // singleURLAttrs are attributes whose value is a single URL. Dangerous-scheme
 // values cause the whole attribute to be stripped.
 var singleURLAttrs = map[string]struct{}{
@@ -140,10 +151,7 @@ func hasDangerousScheme(raw string) bool {
 	lower := strings.ToLower(raw)
 	return strings.Contains(lower, "javascript:") ||
 		strings.Contains(lower, "vbscript:") ||
-		strings.Contains(lower, "data:text/html") ||
-		strings.Contains(lower, "data:text/javascript") ||
-		strings.Contains(lower, "data:image/svg+xml") ||
-		strings.Contains(lower, "data:application/javascript")
+		containsExecutableDataPrefix(lower)
 }
 
 // isDangerousURL returns true if the URL uses a scheme that can execute code.
@@ -151,23 +159,25 @@ func isDangerousURL(raw string) bool {
 	trimmed := strings.TrimSpace(raw)
 	lower := strings.ToLower(trimmed)
 
-	if strings.HasPrefix(lower, "javascript:") {
-		return true
+	return strings.HasPrefix(lower, "javascript:") ||
+		strings.HasPrefix(lower, "vbscript:") ||
+		hasExecutableDataPrefix(lower)
+}
+
+func containsExecutableDataPrefix(value string) bool {
+	for _, prefix := range executableDataPrefixes {
+		if strings.Contains(value, prefix) {
+			return true
+		}
 	}
-	if strings.HasPrefix(lower, "data:text/html") {
-		return true
-	}
-	if strings.HasPrefix(lower, "data:text/javascript") {
-		return true
-	}
-	if strings.HasPrefix(lower, "data:image/svg+xml") {
-		return true
-	}
-	if strings.HasPrefix(lower, "data:application/javascript") {
-		return true
-	}
-	if strings.HasPrefix(lower, "vbscript:") {
-		return true
+	return false
+}
+
+func hasExecutableDataPrefix(value string) bool {
+	for _, prefix := range executableDataPrefixes {
+		if strings.HasPrefix(value, prefix) {
+			return true
+		}
 	}
 	return false
 }
