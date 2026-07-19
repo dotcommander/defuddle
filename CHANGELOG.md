@@ -10,6 +10,22 @@ All notable changes to this project will be documented in this file. The format 
 
 ---
 
+## [v0.13.3] — 2026-07-19
+
+### Security
+
+- Block executable `data:application/xhtml+xml` URIs in URL and `srcset`
+  attributes, using one shared policy for executable data URI media types.
+
+### Changed
+
+- Render compact tree-style CLI help with command summaries and
+  command-specific flags grouped last.
+- Split oversized parser, extractor, and internal implementation files into
+  focused source units without changing the public library API.
+
+---
+
 ## [v0.13.2] — 2026-07-14
 
 ### Fixed
