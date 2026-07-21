@@ -4,7 +4,7 @@ go 1.26.4
 
 require (
 	github.com/PuerkitoBio/goquery v1.12.0
-	github.com/chromedp/chromedp v0.15.1
+	github.com/chromedp/chromedp v0.16.0
 	github.com/dotcommander/defuddle v0.13.3
 	github.com/stretchr/testify v1.11.1
 )
@@ -16,7 +16,7 @@ require (
 	github.com/JohannesKaufmann/html-to-markdown/v2 v2.5.2 // indirect
 	github.com/alecthomas/kong v1.16.0
 	github.com/andybalholm/cascadia v1.3.4 // indirect
-	github.com/chromedp/cdproto v0.0.0-20260427013145-5737772c319b // indirect
+	github.com/chromedp/cdproto v0.0.0-20260714215040-dc233986426f // indirect
 	github.com/chromedp/sysutil v1.1.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/go-json-experiment/json v0.0.0-20260623181947-01eb4420fa68 // indirect
