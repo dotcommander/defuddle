@@ -3,7 +3,6 @@
 set -euo pipefail
 
 UPSTREAM_INFRA="^(_base|_conversation|bbcode-data|types|base|index|registry)$"
-LOCAL_INFRA="^(base|comments|conversation|registry|extract)$"
 
 # Fetch upstream extractor names: .ts only, strip extension, exclude infra
 upstream_list=$(
@@ -15,15 +14,13 @@ upstream_list=$(
     | sort
 )
 
-# Enumerate local ports: .go only, strip extension, exclude infra and split/test files
+# Enumerate canonical local ports by the BaseExtractor Name method. The owning
+# filename is the port name; helper and split files have no Name method.
 local_list=$(
-  find "$(cd "$(dirname "$0")/.." && pwd)/extractors" -maxdepth 1 -name '*.go' -print0 \
-    | xargs -0 -n1 basename \
-    | grep -v '_test\.go$' \
-    | sed 's/\.go$//' \
-    | grep -Ev '_(content|dom|json)$' \
-    | grep -Ev "$LOCAL_INFRA" \
-    | sort
+	find "$(cd "$(dirname "$0")/.." && pwd)/extractors" -maxdepth 1 -type f -name '*.go' ! -name '*_test.go' \
+		-exec awk '/^func \([^)]*\) Name\(\) string/ { print FILENAME; nextfile }' {} + \
+	| sed 's#.*/##; s/\.go$//' \
+	| sort
 )
 
 missing=$(comm -23 <(echo "$upstream_list") <(echo "$local_list"))

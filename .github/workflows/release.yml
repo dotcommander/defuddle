@@ -14,13 +14,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           submodules: false
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
 
@@ -36,9 +36,10 @@ jobs:
 
       - name: Run CLI tests
         working-directory: cmd/defuddle
-        env:
-          GOPROXY: direct
-        run: GOWORK=off go test -race -v ./...
+        run: go test -race -v ./...
+
+      - name: Restore generated workspace checksum
+        run: git restore go.work.sum
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v7

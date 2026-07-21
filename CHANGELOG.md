@@ -10,6 +10,46 @@ All notable changes to this project will be documented in this file. The format 
 
 ---
 
+## [v0.13.3] — 2026-07-19
+
+### Security
+
+- Harden URL sanitization against whitespace-obfuscated schemes and executable
+  HTML, XML, SVG, PDF, and JavaScript `data:` media types across ordinary URL
+  attributes and `srcset` candidates.
+- Remove active HTML elements and unsafe root attributes consistently from
+  generic, fallback, and site-extractor output while preserving MathML scripts.
+
+### Changed
+
+- Render compact tree-style CLI help with command summaries and
+  command-specific flags grouped last, with regression coverage against the
+  documented synopsis.
+- Split oversized parser, extractor, and internal implementation files into
+  focused source units, consolidate partial selectors, and use domain-oriented
+  filenames without changing the public library API.
+
+---
+
+## [v0.13.2] — 2026-07-14
+
+### Fixed
+
+- Restore the transient `go.work.sum` update produced by tagged-workspace CLI
+  tests before GoReleaser's clean-tree validation.
+
+---
+
+## [v0.13.1] — 2026-07-14
+
+### Fixed
+
+- Run root-release CLI tests against the tagged workspace. Standalone
+  `GOWORK=off` verification remains the post-publication gate before the CLI
+  module tag, when the new root module checksum is available.
+
+---
+
 ## [v0.13.0] — 2026-07-14
 
 ### Added

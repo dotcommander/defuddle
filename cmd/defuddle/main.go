@@ -57,6 +57,12 @@ func newParser(cli *CLI, stdout, stderr io.Writer) (*kong.Kong, error) {
 		kong.Description("Extract and structure content from web pages."),
 		kong.Vars{"version": fmt.Sprintf("%s (commit: %s, built: %s)", resolvedVersion(), commit, date)},
 		kong.Writers(stdout, stderr),
+		kong.ConfigureHelp(kong.HelpOptions{
+			Compact:   true,
+			Tree:      true,
+			Summary:   true,
+			FlagsLast: true,
+		}),
 	)
 }
 

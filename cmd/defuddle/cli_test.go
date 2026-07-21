@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -75,6 +76,28 @@ func parseCLI(t *testing.T, args ...string) (*CLI, *kong.Context) {
 	ctx, err := parser.Parse(args)
 	require.NoError(t, err)
 	return cli, ctx
+}
+
+func TestRootHelpMatchesDocumentedSynopsis(t *testing.T) {
+	t.Parallel()
+
+	docs, err := os.ReadFile(filepath.Join("..", "..", "docs", "cli.md"))
+	require.NoError(t, err)
+	const synopsisStart = "## Synopsis\n\n```\n"
+	_, after, found := strings.Cut(string(docs), synopsisStart)
+	require.True(t, found, "docs/cli.md must contain a fenced Synopsis block")
+	want, _, found := strings.Cut(after, "\n```")
+	require.True(t, found, "docs/cli.md Synopsis fence must be closed")
+
+	var stdout, stderr bytes.Buffer
+	parser, err := newParser(&CLI{}, &stdout, &stderr)
+	require.NoError(t, err)
+	parser.Exit = func(int) { panic("help requested") }
+	assert.PanicsWithValue(t, "help requested", func() {
+		_, _ = parser.Parse([]string{"--help"})
+	})
+	assert.Empty(t, stderr.String())
+	assert.Equal(t, want+"\n", stdout.String())
 }
 
 func TestKongParseCommandFlagsAndAlias(t *testing.T) {

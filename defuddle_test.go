@@ -966,6 +966,8 @@ func TestExtractorPath_SanitizesUnsafeHTML(t *testing.T) {
 			<div data-testid="issue-body-viewer"><div class="markdown-body">
 				<p><img src="x" onerror="alert(1)"></p>
 				<a href="javascript:alert(2)">bad link</a>
+				<form><button formaction="data:application/pdf,evil">bad action</button></form>
+				<script>alert(3)</script><style>body{display:none}</style><noscript>unsafe fallback</noscript>
 			</div></div>
 		</div>
 	</body></html>`
@@ -978,7 +980,34 @@ func TestExtractorPath_SanitizesUnsafeHTML(t *testing.T) {
 
 	assert.NotContains(t, result.Content, "onerror")
 	assert.NotContains(t, result.Content, "javascript:alert")
+	assert.NotContains(t, result.Content, "formaction")
+	assert.NotContains(t, result.Content, "alert(3)")
+	assert.NotContains(t, result.Content, "display:none")
+	assert.NotContains(t, result.Content, "unsafe fallback")
 	assert.Contains(t, result.Content, "bad link")
+}
+
+func TestGenericPath_SanitizesSelectedRoot(t *testing.T) {
+	t.Parallel()
+
+	html := `<html><body><main id="content" onclick="evil()" href="java&#x09;script:evil()"><p>Safe article content.</p></main></body></html>`
+	d, err := NewDefuddle(html, &Options{ContentSelector: "#content"})
+	require.NoError(t, err)
+	result, err := d.Parse(context.Background())
+	require.NoError(t, err)
+
+	assert.Contains(t, result.Content, "Safe article content")
+	assert.NotContains(t, result.Content, "onclick")
+	assert.NotContains(t, result.Content, "javascript:")
+}
+
+func TestSanitizeHTMLFragment_CoversFallbackFragments(t *testing.T) {
+	t.Parallel()
+
+	got := sanitizeHTMLFragment(`<script>alert(1)</script><p><a href="data:text/xml,evil">safe text</a></p>`)
+	assert.NotContains(t, got, "alert(1)")
+	assert.NotContains(t, got, "href=")
+	assert.Contains(t, got, "safe text")
 }
 
 func TestProcessImagesOptionGatesImageProcessing(t *testing.T) {

@@ -21,7 +21,7 @@ func TestSanitizeUnsafe_RemovesUnsafeElements(t *testing.T) {
 
 	// frameset is omitted — it replaces <body> during HTML parsing and
 	// cannot appear inside extracted content.
-	for _, tag := range []string{"object", "embed", "applet", "frame"} {
+	for _, tag := range []string{"object", "embed", "applet", "frame", "script", "style", "noscript", "base"} {
 		t.Run(tag, func(t *testing.T) {
 			t.Parallel()
 			html := "<div><" + tag + ">evil</" + tag + "><p>safe</p></div>"
@@ -32,6 +32,30 @@ func TestSanitizeUnsafe_RemovesUnsafeElements(t *testing.T) {
 			assert.Contains(t, out, "safe")
 		})
 	}
+}
+
+func TestSanitizeUnsafe_PreservesMathMLScript(t *testing.T) {
+	t.Parallel()
+
+	sel := parseSelection(t, `<div><math><semantics><annotation-xml encoding="application/xhtml+xml"><script>math data</script></annotation-xml><script>math expression</script></semantics></math><script>alert(1)</script></div>`)
+	SanitizeUnsafe(sel)
+	out, err := sel.Html()
+	require.NoError(t, err)
+	assert.NotContains(t, out, "alert(1)")
+	assert.Contains(t, out, "math expression")
+}
+
+func TestSanitizeUnsafe_SanitizesSelectedRoot(t *testing.T) {
+	t.Parallel()
+
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(`<main onclick="evil()" href="java&#x09;script:evil()"><p>safe</p></main>`))
+	require.NoError(t, err)
+	root := doc.Find("main")
+	SanitizeUnsafe(root)
+	_, hasOnclick := root.Attr("onclick")
+	_, hasHref := root.Attr("href")
+	assert.False(t, hasOnclick)
+	assert.False(t, hasHref)
 }
 
 func TestSanitizeUnsafe_StripsEventHandlers(t *testing.T) {
@@ -79,6 +103,7 @@ func TestSanitizeUnsafe_StripsDangerousURLs(t *testing.T) {
 		{"javascript href", `<div><a href="javascript:alert(1)">XSS</a></div>`, "href"},
 		{"javascript src", `<div><iframe src="javascript:alert(1)"></iframe></div>`, "src"},
 		{"data:text/html src", `<div><iframe src="data:text/html,<script>alert(1)</script>"></iframe></div>`, "src"},
+		{"data:application/xhtml+xml src", `<div><iframe src="data:application/xhtml+xml,<script>alert(1)</script>"></iframe></div>`, "src"},
 		{"vbscript href", `<div><a href="vbscript:MsgBox('XSS')">VBS</a></div>`, "href"},
 		{"javascript action", `<div><form action="javascript:void(0)"></form></div>`, "action"},
 		{"case insensitive", `<div><a href="JAVASCRIPT:alert(1)">XSS</a></div>`, "href"},
@@ -90,6 +115,8 @@ func TestSanitizeUnsafe_StripsDangerousURLs(t *testing.T) {
 			t.Parallel()
 			sel := parseSelection(t, tt.html)
 			SanitizeUnsafe(sel)
+			_, ok := sel.Find("[" + tt.attr + "]").Attr(tt.attr)
+			assert.False(t, ok, "expected dangerous %s attribute to be removed", tt.attr)
 			out, _ := sel.Html()
 			assert.NotContains(t, strings.ToLower(out), tt.attr+`="javascript`)
 			assert.NotContains(t, strings.ToLower(out), tt.attr+`="data:text/html`)
@@ -138,23 +165,43 @@ func TestSanitizeUnsafe_PreservesSafeContent(t *testing.T) {
 func TestIsDangerousURL(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
+	type testCase struct {
 		url       string
 		dangerous bool
-	}{
+	}
+	tests := make([]testCase, 0, 16+len(javascriptMIMETypes))
+	tests = append(tests, []testCase{
 		{"javascript:alert(1)", true},
 		{"JAVASCRIPT:alert(1)", true},
 		{"  javascript:void(0)", true},
+		{"\tjava\tscript:alert(1)\r\n", true},
+		{"java\nscript:alert(1)", true},
+		{"vbscr\ript:MsgBox(1)", true},
 		{"data:text/html,<script>alert(1)</script>", true},
 		{"data:text/html;base64,abc", true},
+		{"data: TEXT/HTML ; charset=utf-8 ;base64,abc", true},
+		{"data:application/xhtml+xml,<script>alert(1)</script>", true},
+		{"data:text/xml,<x/>", true},
+		{"data:application/xml,<x/>", true},
+		{"data:application/atom+xml,<x/>", true},
 		{"data:image/svg+xml;base64,xxx", true},
+		{"data:application/pdf;base64,xxx", true},
+		{"data:application/ecmascript,alert(1)", true},
+		{"data:text/javascript1.5,alert(1)", true},
+		{"data:text/x-javascript,alert(1)", true},
 		{"vbscript:MsgBox('XSS')", true},
 		{"https://example.com", false},
 		{"/path/to/page", false},
 		{"data:image/png;base64,xxx", false},
-		{"data:image/png;base64,abc", false},
+		{"data:image/jpeg;base64,abc", false},
+		{"data:text/plain,<b>plain text</b>", false},
+		{"data:text/htmlx,<b>not html</b>", false},
 		{"mailto:user@example.com", false},
 		{"", false},
+	}...)
+
+	for mediaType := range javascriptMIMETypes {
+		tests = append(tests, testCase{url: "data:" + mediaType + ",alert(1)", dangerous: true})
 	}
 
 	for _, tt := range tests {
@@ -162,5 +209,20 @@ func TestIsDangerousURL(t *testing.T) {
 			t.Parallel()
 			assert.Equal(t, tt.dangerous, isDangerousURL(tt.url))
 		})
+	}
+}
+
+func TestSanitizeUnsafe_StripsFormactionAndXLinkHref(t *testing.T) {
+	t.Parallel()
+
+	sel := parseSelection(t, `<div><button formaction="java&#x0A;script:evil()">go</button><svg><a xlink:href="data:text/html,evil"><text>x</text></a></svg></div>`)
+	SanitizeUnsafe(sel)
+	_, hasFormaction := sel.Find("button").Attr("formaction")
+	assert.False(t, hasFormaction)
+
+	link := sel.Find("svg a").Get(0)
+	require.NotNil(t, link)
+	for _, attr := range link.Attr {
+		assert.False(t, attr.Key == "href" || attr.Key == "xlink:href", "unsafe xlink href survived: %#v", attr)
 	}
 }

@@ -5,16 +5,23 @@
 ## Synopsis
 
 ```
-defuddle <command> [flags]
+Usage: defuddle <command> [flags]
+
+Extract and structure content from web pages.
 
 Commands:
-  parse (p) [source] Extract content from a URL, HTML file, or stdin
-  batch            Parse many URLs concurrently, emit JSONL
-  extractors       List registered site-specific extractors
+  parse (p)       Parse and extract content from a URL, HTML file, or stdin.
+    [<source>]    URL or HTML file; reads stdin when omitted.
 
-Global:
-  --version        Print version, commit, and build date
-  -h, --help       Help for any command
+  extractors      List registered site-specific extractors.
+
+  batch           Parse multiple URLs, output JSONL.
+
+Flags:
+  -h, --help       Show context-sensitive help.
+      --version    Print version information and quit.
+
+Run "defuddle <command> --help" for more information on a command.
 ```
 
 There are no persistent/global flags beyond `--version` and `--help`; each command owns its own flags.

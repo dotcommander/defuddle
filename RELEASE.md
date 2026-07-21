@@ -57,6 +57,9 @@ task tag VERSION=v0.13.0
 The root tag must be available through the Go module proxy before the standalone
 CLI verification can succeed. If propagation is delayed, rerun the CLI phase
 after the version resolves; do not change the already-correct CLI version pin.
+The root release workflow tests the CLI against the tagged workspace and then
+restores the generated `go.work.sum` change before GoReleaser validates that the
+checkout is clean.
 
 ## Verify the public release
 
