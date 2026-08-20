@@ -203,7 +203,7 @@ tasks:
       - GOWORK=off go vet ./...
       - GOWORK=off govulncheck ./...
       - echo "Tagging library {{.VERSION}}..."
-      - 'grep -Eq "github.com/dotcommander/defuddle {{.VERSION}}$$" {{.CLI_FOLDER}}/go.mod || (echo "{{.CLI_FOLDER}}/go.mod must require github.com/dotcommander/defuddle {{.VERSION}} before tagging" && exit 1)'
+      - 'grep -Eq "^[[:space:]]*github.com/dotcommander/defuddle[[:space:]]+{{.VERSION}}([[:space:]]*//.*)?$$" {{.CLI_FOLDER}}/go.mod || (echo "{{.CLI_FOLDER}}/go.mod must require github.com/dotcommander/defuddle {{.VERSION}} before tagging" && exit 1)'
       - git tag -a {{.VERSION}} -m "Release {{.VERSION}}"
       - git push origin {{.VERSION}}
       # Phase 2: resolve the already-pinned nested CLI module against the
