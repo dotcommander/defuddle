@@ -185,32 +185,8 @@ tasks:
       - ln -sf {{.GOBIN}}/{{.BINARY_NAME}} $(go env GOPATH)/bin/{{.BINARY_NAME}}
       - echo "{{.BINARY_NAME}} symlinked to $(go env GOPATH)/bin/{{.BINARY_NAME}}"
 
-  snapshot:
-    desc: Test release build locally
-    cmds:
-      - echo "Testing release build..."
-      # HEAD also carries cmd/defuddle/v* tags, which are not valid root SemVer
-      # inputs for GoReleaser's snapshot template. Select the latest root tag.
-      - 'GORELEASER_CURRENT_TAG="$(git tag --list ''v*'' --sort=-v:refname | head -1)" goreleaser release --snapshot --skip=publish --clean'
-
-  release-test:
-    desc: Test release build without publishing (alias for snapshot)
-    cmds:
-      - task: snapshot
-
-  release-snapshot:
-    desc: Create a snapshot release (alias for snapshot)
-    cmds:
-      - task: snapshot
-
-  install-goreleaser:
-    desc: Install GoReleaser
-    cmds:
-      - echo "Installing GoReleaser..."
-      - go install github.com/goreleaser/goreleaser@latest
-
   tag:
-    desc: Create and push a new tag (usage - task tag VERSION=v0.1.0)
+    desc: Verify, create, and push matching library and CLI tags
     cmds:
       - |
         if [ -z "{{.VERSION}}" ]; then
@@ -221,12 +197,11 @@ tasks:
       # Phase 1: tag and publish the library module FIRST — the nested CLI
       # module's go.mod requires it, so it must be on the remote before the
       # CLI module can `go mod tidy` against it.
-      # The full workspace gate and snapshot must run before the release pin is
-      # committed, because an unpublished module version cannot be resolved.
+      # The full workspace gate must run before the release pin is committed,
+      # because an unpublished module version cannot be resolved.
       - GOWORK=off go test -race ./...
       - GOWORK=off go vet ./...
       - GOWORK=off govulncheck ./...
-      - goreleaser check
       - echo "Tagging library {{.VERSION}}..."
       - 'grep -Eq "github.com/dotcommander/defuddle {{.VERSION}}$$" {{.CLI_FOLDER}}/go.mod || (echo "{{.CLI_FOLDER}}/go.mod must require github.com/dotcommander/defuddle {{.VERSION}} before tagging" && exit 1)'
       - git tag -a {{.VERSION}} -m "Release {{.VERSION}}"

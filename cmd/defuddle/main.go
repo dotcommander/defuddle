@@ -12,7 +12,7 @@ import (
 	"github.com/dotcommander/defuddle/extractors"
 )
 
-// Build-injected via ldflags (goreleaser, go build -ldflags "-X main.version=...")
+// Build-injected via go build -ldflags "-X main.version=...".
 var (
 	version = "dev"
 	commit  = "unknown"

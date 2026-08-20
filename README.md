@@ -1,6 +1,4 @@
 <p align="center">
-<a href="https://github.com/dotcommander/defuddle/releases"><img src="https://img.shields.io/github/v/release/dotcommander/defuddle" alt="Release"></a>
-<a href="https://github.com/dotcommander/defuddle/actions"><img src="https://github.com/dotcommander/defuddle/workflows/Test/badge.svg" alt="Tests"></a>
 <a href="https://goreportcard.com/report/github.com/dotcommander/defuddle"><img src="https://goreportcard.com/badge/github.com/dotcommander/defuddle" alt="Go Report Card"></a>
 <a href="https://pkg.go.dev/github.com/dotcommander/defuddle"><img src="https://pkg.go.dev/badge/github.com/dotcommander/defuddle.svg" alt="Go Reference"></a>
 </p>
@@ -15,7 +13,7 @@ Available as both a **Go library** and a drop-in **CLI tool** compatible with th
 
 ### CLI
 
-Download a pre-built binary from the [releases page](https://github.com/dotcommander/defuddle/releases), or install with Go:
+Install the CLI with Go:
 
 ```bash
 go install github.com/dotcommander/defuddle/cmd/defuddle@latest
