@@ -2,6 +2,12 @@
 
 Defuddle includes site-specific extractors that understand the DOM structure of major platforms. When a URL matches a registered extractor, it runs instead of the general-purpose content detection algorithm.
 
+Check the extractor selected for a URL:
+
+```bash
+defuddle extractors --match 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+```
+
 ## Supported Sites
 
 ### Conversation
@@ -37,7 +43,7 @@ Defuddle includes site-specific extractors that understand the DOM structure of 
 
 | Extractor | Sites | What It Extracts |
 |-----------|-------|------------------|
-| YouTube | `youtube.com`, `youtu.be` | Video title, description, channel, transcript |
+| YouTube | `youtube.com`, `youtu.be` | Video metadata, caption links, and timed-text transcripts |
 | Reddit | `reddit.com`, `old.reddit.com`, `new.reddit.com` | Post content, comments, subreddit context |
 | Hacker News | `news.ycombinator.com` | Story content and comment threads |
 | GitHub | `github.com` | Issues, pull requests, repository content |
@@ -107,6 +113,25 @@ type ConversationMessage struct {
     Metadata  map[string]any
 }
 ```
+
+## YouTube Captions and Transcripts
+
+For a YouTube watch page, Defuddle extracts the available video metadata and
+adds a labeled link for each caption track present in
+`ytInitialPlayerResponse`. Automatically generated tracks are labeled as such.
+Only HTTPS `youtube.com/api/timedtext` links are emitted.
+
+Defuddle does not follow those links automatically. Pass a returned timed-text
+URL to `defuddle parse` (or `ParseFromURL`) to extract the transcript:
+
+```bash
+defuddle parse 'https://www.youtube.com/api/timedtext?...' --markdown
+```
+
+Transcript extraction collapses whitespace, removes adjacent duplicate cues,
+and escapes cue text before producing HTML. Output is limited to 10,000 cues
+and 1 MiB of normalized transcript text; truncated output includes a visible
+marker and sets `ExtractedContent["truncated"]` to `true`.
 
 ## Fallback Behavior
 

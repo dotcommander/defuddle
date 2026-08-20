@@ -363,7 +363,7 @@ func TestInitializeBuiltins_RegistersBuiltinExtractors(t *testing.T) {
 	r.initializeBuiltins()
 
 	mappings := r.GetMappings()
-	assert.Len(t, mappings, 21, "should register exactly 21 built-in extractors")
+	assert.Len(t, mappings, 22, "should register exactly 22 built-in extractors")
 }
 
 func TestInitializeBuiltins_EachExtractorRoutes(t *testing.T) {
@@ -397,6 +397,18 @@ func TestInitializeBuiltins_EachExtractorRoutes(t *testing.T) {
 			assert.NotNil(t, extractor, "expected extractor for %s URL %s", tc.name, tc.url)
 		})
 	}
+}
+
+func TestInitializeBuiltins_YouTubeTranscriptPrecedesWatchExtractor(t *testing.T) {
+	t.Parallel()
+
+	r := NewRegistry()
+	r.initializeBuiltins()
+	doc := newTestDoc(t, `<transcript><text start="0">First cue</text></transcript>`)
+
+	ext := r.FindExtractor(doc, "https://www.youtube.com/api/timedtext?v=abc123&lang=en", nil)
+	require.NotNil(t, ext)
+	assert.Equal(t, "YouTubeTranscriptExtractor", ext.Name())
 }
 
 func TestInitializeBuiltins_NewExtractorPatterns(t *testing.T) {

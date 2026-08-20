@@ -33,9 +33,20 @@ func (y *YouTubeExtractor) getTitle(videoData map[string]any) string {
 	title := y.document.Find("title").Text()
 	// Remove " - YouTube" suffix if present
 	title = strings.TrimSuffix(title, " - YouTube")
+	if title != "" {
+		slog.Debug("YouTube extractor: using title from document", "title", title)
+		return title
+	}
 
-	slog.Debug("YouTube extractor: using title from document", "title", title)
-	return title
+	if videoDetails := y.playerResponseVideoDetails(); videoDetails != nil {
+		if title, _ := videoDetails["title"].(string); title != "" {
+			slog.Debug("YouTube extractor: using title from player response", "title", title)
+			return title
+		}
+	}
+
+	slog.Debug("YouTube extractor: no title found")
+	return ""
 }
 
 // getAuthor resolves the channel name using a 3-level fallback chain matching TS:
@@ -94,7 +105,7 @@ func (y *YouTubeExtractor) getChannelNameFromDOM() string {
 
 // getChannelNameFromPlayerResponse parses ytInitialPlayerResponse from inline scripts.
 func (y *YouTubeExtractor) getChannelNameFromPlayerResponse() string {
-	data := y.parseInlineJSON("ytInitialPlayerResponse")
+	data := y.playerResponse()
 	if data == nil {
 		return ""
 	}
@@ -118,6 +129,64 @@ func (y *YouTubeExtractor) getChannelNameFromPlayerResponse() string {
 	return ""
 }
 
+// playerResponse returns the inline player data when YouTube supplied it with
+// the watch page. It is intentionally only a fallback: schema.org and DOM
+// values retain their existing precedence.
+func (y *YouTubeExtractor) playerResponse() map[string]any {
+	return y.parseInlineJSON("ytInitialPlayerResponse")
+}
+
+func (y *YouTubeExtractor) playerResponseVideoDetails() map[string]any {
+	data := y.playerResponse()
+	if data == nil {
+		return nil
+	}
+	videoDetails, _ := data["videoDetails"].(map[string]any)
+	return videoDetails
+}
+
+func (y *YouTubeExtractor) playerResponseDescription() string {
+	data := y.playerResponse()
+	if data == nil {
+		return ""
+	}
+	if videoDetails, _ := data["videoDetails"].(map[string]any); videoDetails != nil {
+		if description, _ := videoDetails["shortDescription"].(string); strings.TrimSpace(description) != "" {
+			return strings.TrimSpace(description)
+		}
+	}
+	microformat, _ := data["microformat"].(map[string]any)
+	renderer, _ := microformat["playerMicroformatRenderer"].(map[string]any)
+	description, _ := renderer["description"].(map[string]any)
+	if text, _ := description["simpleText"].(string); strings.TrimSpace(text) != "" {
+		return strings.TrimSpace(text)
+	}
+	return ""
+}
+
+func (y *YouTubeExtractor) playerResponsePublished() string {
+	if videoDetails := y.playerResponseVideoDetails(); videoDetails != nil {
+		for _, key := range []string{"publishDate", "uploadDate"} {
+			if date, _ := videoDetails[key].(string); date != "" {
+				return date
+			}
+		}
+	}
+
+	data := y.playerResponse()
+	if data == nil {
+		return ""
+	}
+	microformat, _ := data["microformat"].(map[string]any)
+	renderer, _ := microformat["playerMicroformatRenderer"].(map[string]any)
+	for _, key := range []string{"publishDate", "uploadDate"} {
+		if date, _ := renderer[key].(string); date != "" {
+			return date
+		}
+	}
+	return ""
+}
+
 // parseInlineJSON finds a global JS variable assignment and extracts the JSON object.
 // Matches TS parseInlineJson: scans script tags for `globalName`, then brace-balances
 // to extract the JSON block.
@@ -135,37 +204,68 @@ func (y *YouTubeExtractor) parseInlineJSON(globalName string) map[string]any {
 }
 
 // parseGlobalJSON finds globalName in text and returns the first balanced
-// {...} JSON object that follows it, or nil if absent or unparseable.
+// {...} JSON object that follows it, or nil if absent or unparseable. Braces
+// inside JSON strings do not affect object balancing, including escaped quotes.
 func parseGlobalJSON(text, globalName string) map[string]any {
-	idx := strings.Index(text, globalName)
-	if idx == -1 {
-		return nil
+	searchFrom := 0
+	for searchFrom < len(text) {
+		offset := strings.Index(text[searchFrom:], globalName)
+		if offset == -1 {
+			return nil
+		}
+		idx := searchFrom + offset
+		startOffset := strings.IndexByte(text[idx+len(globalName):], '{')
+		if startOffset == -1 {
+			return nil
+		}
+		start := idx + len(globalName) + startOffset
+		if end, ok := balancedJSONObjectEnd(text, start); ok {
+			var parsed map[string]any
+			if err := json.Unmarshal([]byte(text[start:end]), &parsed); err == nil {
+				return parsed
+			}
+			slog.Debug("YouTube: failed to parse inline JSON")
+		}
+		searchFrom = idx + len(globalName)
 	}
-	// Find opening brace after the variable name
-	startIndex := strings.IndexByte(text[idx:], '{')
-	if startIndex == -1 {
-		return nil
-	}
-	startIndex += idx
+	return nil
+}
 
-	// Brace-balance to find matching closing brace
+// balancedJSONObjectEnd returns the exclusive end index of the object starting
+// at start. JSON string contents, including escaped quotes and braces, are
+// skipped while balancing braces.
+func balancedJSONObjectEnd(text string, start int) (int, bool) {
 	depth := 0
-	for i := startIndex; i < len(text); i++ {
-		switch text[i] {
+	inString := false
+	escaped := false
+	for i := start; i < len(text); i++ {
+		char := text[i]
+		if inString {
+			if escaped {
+				escaped = false
+				continue
+			}
+			if char == '\\' {
+				escaped = true
+				continue
+			}
+			if char == '"' {
+				inString = false
+			}
+			continue
+		}
+
+		switch char {
+		case '"':
+			inString = true
 		case '{':
 			depth++
 		case '}':
 			depth--
 			if depth == 0 {
-				jsonText := text[startIndex : i+1]
-				var parsed map[string]any
-				if err := json.Unmarshal([]byte(jsonText), &parsed); err != nil {
-					slog.Debug("YouTube: failed to parse inline JSON", "error", err)
-					return nil
-				}
-				return parsed
+				return i + 1, true
 			}
 		}
 	}
-	return nil
+	return 0, false
 }

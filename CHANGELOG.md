@@ -10,6 +10,24 @@ All notable changes to this project will be documented in this file. The format 
 
 ---
 
+## [v0.14.0] — 2026-08-20
+
+### Added
+
+- Expose safe, labeled YouTube caption-track links from watch-page player data,
+  including explicit labels for automatically generated captions.
+- Extract YouTube timed-text responses as escaped, whitespace-normalized
+  transcripts with adjacent-cue deduplication and bounded output.
+
+### Changed
+
+- Fill missing YouTube title, description, author, and publication metadata
+  from the inline player response without overriding stronger page metadata.
+- Retire prebuilt archive publishing; the supported CLI distribution path is
+  now `go install` from the versioned CLI module.
+
+---
+
 ## [v0.13.3] — 2026-07-19
 
 ### Security

@@ -197,7 +197,7 @@ Defuddle automatically detects popular platforms and applies specialized extract
 
 | Platform | Domains | Content Type |
 |----------|---------|-------------|
-| YouTube | `youtube.com`, `youtu.be` | Video metadata and descriptions |
+| YouTube | `youtube.com`, `youtu.be` | Video metadata, descriptions, caption links, and timed-text transcripts |
 | Reddit | `reddit.com`, `old.reddit.com`, `new.reddit.com` | Posts with comment trees |
 | Hacker News | `news.ycombinator.com` | Posts and threaded comment discussions |
 | GitHub | `github.com` | Issues and pull requests with comments |
@@ -212,7 +212,7 @@ Defuddle automatically detects popular platforms and applies specialized extract
 | Discourse | Forum topics and reply threads |
 | Mastodon | Posts and threads |
 
-23 extractors total: 4 conversation, 4 news, 6 social, 7 tech, 2 catchall.
+24 extractors total: 4 conversation, 4 news, 6 social, 8 tech, 2 catchall.
 
 ### Custom Extractors
 

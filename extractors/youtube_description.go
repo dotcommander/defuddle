@@ -29,8 +29,14 @@ func (y *YouTubeExtractor) getDescription(videoData map[string]any) string {
 	// Fallback to description element in DOM
 	descElement := y.document.Find("#description").First()
 	if descElement.Length() > 0 {
-		description := descElement.Text()
-		slog.Debug("YouTube extractor: using description from DOM", "descriptionLength", len(description))
+		if description := strings.TrimSpace(descElement.Text()); description != "" {
+			slog.Debug("YouTube extractor: using description from DOM", "descriptionLength", len(description))
+			return description
+		}
+	}
+
+	if description := y.playerResponseDescription(); description != "" {
+		slog.Debug("YouTube extractor: using description from player response", "descriptionLength", len(description))
 		return description
 	}
 
@@ -50,7 +56,7 @@ func (y *YouTubeExtractor) getPublished(videoData map[string]any) string {
 			return dateStr
 		}
 	}
-	return ""
+	return y.playerResponsePublished()
 }
 
 // getThumbnail gets the video thumbnail URL

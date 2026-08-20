@@ -2,7 +2,10 @@ package extractors
 
 import (
 	"fmt"
+	"html"
 	"log/slog"
+	"net/url"
+	"strings"
 
 	"github.com/PuerkitoBio/goquery"
 )
@@ -142,6 +145,7 @@ func (y *YouTubeExtractor) Extract() *ExtractorResult {
 		// Fallback content when videoID is empty
 		contentHTML = formattedDescription
 	}
+	contentHTML += y.transcriptLinksHTML()
 
 	title := y.getTitle(videoData)
 	author := y.getAuthor(videoData)
@@ -172,4 +176,80 @@ func (y *YouTubeExtractor) Extract() *ExtractorResult {
 			"description": truncatedDescription,
 		},
 	}
+}
+
+type youtubeCaptionTrack struct {
+	url   string
+	label string
+}
+
+func (y *YouTubeExtractor) transcriptLinksHTML() string {
+	tracks := y.captionTracks()
+	if len(tracks) == 0 {
+		return ""
+	}
+
+	var content strings.Builder
+	for _, track := range tracks {
+		fmt.Fprintf(&content, `<p><a href="%s">%s</a></p>`, html.EscapeString(track.url), html.EscapeString(track.label))
+	}
+	return content.String()
+}
+
+func (y *YouTubeExtractor) captionTracks() []youtubeCaptionTrack {
+	data := y.playerResponse()
+	if data == nil {
+		return nil
+	}
+	captions, _ := data["captions"].(map[string]any)
+	trackList, _ := captions["playerCaptionsTracklistRenderer"].(map[string]any)
+	tracks, _ := trackList["captionTracks"].([]any)
+
+	result := make([]youtubeCaptionTrack, 0, len(tracks))
+	for _, item := range tracks {
+		track, _ := item.(map[string]any)
+		trackURL, _ := track["baseUrl"].(string)
+		if !isSafeYouTubeTranscriptURL(trackURL) {
+			continue
+		}
+		language := captionTrackLanguage(track)
+		label := fmt.Sprintf("Transcript (%s)", language)
+		if kind, _ := track["kind"].(string); strings.EqualFold(kind, "asr") {
+			label = fmt.Sprintf("Transcript (%s, auto-generated)", language)
+		}
+		result = append(result, youtubeCaptionTrack{url: trackURL, label: label})
+	}
+	return result
+}
+
+func captionTrackLanguage(track map[string]any) string {
+	if name, ok := track["name"].(map[string]any); ok {
+		if text, _ := name["simpleText"].(string); strings.TrimSpace(text) != "" {
+			return strings.TrimSpace(text)
+		}
+		if runs, ok := name["runs"].([]any); ok {
+			var text strings.Builder
+			for _, item := range runs {
+				run, _ := item.(map[string]any)
+				part, _ := run["text"].(string)
+				text.WriteString(part)
+			}
+			if label := strings.TrimSpace(text.String()); label != "" {
+				return label
+			}
+		}
+	}
+	if languageCode, _ := track["languageCode"].(string); languageCode != "" {
+		return languageCode
+	}
+	return "unknown language"
+}
+
+func isSafeYouTubeTranscriptURL(rawURL string) bool {
+	parsed, err := url.Parse(rawURL)
+	if err != nil || parsed.Scheme != "https" {
+		return false
+	}
+	host := strings.ToLower(parsed.Hostname())
+	return (host == "youtube.com" || strings.HasSuffix(host, ".youtube.com")) && parsed.Path == "/api/timedtext"
 }

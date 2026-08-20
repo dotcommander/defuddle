@@ -214,6 +214,75 @@ func TestYouTubeExtractor_Extract_DescriptionFallbackFromDOM(t *testing.T) {
 	assert.Contains(t, result.Variables["description"], "Description from the DOM element")
 }
 
+func TestYouTubeExtractor_Extract_PlayerResponseMetadataFallback(t *testing.T) {
+	t.Parallel()
+
+	script := `var ytInitialPlayerResponse = {"videoDetails":{"title":"Inline title","shortDescription":"Inline description"},"microformat":{"playerMicroformatRenderer":{"publishDate":"2026-08-20"}}};`
+	doc := newTestDoc(t, fmt.Sprintf("<html><head><script>%s</script></head><body></body></html>", script))
+	ext := NewYouTubeExtractor(doc, "https://www.youtube.com/watch?v=inline123", nil)
+	result := ext.Extract()
+
+	require.NotNil(t, result)
+	assert.Equal(t, "Inline title", result.Variables["title"])
+	assert.Equal(t, "Inline description", result.Variables["description"])
+	assert.Equal(t, "2026-08-20", result.Variables["published"])
+}
+
+func TestYouTubeExtractor_Extract_PlayerResponseDescriptionFallbacks(t *testing.T) {
+	t.Parallel()
+
+	emptyDOMScript := `var ytInitialPlayerResponse = {"videoDetails":{"shortDescription":"Inline despite empty DOM"}};`
+	emptyDOM := newTestDoc(t, fmt.Sprintf(`<html><head><script>%s</script></head><body><div id="description"> </div></body></html>`, emptyDOMScript))
+	assert.Equal(t, "Inline despite empty DOM", NewYouTubeExtractor(emptyDOM, "https://www.youtube.com/watch?v=emptydom", nil).getDescription(nil))
+
+	microformatScript := `var ytInitialPlayerResponse = {"microformat":{"playerMicroformatRenderer":{"description":{"simpleText":"Microformat description"}}}};`
+	microformat := newTestDoc(t, fmt.Sprintf(`<html><head><script>%s</script></head><body></body></html>`, microformatScript))
+	assert.Equal(t, "Microformat description", NewYouTubeExtractor(microformat, "https://www.youtube.com/watch?v=microformat", nil).getDescription(nil))
+}
+
+func TestYouTubeExtractor_PlayerResponseFallbackPreservesSchemaAndDOM(t *testing.T) {
+	t.Parallel()
+
+	schema := youtubeVideoObjectSchema("Schema title", "Channel", "Schema description", "2020-01-02")
+	script := `var ytInitialPlayerResponse = {"videoDetails":{"title":"Inline title","shortDescription":"Inline description"},"microformat":{"playerMicroformatRenderer":{"publishDate":"2026-08-20"}}};`
+	html := fmt.Sprintf(`<html><head><title>DOM title - YouTube</title><script>%s</script></head><body><div id="description">DOM description</div></body></html>`, script)
+	doc := newTestDoc(t, html)
+	ext := NewYouTubeExtractor(doc, "https://www.youtube.com/watch?v=preserve123", schema)
+	result := ext.Extract()
+
+	require.NotNil(t, result)
+	assert.Equal(t, "Schema title", result.Variables["title"])
+	assert.Equal(t, "Schema description", result.Variables["description"])
+	assert.Equal(t, "2020-01-02", result.Variables["published"])
+}
+
+func TestYouTubeExtractor_PlayerResponseJSONHandlesQuotedBraces(t *testing.T) {
+	t.Parallel()
+
+	script := `var ytInitialPlayerResponse = {"videoDetails":{"title":"A { brace } and a \"quote\"","shortDescription":"Keeps a } brace"}};`
+	doc := newTestDoc(t, fmt.Sprintf("<html><head><script>%s</script></head><body></body></html>", script))
+	ext := NewYouTubeExtractor(doc, "https://www.youtube.com/watch?v=quoted123", nil)
+
+	assert.Equal(t, `A { brace } and a "quote"`, ext.getTitle(nil))
+	assert.Equal(t, "Keeps a } brace", ext.getDescription(nil))
+}
+
+func TestYouTubeExtractor_ContentHTML_TranscriptLinks(t *testing.T) {
+	t.Parallel()
+
+	script := `var ytInitialPlayerResponse = {"captions":{"playerCaptionsTracklistRenderer":{"captionTracks":[{"baseUrl":"https://www.youtube.com/api/timedtext?v=caption123&lang=en","name":{"simpleText":"English & French"},"languageCode":"en"},{"baseUrl":"https://www.youtube.com/api/timedtext?v=caption123&lang=es","name":{"simpleText":"Spanish"},"kind":"asr"},{"baseUrl":"javascript:alert(1)","name":{"simpleText":"Unsafe scheme"}},{"baseUrl":"https://www.youtube.com/watch?v=caption123","name":{"simpleText":"Unsafe path"}}]}}};`
+	doc := newTestDoc(t, fmt.Sprintf("<html><head><script>%s</script></head><body></body></html>", script))
+	ext := NewYouTubeExtractor(doc, "https://www.youtube.com/watch?v=caption123", nil)
+	result := ext.Extract()
+
+	require.NotNil(t, result)
+	assert.Contains(t, result.ContentHTML, `href="https://www.youtube.com/api/timedtext?v=caption123&amp;lang=en"`)
+	assert.Contains(t, result.ContentHTML, "Transcript (English &amp; French)")
+	assert.Contains(t, result.ContentHTML, "Transcript (Spanish, auto-generated)")
+	assert.NotContains(t, result.ContentHTML, "Unsafe scheme")
+	assert.NotContains(t, result.ContentHTML, "Unsafe path")
+}
+
 // ---------------------------------------------------------------------------
 // Channel name resolution — DOM selectors
 // ---------------------------------------------------------------------------

@@ -5,6 +5,11 @@ import "regexp"
 // registerTech registers extractors for tech, code, and forum platforms:
 // YouTube, Reddit, Hacker News, GitHub, Wikipedia, C2 Wiki, and LeetCode.
 func registerTech(r *Registry) {
+	// Timed-text responses share YouTube's host but must win before the broad
+	// watch-page extractor. The transcript extractor confirms text cues in DOM.
+	registerIfExtractable(r, NewYouTubeTranscriptExtractor,
+		regexp.MustCompile(`(?i)^https?://(?:[^/]+\.)?youtube\.com/api/timedtext(?:[/?]|$)`),
+	)
 	register(r, NewYouTubeExtractor,
 		"youtube.com",
 		"youtu.be",
