@@ -19,8 +19,8 @@ github.com/chromedp/chromedp v0.16.0/go.mod h1:rbuGKFT1vMcFcFqKfPIO1GpX/N+2s8onm
 github.com/chromedp/sysutil v1.1.0 h1:PUFNv5EcprjqXZD9nJb9b/c9ibAbxiYo4exNWZyipwM=
 github.com/chromedp/sysutil v1.1.0/go.mod h1:WiThHUdltqCNKGc4gaU50XgYjwjYIhKWoHGPTUfWTJ8=
 github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=
-github.com/dotcommander/defuddle v0.13.3 h1:XyUt+EnodB4GlbpEA0aI1lV6TCFEW9Zn8wyE8w4Px64=
-github.com/dotcommander/defuddle v0.13.3/go.mod h1:uTA3q9ooSj94PJeJiw05PizxGmyU36uddoSnQhxYhKE=
+github.com/dotcommander/defuddle v0.14.0 h1:3cWsqU1Rp3xe9Kr0Tq71aqg8hiHTXxAeVHkX3DdaHmo=
+github.com/dotcommander/defuddle v0.14.0/go.mod h1:bcGg9rdZ09xFJ3lA0jU/QXY5YXEkN3/GQlnz9v3vq1U=
 github.com/go-json-experiment/json v0.0.0-20260623181947-01eb4420fa68 h1:KZaTBSyshWX3MP5jukJcNSuXDQTO+rNpt0J564dX/eg=
 github.com/go-json-experiment/json v0.0.0-20260623181947-01eb4420fa68/go.mod h1:tphK2c80bpPhMOI4v6bIc2xWywPfbqi1Z06+RcrMkDg=
 github.com/gobwas/httphead v0.1.0 h1:exrUm0f4YX0L7EBwZHuCF4GDp8aJfVeBrlLQrs6NqWU=

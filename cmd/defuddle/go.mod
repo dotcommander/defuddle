@@ -14,8 +14,6 @@ require (
 	github.com/kr/text v0.2.0 // indirect
 	github.com/ledongthuc/pdf v0.0.0-20250511090121-5959a4027728 // indirect
 	github.com/orisano/pixelmatch v0.0.0-20230914042517-fa304d1dc785 // indirect
-	github.com/rogpeppe/go-internal v1.16.0 // indirect
-	github.com/yuin/goldmark v1.8.5 // indirect
 )
 
 require (
