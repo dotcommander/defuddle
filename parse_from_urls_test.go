@@ -134,6 +134,43 @@ func TestParseFromURL_NotModified(t *testing.T) {
 	assert.Nil(t, result)
 }
 
+func TestParseFromURL_ContentTypeValidation(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name        string
+		contentType string
+		wantErr     bool
+	}{
+		{name: "mixed case HTML", contentType: "Text/HTML; Charset=UTF-8"},
+		{name: "application XML", contentType: "Application/XML"},
+		{name: "structured XML", contentType: "Application/Atom+XML"},
+		{name: "binary", contentType: "application/octet-stream", wantErr: true},
+		{name: "malformed", contentType: `text/html; charset="unterminated`, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				if tt.contentType != "" {
+					w.Header().Set("Content-Type", tt.contentType)
+				}
+				_, _ = w.Write([]byte(pageHTML("/content-type")))
+			}))
+			t.Cleanup(srv.Close)
+
+			result, err := ParseFromURL(t.Context(), srv.URL, &Options{Client: srv.Client()})
+			if tt.wantErr {
+				require.ErrorIs(t, err, ErrNotHTML)
+				assert.Nil(t, result)
+				return
+			}
+			require.NoError(t, err)
+			assert.NotNil(t, result)
+		})
+	}
+	assert.True(t, isDocumentContentType(""), "empty Content-Type remains accepted")
+}
+
 func TestParseFromURL_UsesRedirectTargetForImplicitMetadataURL(t *testing.T) {
 	t.Parallel()
 

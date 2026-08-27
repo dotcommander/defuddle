@@ -14,6 +14,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"mime"
 	"net/http"
 	"strings"
 
@@ -56,7 +57,7 @@ func fetchHTML(ctx context.Context, rawURL string, client *http.Client, headers 
 	}
 
 	ct := resp.Header.Get("Content-Type")
-	if ct != "" && !strings.Contains(ct, "html") && !strings.Contains(ct, "xml") && !strings.Contains(ct, "text/") {
+	if !isDocumentContentType(ct) {
 		return "", fmt.Errorf("fetch %s: content-type %q: %w", rawURL, ct, defuddle.ErrNotHTML)
 	}
 
@@ -65,4 +66,17 @@ func fetchHTML(ctx context.Context, rawURL string, client *http.Client, headers 
 		return "", err
 	}
 	return string(body), nil
+}
+
+func isDocumentContentType(contentType string) bool {
+	if contentType == "" {
+		return true
+	}
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		return false
+	}
+	return strings.HasPrefix(mediaType, "text/") ||
+		mediaType == "application/xml" ||
+		strings.HasSuffix(mediaType, "+xml")
 }

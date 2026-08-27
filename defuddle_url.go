@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"mime"
 	"net/http"
 	"net/url"
 	"strings"
@@ -114,7 +115,7 @@ func fetchCapped(ctx context.Context, client *http.Client, headers http.Header, 
 	}
 
 	ct := resp.Header.Get("Content-Type")
-	if ct != "" && !strings.Contains(ct, "html") && !strings.Contains(ct, "xml") && !strings.Contains(ct, "text/") {
+	if !isDocumentContentType(ct) {
 		return nil, fmt.Errorf("fetch %s: content-type %q: %w", rawURL, ct, ErrNotHTML)
 	}
 	if resp.ContentLength > maxResponseSize {
@@ -129,6 +130,19 @@ func fetchCapped(ctx context.Context, client *http.Client, headers http.Header, 
 		return nil, fmt.Errorf("fetch %s: response exceeds %d bytes: %w", rawURL, maxResponseSize, ErrTooLarge)
 	}
 	return &fetchResult{Body: body, ContentType: ct, URL: responseURL}, nil
+}
+
+func isDocumentContentType(contentType string) bool {
+	if contentType == "" {
+		return true
+	}
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		return false
+	}
+	return strings.HasPrefix(mediaType, "text/") ||
+		mediaType == "application/xml" ||
+		strings.HasSuffix(mediaType, "+xml")
 }
 
 func validateRequestURL(rawURL string) (string, error) {
