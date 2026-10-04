@@ -1,0 +1,8 @@
+[
+  {"id":"news","html_path":"../../.reference/defuddle/tests/fixtures/general--apnews-link-enhancement.html","url":"https://apnews.com/article/test-article","annotations":{"category":"news","provenance":"TS regression fixture; no independent gold"}},
+  {"id":"code","html_path":"../../.reference/defuddle/tests/fixtures/codeblocks--rockthejvm.com-articles-kotlin-101-type-classes.html","annotations":{"category":"code"}},
+  {"id":"social","html_path":"../../.reference/defuddle/tests/fixtures/general--substack-note.html","annotations":{"category":"social; short synthetic note"}},
+  {"id":"docs","html_path":"../../.reference/defuddle/tests/fixtures/codeblocks--mintlify.html","url":"https://www.sanity.io/docs/guides/modes","annotations":{"category":"docs","url_source":"explicit context for synthetic fixture; not fetched"}},
+  {"id":"short","html_path":"../../.reference/defuddle/tests/fixtures/general--stephango.com-buy-wisely.html","annotations":{"category":"short blog"}},
+  {"id":"encyclopedia","html_path":"../../.reference/defuddle/tests/fixtures/general--wikipedia.html","annotations":{"category":"encyclopedia"}}
+]

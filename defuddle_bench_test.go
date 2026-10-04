@@ -171,20 +171,23 @@ func BenchmarkExtractSchemaOrgData(b *testing.B) {
 }
 
 // loadFixture reads a real-world HTML fixture from the reference test directory.
-// Returns empty string if fixture is not available (skips benchmark).
+// The optional reference checkout may be absent; a broken fixture name may not.
 func loadFixture(b *testing.B, name string) string {
 	b.Helper()
 	path := filepath.Join(".reference", "defuddle", "tests", "fixtures", name)
+	if _, err := os.Stat(filepath.Dir(path)); os.IsNotExist(err) {
+		b.Skip("optional TypeScript reference fixtures are not checked out")
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		b.Skipf("fixture %s not available: %v", name, err)
+		b.Fatalf("required fixture %s: %v", name, err)
 	}
 	return string(data)
 }
 
 // BenchmarkRealWorld_Blog benchmarks a real blog post (~19KB)
 func BenchmarkRealWorld_Blog(b *testing.B) {
-	html := loadFixture(b, "stephango.com-buy-wisely.html")
+	html := loadFixture(b, "general--stephango.com-buy-wisely.html")
 	ctx := context.Background()
 	b.SetBytes(int64(len(html)))
 	b.ResetTimer()
@@ -200,7 +203,7 @@ func BenchmarkRealWorld_Blog(b *testing.B) {
 
 // BenchmarkRealWorld_BlogMarkdown benchmarks a real blog post with markdown conversion
 func BenchmarkRealWorld_BlogMarkdown(b *testing.B) {
-	html := loadFixture(b, "stephango.com-buy-wisely.html")
+	html := loadFixture(b, "general--stephango.com-buy-wisely.html")
 	ctx := context.Background()
 	opts := &Options{Markdown: true}
 	b.SetBytes(int64(len(html)))
@@ -217,7 +220,7 @@ func BenchmarkRealWorld_BlogMarkdown(b *testing.B) {
 
 // BenchmarkRealWorld_GitHubIssue benchmarks a GitHub issue page (~295KB)
 func BenchmarkRealWorld_GitHubIssue(b *testing.B) {
-	html := loadFixture(b, "github.com-issue-56.html")
+	html := loadFixture(b, "general--github.com-issue-56.html")
 	ctx := context.Background()
 	b.SetBytes(int64(len(html)))
 	b.ResetTimer()
@@ -233,7 +236,7 @@ func BenchmarkRealWorld_GitHubIssue(b *testing.B) {
 
 // BenchmarkRealWorld_LargeArticle benchmarks a large article page (~664KB)
 func BenchmarkRealWorld_LargeArticle(b *testing.B) {
-	html := loadFixture(b, "x.com-article-2026-02-13.html")
+	html := loadFixture(b, "general--x.com-article-2026-02-13.html")
 	ctx := context.Background()
 	b.SetBytes(int64(len(html)))
 	b.ResetTimer()
@@ -249,7 +252,7 @@ func BenchmarkRealWorld_LargeArticle(b *testing.B) {
 
 // BenchmarkRealWorld_TechBlog benchmarks a technical blog with code blocks (~5KB)
 func BenchmarkRealWorld_TechBlog(b *testing.B) {
-	html := loadFixture(b, "rockthejvm.com!articles!kotlin-101-type-classes.html")
+	html := loadFixture(b, "codeblocks--rockthejvm.com-articles-kotlin-101-type-classes.html")
 	ctx := context.Background()
 	b.SetBytes(int64(len(html)))
 	b.ResetTimer()
@@ -265,7 +268,7 @@ func BenchmarkRealWorld_TechBlog(b *testing.B) {
 
 // BenchmarkRealWorld_LessWrong benchmarks a LessWrong article with footnotes (~247KB)
 func BenchmarkRealWorld_LessWrong(b *testing.B) {
-	html := loadFixture(b, "lesswrong.com!s!N7nDePaNabJdnbXeE!p!vJFdjigzmcXMhNTsx.html")
+	html := loadFixture(b, "general--lesswrong.com-s-N7nDePaNabJdnbXeE-p-vJFdjigzmcXMhNTsx.html")
 	ctx := context.Background()
 	b.SetBytes(int64(len(html)))
 	b.ResetTimer()
