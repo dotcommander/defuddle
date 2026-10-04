@@ -151,7 +151,7 @@ func TestParseOptionsFileOutputModes(t *testing.T) {
 	}{
 		{name: "html", opts: ParseOptions{Source: path}, want: "Article body for parse cmd integration test"},
 		{name: "markdown", opts: ParseOptions{Source: path, Markdown: true}, want: "Article body for parse cmd integration test"},
-		{name: "property", opts: ParseOptions{Source: path, Property: "title"}, want: "Fixture Title"},
+		{name: "property", opts: ParseOptions{Source: path, Property: "title"}, want: "Fixture Title\n"},
 	}
 
 	for _, tt := range tests {

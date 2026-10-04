@@ -8,7 +8,22 @@ All notable changes to this project will be documented in this file. The format 
 
 ## [Unreleased]
 
+### Changed
+
+- `--render-auto` escalation now defaults to `networkidle` when `--render-wait`
+  is unset: the JS-shell pages it escalates on hydrate after the load event,
+  so the previous `load` default usually re-captured the same un-hydrated
+  shell. An explicit `--render-wait` value is honored unchanged on every path.
+- `--property` output now ends with a trailing newline, matching the upstream
+  CLI's `console.log` shape.
+- An unwritable `--output` destination (for example a missing directory) now
+  exits `2` (validation) instead of `3` (not found).
+
 ### Fixed
+
+- `--render` / `--render-auto` with a file or stdin source now print a one-line
+  warning to stderr and parse statically, instead of silently ignoring the
+  render flags.
 
 - `defuddle parse <file>` now resolves relative URLs in extracted content
   against a `file://` URL derived from the input path (matching the TypeScript

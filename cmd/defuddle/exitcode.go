@@ -47,6 +47,10 @@ func exitCodeFor(err error) int {
 	case errors.Is(err, defuddle.ErrHTTPStatus),
 		errors.Is(err, defuddle.ErrNotModified):
 		return exitUpstream
+	// ErrOutputWrite wraps fs.ErrNotExist (missing output directory), so it
+	// must classify before the generic not-exist fallback below.
+	case errors.Is(err, ErrOutputWrite):
+		return exitValidation
 	case errors.Is(err, fs.ErrNotExist):
 		return exitNotFound
 	case errors.Is(err, ErrInvalidHeaderFormat),
@@ -58,6 +62,7 @@ func exitCodeFor(err error) int {
 		errors.Is(err, ErrInvalidMatchURL),
 		errors.Is(err, ErrInvalidConcurrency),
 		errors.Is(err, ErrInvalidProxyScheme),
+		errors.Is(err, ErrInvalidRenderWait),
 		errors.Is(err, defuddle.ErrNotHTML),
 		errors.Is(err, defuddle.ErrTooLarge):
 		return exitValidation

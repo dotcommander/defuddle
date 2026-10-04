@@ -66,7 +66,7 @@ defuddle parse URL --property title    # a single field, raw
 defuddle parse URL --output out.html   # write to a file instead of stdout (-o)
 ```
 
-When more than one is set, precedence is `--property` > `--json` > `--markdown` > default HTML. `--markdown` falls back to HTML if no markdown was produced.
+When more than one is set, precedence is `--property` > `--tables-json` > `--json` > `--markdown` > default HTML. `--markdown` falls back to HTML if no markdown was produced.
 
 `--property` accepts: `content`, `language`, `title`, `description`, `domain`, `favicon`, `image`, `author`, `site`, `published`, `wordCount`, `parseTime`, `metaTags`, `schemaOrgData`, `extractorType`, `contentMarkdown`.
 
@@ -98,8 +98,20 @@ defuddle parse --render \
 the page looks like a JavaScript shell. If Chrome is unavailable, it falls back
 to parsing the static HTML. `--render-wait` accepts `load` (default; snapshot
 after the load event) or `networkidle` (snapshot after a brief network-idle
-settle). Use `--render-wait-for` for a stable CSS selector, or `--render-settle`
+settle). `--render-auto` escalation defaults to `networkidle` when
+`--render-wait` is unset, because the JS shells it escalates on hydrate after
+the load event; an explicit `--render-wait` value overrides this on every path.
+Use `--render-wait-for` for a stable CSS selector, or `--render-settle`
 for a fixed post-load delay. Render tuning flags only affect a render path.
+
+Rendering requires an http(s) URL source. With a file or stdin source the
+render flags cannot apply (there is no URL for Chrome to navigate), so the CLI
+prints a one-line warning to stderr and parses the input statically.
+
+Charset note: pages that declare no charset anywhere (neither an HTTP header
+nor a `<meta>` tag) are decoded by Chrome's legacy-encoding fallback on the
+render path, which can garble non-ASCII text; the static fetch path assumes
+UTF-8. Pages that declare any charset are unaffected.
 
 ### HTTP flags
 
@@ -160,7 +172,7 @@ defuddle parse https://example.com --debug
 | `--render` | | bool | false | Render JavaScript via headless Chrome before extracting |
 | `--render-auto` | | bool | false | Render only pages detected as JavaScript-heavy |
 | `--js` | | bool | false | Alias for `--render` |
-| `--render-wait` | | string | load | Render wait strategy: `load` or `networkidle` |
+| `--render-wait` | | string | load | Render wait strategy: `load` or `networkidle` (default `load`; `networkidle` under `--render-auto` when unset) |
 | `--render-wait-for` | | string | | Wait for a visible CSS selector before snapshot |
 | `--render-settle` | | duration | 0 | Extra post-load delay before snapshot |
 | `--render-user-agent` | | string | | User agent for the render stage (default: Chrome default) |
@@ -194,7 +206,7 @@ defuddle batch --input urls.txt --timeout 2m
 defuddle batch --input urls.txt > results.jsonl
 ```
 
-Blank lines and lines beginning with `#` are skipped. Each input line is bounded at 64 KiB; longer lines surface as an error rather than being silently truncated. Results are written in input order.
+Blank lines and lines beginning with `#` are skipped. Each input line is bounded at 64 KiB; longer lines surface as an error rather than being silently truncated. Results are written in input order. `--concurrency` values below 1 are rejected (exit 2); note that the short form `-c -3` is parsed as a flag by the CLI parser — use the long equals form (`--concurrency=-3`) to probe negative values.
 
 ### Output format
 
@@ -261,7 +273,7 @@ defuddle parse https://example.com --json | jq '{title, author, wordCount}'
 |------|----------|---------|---------|
 | `0` | success | Command completed | — |
 | `1` | error | Unclassified error (fallback) | JSON marshal failure, HTTP client build failure |
-| `2` | validation | Bad flags, arguments, or input | Malformed `-H` header, unknown `--property`, non-HTML input, input over the 5 MiB cap |
+| `2` | validation | Bad flags, arguments, or input | Malformed `-H` header, unknown `--property`, non-HTML input, input over the 5 MiB cap, unwritable `--output` path |
 | `3` | not_found | Source file / input file missing | `defuddle parse ./missing.html`, `batch --input missing.txt` |
 | `4` | upstream | Fetch / HTTP / network failure | Non-2xx HTTP status, `304 Not Modified` |
 | `5` | precondition | Operator action needed | `--render` with no Chrome/Chromium installed |
@@ -276,7 +288,7 @@ defuddle --version
 # v0.15.0 (commit: 4f1c2ab, built: 2026-10-04)
 ```
 
-The output format is `<version> (commit: <hash>, built: <date>)`. The commit hash and build date are injected at build time; when they are not injected, both print as `unknown` (for example `dev (commit: unknown, built: unknown)` from a plain `go build`).
+The output format is `<version> (commit: <hash>, built: <date>)`. The commit hash and build date are injected at build time; when they are not injected, both print as `unknown`. On Go 1.24+ a plain `go build` inside a VCS checkout also embeds the module's VCS-stamped version, so a tagged-but-dirty tree prints something like `v0.15.0+dirty (commit: unknown, built: unknown)`; outside a checkout (or before Go 1.24) it stays `dev (commit: unknown, built: unknown)`.
 
 ## Examples
 

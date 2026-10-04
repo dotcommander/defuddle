@@ -41,7 +41,7 @@ type ParseOptions struct {
 	Render           bool          `help:"Render JavaScript via headless Chrome before extracting."`
 	RenderAuto       bool          `name:"render-auto" help:"Render only pages detected as JavaScript-heavy."`
 	JS               bool          `name:"js" help:"Alias for --render."`
-	RenderWait       string        `name:"render-wait" default:"load" enum:"load,networkidle" help:"Render wait strategy."`
+	RenderWait       string        `name:"render-wait" help:"Render wait strategy: load or networkidle (default load; networkidle for --render-auto when unset)."`
 	RenderWaitFor    string        `name:"render-wait-for" help:"CSS selector to wait for before snapshot."`
 	RenderSettle     time.Duration `name:"render-settle" help:"Extra settle delay after load."`
 	RenderUA         string        `name:"render-user-agent" help:"User-agent for the render stage."`
@@ -72,6 +72,9 @@ func (opts *ParseOptions) run(ctx context.Context) error {
 	opts.Source = source
 	opts.Markdown = opts.Markdown || opts.MD
 	opts.Render = opts.Render || opts.JS
+	if err := validateRenderWait(opts.RenderWait); err != nil {
+		return err
+	}
 	if opts.Debug {
 		slog.SetLogLoggerLevel(slog.LevelDebug)
 	}
@@ -84,6 +87,18 @@ func commandContext(parent context.Context) context.Context {
 		return parent
 	}
 	return context.Background()
+}
+
+// validateRenderWait rejects --render-wait values outside the accepted set.
+// Empty is valid: it selects the path default (load for --render, networkidle
+// for --render-auto escalation) so an explicit value is always distinguishable
+// from an unset one.
+func validateRenderWait(v string) error {
+	switch v {
+	case "", "load", "networkidle":
+		return nil
+	}
+	return fmt.Errorf("%w: %q (valid: load, networkidle)", ErrInvalidRenderWait, v)
 }
 
 // buildContext returns a context (with optional timeout) and its cancel func.
@@ -168,6 +183,11 @@ func loadResult(ctx context.Context, opts *ParseOptions, defuddleOpts *defuddle.
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	// Rendering drives Chrome to the source URL; file and stdin inputs have no
+	// URL to navigate, so warn instead of silently dropping the render flags.
+	if (opts.Render || opts.RenderAuto) && !isHTTPSource(opts.Source) {
+		fmt.Fprintf(os.Stderr, "defuddle: ignoring %s: JavaScript rendering requires an http(s) URL source\n", renderFlagLabel(opts))
+	}
 	switch {
 	case opts.Source == "-":
 		stdinBytes, err := readCapped(os.Stdin, "stdin")
@@ -179,7 +199,7 @@ func loadResult(ctx context.Context, opts *ParseOptions, defuddleOpts *defuddle.
 			return nil, fmt.Errorf("error creating defuddle instance: %w", err)
 		}
 		return d.Parse(ctx)
-	case strings.HasPrefix(opts.Source, "http://") || strings.HasPrefix(opts.Source, "https://"):
+	case isHTTPSource(opts.Source):
 		if opts.Render {
 			return renderAndParse(ctx, opts, defuddleOpts)
 		}
@@ -211,6 +231,21 @@ func loadResult(ctx context.Context, opts *ParseOptions, defuddleOpts *defuddle.
 	}
 }
 
+func isHTTPSource(source string) bool {
+	return strings.HasPrefix(source, "http://") || strings.HasPrefix(source, "https://")
+}
+
+func renderFlagLabel(opts *ParseOptions) string {
+	switch {
+	case opts.Render && opts.RenderAuto:
+		return "--render/--render-auto"
+	case opts.RenderAuto:
+		return "--render-auto"
+	default:
+		return "--render"
+	}
+}
+
 // renderOutput formats result according to opts, returning the string to write.
 func renderOutput(result *defuddle.Result, opts *ParseOptions) (string, error) {
 	if opts.Property != "" {
@@ -218,7 +253,9 @@ func renderOutput(result *defuddle.Result, opts *ParseOptions) (string, error) {
 		if !found {
 			return "", fmt.Errorf("%w: %q (valid: %s)", ErrPropertyNotFound, opts.Property, strings.Join(knownProperties, ", "))
 		}
-		return value, nil
+		// Trailing newline matches the upstream CLI's console.log shape and
+		// keeps terminal output readable; --output writes it as part of content.
+		return value + "\n", nil
 	}
 
 	switch {

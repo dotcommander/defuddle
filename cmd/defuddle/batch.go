@@ -123,15 +123,7 @@ func encodeBatchResults(results []defuddle.URLResult, continueOnError bool) erro
 	return nil
 }
 
-// batchContext returns a cancellable context with an optional deadline.
-// Callers must always defer cancel().
-func batchContext(timeout time.Duration) (context.Context, context.CancelFunc) {
-	if timeout > 0 {
-		return context.WithTimeout(context.Background(), timeout)
-	}
-	return context.WithCancel(context.Background())
-}
-
+// validateConcurrency reports whether a --concurrency value is usable.
 func validateConcurrency(concurrency int) error {
 	if concurrency < 1 {
 		return fmt.Errorf("%w: got %d", ErrInvalidConcurrency, concurrency)

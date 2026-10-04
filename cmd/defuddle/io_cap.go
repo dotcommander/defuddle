@@ -74,7 +74,7 @@ func writeOutput(filename, content string) error {
 
 	err := os.WriteFile(filename, []byte(content), 0600) // More secure file permissions
 	if err != nil {
-		return err
+		return fmt.Errorf("%w: %w", ErrOutputWrite, err)
 	}
 
 	fmt.Fprintf(os.Stderr, "Output written to %s\n", filename)

@@ -32,6 +32,18 @@ func buildRenderConfig(opts *ParseOptions) render.Config {
 	}
 }
 
+// effectiveAutoRenderOpts applies the auto-path render defaults. --render-auto
+// escalates exactly on JS-shell pages, which hydrate after the load event, so
+// an unset --render-wait escalates to networkidle; an explicit --render-wait
+// value is honored unchanged on every path.
+func effectiveAutoRenderOpts(opts *ParseOptions) *ParseOptions {
+	effective := *opts
+	if effective.RenderWait == "" {
+		effective.RenderWait = "networkidle"
+	}
+	return &effective
+}
+
 // renderAndParse drives the chromedp render stage, then feeds the rendered HTML
 // into the UNCHANGED library entrypoint defuddle.ParseFromString. The render
 // deadline comes from opts.RenderTimeout, independent of the fetch --timeout.

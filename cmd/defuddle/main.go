@@ -43,6 +43,8 @@ var (
 	ErrInvalidMatchURL     = errors.New("invalid match URL")
 	ErrInvalidConcurrency  = errors.New("concurrency must be at least 1")
 	ErrInvalidProxyScheme  = errors.New("invalid proxy URL scheme")
+	ErrInvalidRenderWait   = errors.New("invalid render wait strategy")
+	ErrOutputWrite         = errors.New("writing output file")
 	ErrCLIUsage            = errors.New("invalid command line")
 )
 

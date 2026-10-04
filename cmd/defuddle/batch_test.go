@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -123,30 +124,31 @@ func TestValidateConcurrency(t *testing.T) {
 	}
 }
 
-// TestBatchContext_NoTimeout verifies that a zero duration returns a plain
-// cancellable context with no deadline.
-func TestBatchContext_NoTimeout(t *testing.T) {
+// TestBatchBuildContext_NoTimeout verifies that a zero duration returns a plain
+// cancellable context with no deadline (buildContext is the shared helper;
+// batch no longer carries a duplicate).
+func TestBatchBuildContext_NoTimeout(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := batchContext(0)
+	ctx, cancel := buildContext(context.Background(), 0)
 	defer cancel()
 	if _, ok := ctx.Deadline(); ok {
-		t.Fatalf("batchContext(0): expected no deadline, got one")
+		t.Fatalf("buildContext(0): expected no deadline, got one")
 	}
 }
 
-// TestBatchContext_WithTimeout verifies that a positive duration installs a
-// deadline within the requested window.
-func TestBatchContext_WithTimeout(t *testing.T) {
+// TestBatchBuildContext_WithTimeout verifies that a positive duration installs
+// a deadline within the requested window.
+func TestBatchBuildContext_WithTimeout(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := batchContext(50 * 1000 * 1000) // 50ms in ns
+	ctx, cancel := buildContext(context.Background(), 50*1000*1000) // 50ms in ns
 	defer cancel()
 	deadline, ok := ctx.Deadline()
 	if !ok {
-		t.Fatalf("batchContext(50ms): expected deadline, got none")
+		t.Fatalf("buildContext(50ms): expected deadline, got none")
 	}
 	if deadline.IsZero() {
-		t.Fatalf("batchContext(50ms): deadline is zero")
+		t.Fatalf("buildContext(50ms): deadline is zero")
 	}
 }

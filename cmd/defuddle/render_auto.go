@@ -24,7 +24,9 @@ func autoRenderAndParse(ctx context.Context, opts *ParseOptions, defuddleOpts *d
 		return nil, err
 	}
 
-	return parseAutoDocument(ctx, opts, defuddleOpts, document, renderToHTML)
+	return parseAutoDocument(ctx, opts, defuddleOpts, document, func(ctx context.Context, o *ParseOptions) (string, error) {
+		return renderToHTML(ctx, effectiveAutoRenderOpts(o))
+	})
 }
 
 // parseAutoDocument keeps render failure fallback separate from caller cancellation.

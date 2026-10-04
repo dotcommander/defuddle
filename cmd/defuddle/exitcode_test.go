@@ -33,6 +33,8 @@ func TestExitCodeFor(t *testing.T) {
 		{"invalid match url is validation", ErrInvalidMatchURL, exitValidation},
 		{"invalid concurrency is validation", ErrInvalidConcurrency, exitValidation},
 		{"invalid proxy scheme is validation", fmt.Errorf("wrap: %w", ErrInvalidProxyScheme), exitValidation},
+		{"invalid render wait is validation", fmt.Errorf("wrap: %w", ErrInvalidRenderWait), exitValidation},
+		{"output write failure is validation", fmt.Errorf("wrap: %w", ErrOutputWrite), exitValidation},
 		{"not html is validation", defuddle.ErrNotHTML, exitValidation},
 		{"too large is validation", fmt.Errorf("read stdin: %w", defuddle.ErrTooLarge), exitValidation},
 		{"missing file is not_found", fmt.Errorf("error reading file: %w", fs.ErrNotExist), exitNotFound},
