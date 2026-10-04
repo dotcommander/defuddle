@@ -194,7 +194,7 @@ func TestRegistry_FindExtractor_EmptyURLReturnsNil(t *testing.T) {
 	assert.Nil(t, extractor)
 }
 
-func TestRegistry_URLCache(t *testing.T) {
+func TestRegistry_ConstructsOnEveryLookup(t *testing.T) {
 	t.Parallel()
 
 	r := NewRegistry()
@@ -209,16 +209,16 @@ func TestRegistry_URLCache(t *testing.T) {
 
 	doc := newTestDoc(t, "<html><body></body></html>")
 
-	// First lookup — traverses mappings and populates cache.
+	// Every lookup traverses mappings.
 	r.FindExtractor(doc, "https://cached.com/page", nil)
 	assert.Equal(t, 1, callCount)
 
-	// Second lookup — cache hit, constructor called again to produce new instance.
+	// Second lookup constructs against the current document again.
 	r.FindExtractor(doc, "https://cached.com/page", nil)
-	assert.Equal(t, 2, callCount, "constructor is called on each lookup even when cache holds the constructor")
+	assert.Equal(t, 2, callCount, "constructor is called on each lookup")
 }
 
-func TestRegistry_URLCacheKeepsPathSpecificLookupsIndependent(t *testing.T) {
+func TestRegistry_PathSpecificLookupsIndependent(t *testing.T) {
 	t.Parallel()
 
 	r := NewRegistry()
@@ -244,7 +244,7 @@ func TestRegistry_URLCacheKeepsPathSpecificLookupsIndependent(t *testing.T) {
 	assert.Equal(t, 1, calls, "non-matching paths on the same host must not reuse a prior matching constructor")
 }
 
-func TestRegistry_RegisterClearsCachedMisses(t *testing.T) {
+func TestRegistry_RegistrationAfterMiss(t *testing.T) {
 	t.Parallel()
 
 	r := NewRegistry()
@@ -276,27 +276,27 @@ func TestRegistry_ClearCache(t *testing.T) {
 	})
 
 	doc := newTestDoc(t, "<html><body></body></html>")
-	r.FindExtractor(doc, "https://clearcache.com/page", nil) // populate cache
+	r.FindExtractor(doc, "https://clearcache.com/page", nil)
 
 	result := r.ClearCache()
 
 	// Returns self for chaining.
 	assert.Same(t, r, result)
 
-	// After clearing, lookup should still work (re-populates cache).
+	// The compatibility no-op preserves lookup behavior.
 	_ = r.FindExtractor(doc, "https://clearcache.com/page", nil)
 }
 
-func TestRegistry_ClearCache_NegativeEntry(t *testing.T) {
+func TestRegistry_ClearCacheAfterMiss(t *testing.T) {
 	t.Parallel()
 
 	r := NewRegistry()
 	doc := newTestDoc(t, "<html><body></body></html>")
 
-	// Populate a negative cache entry for an unknown domain.
+	// Look up an unknown domain.
 	r.FindExtractor(doc, "https://nobody.com/page", nil)
 
-	// Clear should remove the negative entry without panicking.
+	// The compatibility no-op must not panic.
 	r.ClearCache()
 }
 
@@ -449,4 +449,33 @@ func TestInitializeBuiltins_NewExtractorPatterns(t *testing.T) {
 		assert.NotNil(t, ext)
 		assert.Equal(t, "NytimesExtractor", ext.Name())
 	})
+}
+
+func TestRegistry_NilResultFallsThroughAndReevaluatesDocument(t *testing.T) {
+	t.Parallel()
+	r := NewRegistry()
+	r.Register(ExtractorMapping{
+		Patterns: []any{"example.com"},
+		Extractor: func(doc *goquery.Document, _ string, _ any) BaseExtractor {
+			if doc.Find(".eligible").Length() == 0 {
+				return nil
+			}
+			return testExtractor{name: "First"}
+		},
+	})
+	r.Register(ExtractorMapping{
+		Patterns: []any{"example.com"},
+		Extractor: func(_ *goquery.Document, _ string, _ any) BaseExtractor {
+			return testExtractor{name: "Fallback"}
+		},
+	})
+	for _, tc := range []struct{ body, want string }{
+		{"<p>ordinary</p>", "Fallback"},
+		{`<p class="eligible">selected</p>`, "First"},
+		{"<p>ordinary again</p>", "Fallback"},
+	} {
+		ext := r.FindExtractor(newTestDoc(t, tc.body), "https://example.com/same", nil)
+		require.NotNil(t, ext)
+		assert.Equal(t, tc.want, ext.Name())
+	}
 }

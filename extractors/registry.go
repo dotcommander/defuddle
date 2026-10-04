@@ -38,7 +38,6 @@ type ExtractorMapping struct {
 type Registry struct {
 	mu       sync.RWMutex
 	mappings []ExtractorMapping
-	urlCache sync.Map // Cache for URL -> constructor mappings
 }
 
 // NewRegistry creates a new extractor registry
@@ -62,7 +61,6 @@ func (r *Registry) Register(mapping ExtractorMapping) *Registry {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.mappings = append(r.mappings, mapping)
-	r.urlCache.Clear()
 	return r // Enable method chaining
 }
 
@@ -118,28 +116,16 @@ func (r *Registry) FindExtractor(document *goquery.Document, urlStr string, sche
 		return nil
 	}
 
-	// Check cache first
-	if cached, ok := r.urlCache.Load(urlStr); ok {
-		if constructor, ok := cached.(ExtractorConstructor); ok && constructor != nil {
-			return constructor(document, urlStr, schemaOrgData)
-		}
-		return nil
-	}
-
-	// Find matching extractor
-	r.mu.RLock()
-	mappings := r.mappings
-	r.mu.RUnlock()
-	for _, mapping := range mappings {
+	// Constructors may reject a document by returning nil. Reevaluate every
+	// mapping on each lookup; URL-only state cannot represent DOM eligibility.
+	for _, mapping := range r.GetMappings() {
 		if mapping.Extractor != nil && r.matchesPatterns(urlStr, domain, mapping.Patterns) {
-			// Cache the result
-			r.urlCache.Store(urlStr, mapping.Extractor)
-			return mapping.Extractor(document, urlStr, schemaOrgData)
+			if extractor := mapping.Extractor(document, urlStr, schemaOrgData); extractor != nil {
+				return extractor
+			}
 		}
 	}
 
-	// Cache the negative result
-	r.urlCache.Store(urlStr, nil)
 	return nil
 }
 
@@ -166,14 +152,9 @@ func (r *Registry) matchesPatterns(urlStr, domain string, patterns []any) bool {
 	return false
 }
 
-// ClearCache clears the domain cache
-// TypeScript original code:
-//
-//	static clearCache() {
-//	  this.domainCache.clear();
-//	}
+// ClearCache is retained for API compatibility. Lookups no longer cache URLs,
+// so this method is a no-op and still returns the registry for chaining.
 func (r *Registry) ClearCache() *Registry {
-	r.urlCache.Clear()
 	return r // Enable method chaining
 }
 
@@ -241,7 +222,7 @@ func FindExtractor(document *goquery.Document, url string, schemaOrgData any) Ba
 	return DefaultRegistry.FindExtractor(document, url, schemaOrgData)
 }
 
-// ClearCache clears the cache of the default registry
+// ClearCache is a compatibility no-op on the default registry.
 func ClearCache() {
 	DefaultRegistry.ClearCache()
 }
