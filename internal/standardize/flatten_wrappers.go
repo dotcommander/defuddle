@@ -182,7 +182,7 @@ func flattenWrapperElements(element *goquery.Selection, _ *goquery.Document, deb
 		modified := false
 
 		element.Find(blockSelector).Each(func(_ int, el *goquery.Selection) {
-			if preserveRoles && isConfigurableRole(el) {
+			if isRichMarkup(el) || el.AttrOr("id", "") != "" || (preserveRoles && isConfigurableRole(el)) {
 				return
 			}
 			// Check if element only contains paragraphs

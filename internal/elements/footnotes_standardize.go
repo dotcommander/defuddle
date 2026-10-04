@@ -234,8 +234,20 @@ func (p *FootnoteProcessor) extractInlineFootnoteID(el *goquery.Selection) strin
 
 	// Default: use href
 	if href, ok := el.Attr("href"); ok && href != "" {
-		id := strings.TrimPrefix(href, "#")
-		return strings.ToLower(id)
+		id := strings.ToLower(strings.TrimPrefix(href, "#"))
+		// Match the same canonical IDs used by extractListItemIDAndContent.
+		// Otherwise #fn1 and #fn:1 references lose their relationship when
+		// the definition is rebuilt as fn:1.
+		switch {
+		case strings.HasPrefix(id, "bib.bib"):
+			return strings.TrimPrefix(id, "bib.bib")
+		case strings.HasPrefix(id, "fn:"):
+			return strings.TrimPrefix(id, "fn:")
+		case strings.HasPrefix(id, "fn"):
+			return strings.TrimPrefix(id, "fn")
+		default:
+			return id
+		}
 	}
 
 	return ""

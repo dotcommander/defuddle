@@ -12,22 +12,39 @@ import (
 // It handles href, src, srcset, poster, and data-src attributes.
 // docBaseHref overrides the base URL if a <base href> tag was present.
 func ResolveRelativeURLs(element *goquery.Selection, pageURL string, docBaseHref string) {
-	base := docBaseHref
-	if base == "" {
-		base = pageURL
-	}
-	if base == "" {
+	baseURL := EffectiveBaseURL(pageURL, docBaseHref)
+	if baseURL == nil {
 		return
 	}
-
-	baseURL, err := url.Parse(base)
-	if err != nil {
-		return
-	}
+	element.Each(func(_ int, el *goquery.Selection) { resolveElementURLs(el, baseURL) })
 
 	element.Find("*").Each(func(_ int, el *goquery.Selection) {
 		resolveElementURLs(el, baseURL)
 	})
+}
+
+// EffectiveBaseURL composes a document base with its page URL. An absolute
+// document base also works for HTML supplied without a page URL (such as stdin).
+// Relative document bases require a page URL; otherwise references stay intact.
+func EffectiveBaseURL(pageURL, docBaseHref string) *url.URL {
+	var page *url.URL
+	if pageURL != "" {
+		page, _ = url.Parse(pageURL)
+	}
+	if docBaseHref != "" {
+		reference, err := url.Parse(docBaseHref)
+		if err != nil {
+			return nil
+		}
+		if reference.IsAbs() {
+			return reference
+		}
+		if page != nil {
+			return page.ResolveReference(reference)
+		}
+		return nil
+	}
+	return page
 }
 
 // urlAttrs are the element attributes that contain a single resolvable URL.

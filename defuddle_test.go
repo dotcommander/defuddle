@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dotcommander/defuddle/internal/scoring"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -95,7 +94,7 @@ func TestParseWithMetadata(t *testing.T) {
 	t.Logf("Meta tags: %d", len(result.MetaTags))
 }
 
-func TestContentExtraction(t *testing.T) {
+func TestContentSelectorArticleFormatting(t *testing.T) {
 	t.Parallel()
 	html := `<html>
 		<head><title>Content Test</title></head>
@@ -116,7 +115,7 @@ func TestContentExtraction(t *testing.T) {
 		</body>
 	</html>`
 
-	defuddle, err := NewDefuddle(html, nil)
+	defuddle, err := NewDefuddle(html, &Options{ContentSelector: "article"})
 	require.NoError(t, err, "Failed to create Defuddle instance")
 
 	result, err := defuddle.Parse(context.Background())
@@ -126,7 +125,7 @@ func TestContentExtraction(t *testing.T) {
 	assert.Contains(t, result.Content, "Main Article", "Expected content to contain 'Main Article'")
 	assert.Contains(t, result.Content, "main content that should be extracted", "Expected content to contain main article text")
 
-	// Test that clutter removal worked (these might be removed by selectors)
+	// The selected subtree excludes surrounding page content.
 	t.Logf("Content length: %d characters", len(result.Content))
 	t.Logf("Word count: %d", result.WordCount)
 }
@@ -322,42 +321,6 @@ func TestAdvancedAlgorithms(t *testing.T) {
 		contentPreview = contentPreview[:200]
 	}
 	t.Logf("Advanced test - Content preview: %s", contentPreview)
-}
-
-func TestContentScorer(t *testing.T) {
-	t.Parallel()
-	html := `
-	<html>
-		<body>
-			<div class="content">
-				<h1>Test Article</h1>
-				<p>This is a test paragraph with some content.</p>
-				<p>Another paragraph with more content.</p>
-			</div>
-			<div class="sidebar">
-				<a href="#">Link 1</a>
-				<a href="#">Link 2</a>
-				<a href="#">Link 3</a>
-			</div>
-		</body>
-	</html>`
-
-	defuddle, err := NewDefuddle(html, nil)
-	require.NoError(t, err, "Failed to create Defuddle instance")
-
-	// Test ScoreElement function
-	contentDiv := defuddle.doc.Find(".content").First()
-	require.Equal(t, 1, contentDiv.Length(), "Content div not found")
-
-	score := scoring.ScoreElement(contentDiv)
-	assert.Greater(t, score, 0.0, "Content div should have positive score")
-
-	// Test sidebar scoring (should be lower)
-	sidebarDiv := defuddle.doc.Find(".sidebar").First()
-	require.Equal(t, 1, sidebarDiv.Length(), "Sidebar div not found")
-
-	sidebarScore := scoring.ScoreElement(sidebarDiv)
-	assert.Greater(t, score, sidebarScore, "Content should score higher than sidebar")
 }
 
 func TestAdvancedElementProcessing(t *testing.T) {
@@ -701,7 +664,8 @@ func TestRemoveImages(t *testing.T) {
 	t.Run("removeImages=false should keep images", func(t *testing.T) {
 		t.Parallel()
 		defuddleInstance, err := NewDefuddle(html, &Options{
-			RemoveImages: false,
+			RemoveImages:    false,
+			ContentSelector: "body",
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -729,7 +693,8 @@ func TestRemoveImages(t *testing.T) {
 	t.Run("removeImages=true should remove all images", func(t *testing.T) {
 		t.Parallel()
 		defuddleInstance, err := NewDefuddle(html, &Options{
-			RemoveImages: true,
+			RemoveImages:    true,
+			ContentSelector: "body",
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -856,7 +821,7 @@ func TestParseIdempotent(t *testing.T) {
 
 // --- Content selection tests ---
 
-func TestFindMainContent_ArticleElement(t *testing.T) {
+func TestContentSelectorArticleElement(t *testing.T) {
 	t.Parallel()
 	html := `<html><head><title>Test</title></head><body>
 		<nav>Navigation links here</nav>
@@ -868,7 +833,7 @@ func TestFindMainContent_ArticleElement(t *testing.T) {
 		<aside>Sidebar content</aside>
 	</body></html>`
 
-	d, err := NewDefuddle(html, nil)
+	d, err := NewDefuddle(html, &Options{ContentSelector: "article"})
 	require.NoError(t, err)
 
 	result, err := d.Parse(context.Background())
@@ -879,10 +844,9 @@ func TestFindMainContent_ArticleElement(t *testing.T) {
 	assert.NotContains(t, result.Content, "Navigation links")
 }
 
-func TestFindMainContent_ListingPageGuard(t *testing.T) {
+func TestContentSelectorListingContainer(t *testing.T) {
 	t.Parallel()
-	// When a container has >= 3 article children, the listing-page guard
-	// prevents descending into one child. Verify all articles are present.
+	// Explicit container selection keeps all of its listed articles.
 	html := `<html><head><title>Blog</title></head><body>
 		<main>
 			<article>
@@ -903,13 +867,13 @@ func TestFindMainContent_ListingPageGuard(t *testing.T) {
 		</main>
 	</body></html>`
 
-	d, err := NewDefuddle(html, nil)
+	d, err := NewDefuddle(html, &Options{ContentSelector: "main"})
 	require.NoError(t, err)
 
 	result, err := d.Parse(context.Background())
 	require.NoError(t, err)
 
-	// All three articles should be present (parent selected, not single child)
+	// The first matching container includes all three articles.
 	assert.Contains(t, result.Content, "Post One")
 	assert.Contains(t, result.Content, "Post Three")
 }
@@ -930,7 +894,7 @@ func TestFindMainContent_ContentSelector(t *testing.T) {
 	assert.Contains(t, result.Content, "actual target content")
 }
 
-func TestFindMainContent_MainElement(t *testing.T) {
+func TestContentSelectorMainElement(t *testing.T) {
 	t.Parallel()
 	html := `<html><head><title>Test</title></head><body>
 		<header>Site Header</header>
@@ -941,7 +905,7 @@ func TestFindMainContent_MainElement(t *testing.T) {
 		<footer>Site Footer</footer>
 	</body></html>`
 
-	d, err := NewDefuddle(html, nil)
+	d, err := NewDefuddle(html, &Options{ContentSelector: "main"})
 	require.NoError(t, err)
 
 	result, err := d.Parse(context.Background())
@@ -1018,12 +982,12 @@ func TestProcessImagesOptionGatesImageProcessing(t *testing.T) {
 		<img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" data-src="photo.jpg" width="640" height="480" alt="Photo">
 	</article></body></html>`
 
-	withoutProcessing, err := ParseFromString(context.Background(), html, &Options{})
+	withoutProcessing, err := ParseFromString(context.Background(), html, &Options{ContentSelector: "article"})
 	require.NoError(t, err)
 	assert.Contains(t, withoutProcessing.Content, `src="data:image/gif`)
 	assert.Contains(t, withoutProcessing.Content, `data-src="photo.jpg"`)
 
-	withProcessing, err := ParseFromString(context.Background(), html, &Options{ProcessImages: true})
+	withProcessing, err := ParseFromString(context.Background(), html, &Options{ContentSelector: "article", ProcessImages: true})
 	require.NoError(t, err)
 	assert.Contains(t, withProcessing.Content, `src="photo.jpg"`)
 	assert.NotContains(t, withProcessing.Content, `src="data:image/gif`)

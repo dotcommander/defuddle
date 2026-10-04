@@ -34,7 +34,7 @@ func shouldPreserveElement(el *goquery.Selection) bool {
 	tagName := goquery.NodeName(el)
 
 	// Check if element should be preserved
-	if constants.IsPreserveElement(tagName) {
+	if constants.IsPreserveElement(tagName) || isRichMarkup(el) || el.AttrOr("id", "") != "" {
 		return true
 	}
 
@@ -143,4 +143,9 @@ func isWrapperElement(el *goquery.Selection, blockElements []string) bool {
 	})
 
 	return hasOnlyBlockElements
+}
+
+// Safe supported rich markup survives cleanup even when normalization is disabled.
+func isRichMarkup(el *goquery.Selection) bool {
+	return el.Is(`math, .katex, .katex-display, .katex-mathml, .katex-html, [data-katex], .MathJax, .mwe-math-element, [class*="mwe-math-"], [data-mathml], [data-math], [data-latex]`) || el.ParentsFiltered(`math, .katex, .katex-display, .MathJax, .mwe-math-element`).Length() > 0 || el.IsMatcher(constants.FootnoteInlineMatcher) || el.IsMatcher(constants.FootnoteListMatcher)
 }

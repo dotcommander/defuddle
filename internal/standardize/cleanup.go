@@ -111,9 +111,7 @@ func stripElementAttributes(el *goquery.Selection, debug bool) int {
 		preserveAttribute := false
 
 		// Preserve footnote IDs
-		if attrName == "id" && (strings.HasPrefix(attrValue, "fnref:") || // Footnote reference
-			strings.HasPrefix(attrValue, "fn:") || // Footnote content
-			attrValue == "footnotes") { // Footnotes container
+		if attrName == "id" { // Keep exact local relationships, including unnormalized footnotes.
 			preserveAttribute = true
 		}
 
@@ -121,9 +119,13 @@ func stripElementAttributes(el *goquery.Selection, debug bool) int {
 		if attrName == "class" {
 			if (tagName == "code" && strings.HasPrefix(attrValue, "language-")) ||
 				attrValue == "footnote-backref" ||
-				hasCalloutClass(attrValue) {
+				hasCalloutClass(attrValue) || isRichMarkup(el) {
 				preserveAttribute = true
 			}
+		}
+
+		if isRichMarkup(el) && (attrName == "data-math" || attrName == "data-mathml" || attrName == "data-latex" || attrName == "data-katex" || attrName == "display" || attrName == "xmlns" || attrName == "encoding") {
+			preserveAttribute = true
 		}
 
 		if preserveAttribute {

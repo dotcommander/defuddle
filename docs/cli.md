@@ -168,7 +168,7 @@ defuddle parse https://example.com --debug
 | `--debug` | | bool | false | Enable debug output |
 | `--remove-images` | | bool | false | Strip images from content |
 | `--content-selector` | | string | | CSS selector for content root (bypasses auto-detection) |
-| `--no-clutter-removal` | | bool | false | Disable all clutter removal heuristics |
+| `--no-clutter-removal` | | bool | false | Bypass extraction and process the body |
 | `--render` | | bool | false | Render JavaScript via headless Chrome before extracting |
 | `--render-auto` | | bool | false | Render only pages detected as JavaScript-heavy |
 | `--js` | | bool | false | Alias for `--render` |
@@ -328,3 +328,39 @@ defuddle parse https://example.com --debug --json 2>/dev/null | jq '.debugInfo'
 defuddle parse https://example.com/private \
   -H "Authorization: Bearer mytoken" \
   -H "Cookie: session=abc123"
+
+
+## Generic extraction engine
+
+Defuddle uses go-trafilatura v2.2.6 for generic article extraction, with its
+native fallback enabled. Site-specific extractors, Defuddle metadata, CJK-aware
+word counts, HTML safety processing, and Markdown conversion remain available.
+A matching `ContentSelector` takes the first subtree before site dispatch; a
+selector miss continues normal extraction.
+
+The five removal controls (`RemoveExactSelectors`, `RemovePartialSelectors`,
+`RemoveHiddenElements`, `RemoveLowScoring`, `RemoveContentPatterns`) are
+deprecated compatibility fields. Individual combinations have no effect on
+extraction. Setting all five to false bypasses extraction and processes the
+selected subtree or body; the CLI's `--no-clutter-removal` retains this behavior.
+`RemoveImages` remains effective on every path. The six processor gates retain
+their defaults and control normalization independently of basic preservation.
+
+The adapter preserves selected block and inline code, including whitespace and
+language attributes, supported MathML/KaTeX/MWE math, and supported local
+footnote relationships. Referenced definitions appear once in reference order.
+Disabled normalization still preserves already-supported safe markup. Arbitrary
+widgets, canvas equations, remote footnotes, and ambiguous IDs are outside this
+contract.
+
+Upstream failures, panics, unusable results, or malformed preservation markers
+recover using a marker-free, processed body snapshot. Recovery favors retaining
+content and may include page clutter. Debug processing steps report the reason.
+Cancellation and acquisition, parsing, or serialization failures remain errors.
+The adapter resolves links using the page/base URL and sanitizes restored
+fragments and complete output.
+
+The library remains Chrome-free. Consumers keep their existing Defuddle calls
+and need dependency bumps after release. Release the library before updating
+released CLI or consumer pins; workspace builds alone do not prove standalone
+installation.

@@ -1,7 +1,6 @@
 package constants
 
 import (
-	"regexp"
 	"strings"
 
 	"github.com/andybalholm/cascadia"
@@ -104,7 +103,7 @@ var FootnoteListSelectors = []string{
 
 // FootnoteInlineMatcher is a single pre-compiled cascadia matcher equivalent to
 // cascadia.MustCompile(strings.Join(FootnoteInlineReferences, ",")). Compiled
-// once at package init to avoid per-element recompilation in the scoring hot path.
+// once at package init to avoid per-element recompilation during footnote processing.
 var FootnoteInlineMatcher = compileCombined(FootnoteInlineReferences)
 
 // FootnoteListMatcher is a single pre-compiled cascadia matcher equivalent to
@@ -141,38 +140,6 @@ func IsPreserveElement(tagName string) bool {
 // IsInlineElement checks if an element is inline
 func IsInlineElement(tagName string) bool {
 	return InlineElements[tagName]
-}
-
-// GetExactSelectors returns the exact selectors slice
-func GetExactSelectors() []string {
-	return ExactSelectors
-}
-
-// GetTestAttributes returns the test attributes slice
-func GetTestAttributes() []string {
-	return TestAttributes
-}
-
-// GetPartialSelectors returns the partial selectors slice
-func GetPartialSelectors() []string {
-	return PartialSelectors
-}
-
-// partialSelectorRegex is a pre-compiled combined regex for O(n) partial selector matching.
-// Built once at package init from all partial selectors.
-var partialSelectorRegex = compilePartialSelectorRegex()
-
-func compilePartialSelectorRegex() *regexp.Regexp {
-	escaped := make([]string, len(PartialSelectors))
-	for i, s := range PartialSelectors {
-		escaped[i] = regexp.QuoteMeta(strings.ToLower(s))
-	}
-	return regexp.MustCompile(`(?i)` + strings.Join(escaped, "|"))
-}
-
-// GetPartialSelectorRegex returns the pre-compiled combined regex for partial selector matching.
-func GetPartialSelectorRegex() *regexp.Regexp {
-	return partialSelectorRegex
 }
 
 // GetFootnoteInlineReferences returns the footnote inline reference selectors

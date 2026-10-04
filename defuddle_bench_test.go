@@ -170,56 +170,6 @@ func BenchmarkExtractSchemaOrgData(b *testing.B) {
 	}
 }
 
-// BenchmarkFindMainContent benchmarks main content detection
-func BenchmarkFindMainContent(b *testing.B) {
-	html := `<html>
-		<body>
-			<header>Header content</header>
-			<nav>Navigation</nav>
-			<article>
-				<h1>Main Article</h1>
-				<p>This is the main content of the article.</p>
-				<p>More content here.</p>
-			</article>
-			<aside>Sidebar</aside>
-			<footer>Footer</footer>
-		</body>
-	</html>`
-
-	defuddle, err := NewDefuddle(html, nil)
-	if err != nil {
-		b.Fatalf("Failed to create Defuddle instance: %v", err)
-	}
-
-	b.ResetTimer()
-
-	for b.Loop() {
-		_ = defuddle.findMainContent(defuddle.doc)
-	}
-}
-
-// BenchmarkRemoveBySelector benchmarks selector-based removal
-func BenchmarkRemoveBySelector(b *testing.B) {
-	html := `<html>
-		<body>
-			<div class="advertisement">Ad</div>
-			<div class="content">Content</div>
-			<div class="sidebar">Sidebar</div>
-			<div class="footer">Footer</div>
-		</body>
-	</html>`
-
-	b.ResetTimer()
-
-	for b.Loop() {
-		defuddle, err := NewDefuddle(html, nil)
-		if err != nil {
-			b.Fatalf("Failed to create Defuddle instance: %v", err)
-		}
-		defuddle.removeBySelector(defuddle.doc, true, true, nil)
-	}
-}
-
 // loadFixture reads a real-world HTML fixture from the reference test directory.
 // Returns empty string if fixture is not available (skips benchmark).
 func loadFixture(b *testing.B, name string) string {

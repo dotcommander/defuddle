@@ -2,7 +2,6 @@ package defuddle
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"io"
 	"strings"
@@ -11,8 +10,6 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/dotcommander/defuddle/internal/metadata"
-	"github.com/dotcommander/defuddle/internal/removals"
-	"github.com/dotcommander/defuddle/internal/scoring"
 	"github.com/dotcommander/defuddle/internal/text"
 )
 
@@ -46,35 +43,6 @@ func (d *Defuddle) prepareWorkingDoc() (*goquery.Document, error) {
 	flattenShadowDOM(workingDoc)
 	resolveReactStreaming(workingDoc)
 	return workingDoc, nil
-}
-
-// runRemovalPipeline applies the full removal pipeline to workingDoc:
-// small-image removal, hidden elements, low-scoring blocks, clutter
-// selectors, and content patterns. mainContent is protected throughout.
-func (d *Defuddle) runRemovalPipeline(ctx context.Context, workingDoc *goquery.Document, mainContent *goquery.Selection, smallImages map[string]bool, options *Options) {
-	d.removeSmallImages(workingDoc, smallImages)
-
-	if options.RemoveImages {
-		d.removeAllImages(workingDoc)
-	}
-
-	if BoolDefault(options.RemoveHiddenElements, true) {
-		d.removeHiddenElements(workingDoc)
-	}
-
-	if BoolDefault(options.RemoveLowScoring, true) {
-		scoring.ScoreAndRemove(ctx, workingDoc, d.debug, mainContent)
-	}
-
-	removeExact := BoolDefault(options.RemoveExactSelectors, true)
-	removePartial := BoolDefault(options.RemovePartialSelectors, true)
-	if removeExact || removePartial {
-		d.removeBySelector(workingDoc, removeExact, removePartial, mainContent)
-	}
-
-	if BoolDefault(options.RemoveContentPatterns, true) {
-		removals.RemoveByContentPattern(mainContent, workingDoc, d.debug, options.URL)
-	}
 }
 
 // countWordsInSelection counts words in a goquery Selection's text content,

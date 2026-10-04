@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -129,66 +128,6 @@ func TestCoreNestedTableOwnership(t *testing.T) {
 	want := []Table{{Headers: []string{"outer header"}, Rows: [][]string{{"outer inner headerinner value"}, {"outer value"}}}, {Headers: []string{"inner header"}, Rows: [][]string{{"inner value"}}}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %#v want %#v", got, want)
-	}
-}
-
-func TestCoreProtectedMathAndSelectorScopes(t *testing.T) {
-	t.Parallel()
-	doc := remediationDoc(t, `<main><div id="math-parent" class="hidden"><span class="invisible"><math><mi>x</mi></math></span></div><div id="junk" class="hidden">junk</div><pre><code class="advertisement">code retained</code></pre><section id="footnotes"><ol><li><span class="advertisement">note retained</span></li></ol></section><div class="advertisement">clutter removed</div></main>`)
-	parser := &Defuddle{}
-	parser.removeHiddenElements(doc)
-	parser.removePartialSelectors(doc, doc.Find("main"))
-	if doc.Find("#math-parent math").Length() != 1 || doc.Find("#junk").Length() != 0 || !strings.Contains(doc.Text(), "code retained") || !strings.Contains(doc.Text(), "note retained") || strings.Contains(doc.Text(), "clutter removed") {
-		t.Fatal(selectionHTML(doc.Find("main")))
-	}
-}
-
-func TestCoreUsefulButtons(t *testing.T) {
-	t.Parallel()
-	doc := remediationDoc(t, `<main><p>before <button><em>inline term</em></button> after</p><button><span>zoom</span><picture><source srcset="a.webp"><img src="a.jpg"></picture><video src="b.mp4"></video></button><button>action only</button><p>last</p></main>`)
-	(&Defuddle{}).removeExactSelectors(doc, doc.Find("main"))
-	if doc.Find("button").Length() != 0 || doc.Find("picture img").Length() != 1 || doc.Find("video").Length() != 1 || doc.Find("img").Length() != 1 || doc.Find("p").First().Text() != "before inline term after" || strings.Contains(doc.Text(), "zoom") || strings.Contains(doc.Text(), "action only") {
-		t.Fatal(selectionHTML(doc.Find("main")))
-	}
-	if doc.Find("picture").Next().Get(0) != doc.Find("video").Get(0) || doc.Find("video").Next().Text() != "last" {
-		t.Fatal("media order changed")
-	}
-}
-
-func TestCoreListingCandidateGuard(t *testing.T) {
-	t.Parallel()
-	for _, tag := range []string{"article", "section"} {
-		t.Run(tag, func(t *testing.T) {
-			t.Parallel()
-			doc := remediationDoc(t, `<main><`+tag+` id="one">`+strings.Repeat("word ", 60)+`</`+tag+`><`+tag+` id="two">`+strings.Repeat("word ", 60)+`</`+tag+`></main>`)
-			top := contentCandidate{element: doc.Find("main"), selectorIndex: 3}
-			child := contentCandidate{element: doc.Find("#one"), selectorIndex: 1}
-			other := contentCandidate{element: doc.Find("#two"), selectorIndex: 1}
-			if got := preferSpecificChild([]contentCandidate{top, child, other}); got.element.Get(0) != top.element.Get(0) {
-				t.Fatal("listing collapsed")
-			}
-			if got := preferSpecificChild([]contentCandidate{top, child}); got.element.Get(0) != child.element.Get(0) {
-				t.Fatal("single child not preferred")
-			}
-		})
-	}
-}
-
-func TestCoreTableCoverage(t *testing.T) {
-	t.Parallel()
-	for _, tc := range []struct {
-		name    string
-		outside int
-		want    bool
-	}{{"central", 20, true}, {"peripheral", 220, false}, {"half", 100, true}} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			doc := remediationDoc(t, `<body><div>`+strings.Repeat("other ", tc.outside)+`</div><table width="800"><tr><td><p>`+strings.Repeat("article ", 100)+`</p></td></tr></table></body>`)
-			got := (&Defuddle{}).findTableBasedContent(doc)
-			if (got != nil) != tc.want {
-				t.Fatalf("candidate=%v want=%v", got != nil, tc.want)
-			}
-		})
 	}
 }
 
@@ -331,50 +270,6 @@ func TestCorePublicProcessorOptions(t *testing.T) {
 	}
 }
 
-// The existing debug log is a deterministic seam after scoring has run inside
-// the second retry. This test is sequential because it temporarily owns slog's
-// process-wide default; parallel tests wait until sequential tests finish.
-func TestCoreCancellationDuringSecondRetry(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	handler := &coreRetryCancelHandler{cancel: cancel}
-	previous := slog.Default()
-	slog.SetDefault(slog.New(handler))
-	t.Cleanup(func() { slog.SetDefault(previous) })
-	parser, err := NewDefuddle(`<html><body><main><p>tiny article</p><div style="display:none">`+strings.Repeat("hidden word ", 60)+`</div></main></body></html>`, &Options{Debug: true})
-	if err != nil {
-		t.Fatal(err)
-	}
-	result, err := parser.Parse(ctx)
-	if !handler.canceled || !errors.Is(err, context.Canceled) || result == nil {
-		t.Fatalf("second retry cancellation must return the first result and cancellation: canceled=%v result=%v error=%v", handler.canceled, result, err)
-	}
-}
-
-type coreRetryCancelHandler struct {
-	cancel          context.CancelFunc
-	armed, canceled bool
-}
-
-func (*coreRetryCancelHandler) Enabled(context.Context, slog.Level) bool { return true }
-func (h *coreRetryCancelHandler) Handle(_ context.Context, record slog.Record) error {
-	if record.Message == "Parse: trying retry" {
-		record.Attrs(func(attr slog.Attr) bool {
-			if attr.Key == "step" && attr.Value.String() == "hidden-elements" {
-				h.armed = true
-			}
-			return true
-		})
-	}
-	if h.armed && record.Message == "Removed non-content blocks" {
-		h.canceled = true
-		h.cancel()
-	}
-	return nil
-}
-func (h *coreRetryCancelHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
-func (h *coreRetryCancelHandler) WithGroup(string) slog.Handler      { return h }
-
 func TestCorePublicProtectedScopes(t *testing.T) {
 	t.Parallel()
 	source := `<html><body><article><h2>Article</h2><div style="display:none"><math><mi>x</mi></math></div><div style="display:none">unrelated hidden clutter</div><pre><code class="advertisement">protected code</code></pre><ol class="footnotes"><li><span class="advertisement">protected footnote</span></li></ol><div class="advertisement">unrelated selector clutter</div><p>` + strings.Repeat("article word ", 110) + `</p></article></body></html>`
@@ -387,9 +282,9 @@ func TestCorePublicProtectedScopes(t *testing.T) {
 			t.Fatalf("protected subtree removed: %s", kept)
 		}
 	}
-	for _, removed := range []string{"unrelated hidden clutter", "unrelated selector clutter"} {
-		if strings.Contains(result.Content, removed) {
-			t.Fatalf("unrelated clutter survived: %s", removed)
+	for _, kept := range []string{"unrelated hidden clutter", "unrelated selector clutter"} {
+		if !strings.Contains(result.Content, kept) {
+			t.Fatalf("explicitly selected content removed: %s", kept)
 		}
 	}
 	result, err = ParseFromString(context.Background(), source, &Options{ContentSelector: "article", RemoveHiddenElements: PtrBool(false), RemovePartialSelectors: PtrBool(false), RemoveLowScoring: PtrBool(false), RemoveContentPatterns: PtrBool(false)})

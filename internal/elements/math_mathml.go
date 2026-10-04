@@ -47,7 +47,10 @@ import (
 // getMathMLFromElement extracts MathML content from element
 func (p *MathProcessor) getMathMLFromElement(s *goquery.Selection) *MathData {
 	// 1. Try to extract MathML directly
-	mathElement := s.Find("math").First()
+	mathElement := s.Filter("math").First()
+	if mathElement.Length() == 0 {
+		mathElement = s.Find("math").First()
+	}
 	if mathElement.Length() > 0 {
 		outerHTML, err := goquery.OuterHtml(mathElement)
 		if err == nil {

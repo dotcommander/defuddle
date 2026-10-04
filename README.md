@@ -221,7 +221,7 @@ Implement the `BaseExtractor` interface to add support for any site.
 Three things to know before you write one:
 
 1. Registration order matters — the first matching extractor wins.
-2. `CanExtract()` runs before fallback content scoring. Return `false` to fall through to the generic pipeline.
+2. `CanExtract()` runs before generic extraction. Return `false` to fall through to the generic pipeline.
 3. Setting `Variables["title"]` and `Variables["author"]` overrides the values in `Result.Title` / `Result.Author`.
 
 ```go
@@ -285,13 +285,13 @@ opts := &defuddle.Options{
     ContentSelector:  "",    // CSS selector override for main content
     URL:              "",    // Source URL (used for link resolution and domain detection)
 
-    // Removal controls — pointer bools default to true when nil.
-    // Use defuddle.PtrBool(false) to explicitly disable.
-    RemoveExactSelectors:   nil, // Remove known clutter (ads, nav, social buttons)
-    RemovePartialSelectors: nil, // Remove probable clutter (class/id pattern matching)
-    RemoveHiddenElements:   nil, // Remove display:none and hidden elements
-    RemoveContentPatterns:  nil, // Remove boilerplate (breadcrumbs, related posts, etc.)
-    RemoveLowScoring:       nil, // Remove low-scoring non-content blocks
+    // Deprecated removal controls: individual values no longer affect extraction.
+    // Set all five to PtrBool(false) to bypass extraction.
+    RemoveExactSelectors:   nil,
+    RemovePartialSelectors: nil,
+    RemoveHiddenElements:   nil,
+    RemoveContentPatterns:  nil,
+    RemoveLowScoring:       nil,
     RemoveImages:           false, // Strip all images from output
 
     // Element processing
@@ -328,20 +328,21 @@ Defuddle processes content through a multi-stage pipeline:
 HTML Input
  |
  v
-1. Schema.org         -- Extract JSON-LD structured data
-2. Site Detection     -- Match URL to specialized extractor
-3. Shadow DOM         -- Flatten shadow roots and resolve React SSR
-4. Selector Removal   -- Strip known clutter by CSS selector
-5. Content Scoring    -- Score nodes and identify main content
-6. Content Patterns   -- Remove boilerplate (breadcrumbs, related posts, newsletters)
-7. Standardization    -- Normalize headings, footnotes, code blocks, images, math
-8. Markdown           -- Convert to Markdown (if requested)
+1. Preparation        -- Flatten shadow roots, resolve React SSR, extract metadata
+2. Explicit Selection -- Format the first matching selector or bypassed body
+3. Site Detection     -- Dispatch a matching specialized extractor
+4. Rich Preparation   -- Run enabled processors, save recovery body, project rich nodes
+5. Trafilatura        -- Extract generic content with native fallback
+6. Rich Restoration   -- Restore selected code, math, and referenced footnotes
+7. Recovery           -- Use saved body if extraction or marker validation fails
+8. Finalization       -- Resolve URLs, sanitize, serialize, count words
+9. Markdown           -- Convert to Markdown (if requested)
  |
  v
 Result
 ```
 
-The pipeline includes an automatic retry cascade: if initial extraction yields fewer than 50 words, Defuddle progressively relaxes removal filters to recover content from heavily-decorated pages.
+Trafilatura supplies generic extraction and native fallback. If extraction fails or preservation markers become invalid, Defuddle processes its marker-free body snapshot.
 
 ## The Result Object
 
@@ -438,7 +439,7 @@ defuddle parse https://slow-site.com --timeout 120s
 | `--user-agent` | | Custom user agent |
 | `--timeout` | | Request timeout (default: 30s) |
 | `--content-selector` | | CSS selector for content root |
-| `--no-clutter-removal` | | Disable all clutter removal heuristics |
+| `--no-clutter-removal` | | Bypass extraction and process the body |
 | `--remove-images` | | Strip images from output |
 | `--debug` | | Enable debug output |
 | `--md` | | Alias for `--markdown` |
@@ -475,7 +476,7 @@ Defuddle works best on static, article-style HTML. Several categories of pages w
 
 **CAPTCHA and bot-detection pages.** Defuddle returns whatever HTML the server sent. It does not solve CAPTCHAs or bypass bot-detection.
 
-**Non-article pages.** Content scoring is heuristic. Forum threads, comment sections, and listing pages without a site-specific extractor may return partial or noisy results.
+**Non-article pages.** Generic extraction is heuristic. Forum threads, comment sections, and listing pages without a site-specific extractor may return partial or noisy results.
 
 See [docs/limitations.md](docs/limitations.md) for detailed workarounds.
 
@@ -513,3 +514,39 @@ go test -bench=. -benchmem ./...
 ## License
 
 Defuddle Go is open-sourced software licensed under the [MIT license](LICENSE).
+
+
+## Generic extraction engine
+
+Defuddle uses go-trafilatura v2.2.6 for generic article extraction, with its
+native fallback enabled. Site-specific extractors, Defuddle metadata, CJK-aware
+word counts, HTML safety processing, and Markdown conversion remain available.
+A matching `ContentSelector` takes the first subtree before site dispatch; a
+selector miss continues normal extraction.
+
+The five removal controls (`RemoveExactSelectors`, `RemovePartialSelectors`,
+`RemoveHiddenElements`, `RemoveLowScoring`, `RemoveContentPatterns`) are
+deprecated compatibility fields. Individual combinations have no effect on
+extraction. Setting all five to false bypasses extraction and processes the
+selected subtree or body; the CLI's `--no-clutter-removal` retains this behavior.
+`RemoveImages` remains effective on every path. The six processor gates retain
+their defaults and control normalization independently of basic preservation.
+
+The adapter preserves selected block and inline code, including whitespace and
+language attributes, supported MathML/KaTeX/MWE math, and supported local
+footnote relationships. Referenced definitions appear once in reference order.
+Disabled normalization still preserves already-supported safe markup. Arbitrary
+widgets, canvas equations, remote footnotes, and ambiguous IDs are outside this
+contract.
+
+Upstream failures, panics, unusable results, or malformed preservation markers
+recover using a marker-free, processed body snapshot. Recovery favors retaining
+content and may include page clutter. Debug processing steps report the reason.
+Cancellation and acquisition, parsing, or serialization failures remain errors.
+The adapter resolves links using the page/base URL and sanitizes restored
+fragments and complete output.
+
+The library remains Chrome-free. Consumers keep their existing Defuddle calls
+and need dependency bumps after release. Release the library before updating
+released CLI or consumer pins; workspace builds alone do not prove standalone
+installation.

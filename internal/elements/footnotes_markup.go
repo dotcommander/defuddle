@@ -73,25 +73,11 @@ func (p *FootnoteProcessor) createFootnoteItemHTML(number int, content *goquery.
 	var b strings.Builder
 	fmt.Fprintf(&b, `<li id="fn:%d">`, number)
 
-	// Get paragraphs from content element
-	paragraphs := content.Find("p")
-	if paragraphs.Length() == 0 {
-		// Wrap raw innerHTML in a paragraph
-		inner, _ := content.Html()
-		b.WriteString("<p>")
-		b.WriteString(inner)
-	} else {
-		// Copy first paragraph; others follow after
-		paragraphs.Each(func(i int, par *goquery.Selection) {
-			inner, _ := par.Html()
-			b.WriteString("<p>")
-			b.WriteString(inner)
-			if i < paragraphs.Length()-1 {
-				b.WriteString("</p>")
-			}
-			// Leave last paragraph open so backlinks are appended inside it
-		})
-	}
+	// Preserve all definition children in source order, including standalone
+	// code/math blocks. Backlinks get their own paragraph after the content.
+	inner, _ := content.Html()
+	b.WriteString(inner)
+	b.WriteString("<p>")
 
 	// Append back-links into the last paragraph
 	for i, refID := range refs {

@@ -442,3 +442,7 @@ func TestParseFromURLs_ContextCancellation(t *testing.T) {
 		assert.Nil(t, r.Result, "result[%d] expected nil result on cancellation", i)
 	}
 }
+
+func wordRepeat(words string, count int) string {
+	return strings.Repeat(words+" ", count)
+}

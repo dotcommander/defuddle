@@ -85,18 +85,25 @@ func Content(element *goquery.Selection, metadata *metadata.Metadata, doc *goque
 
 // ContentWithOptions standardizes content while honoring optional processor gates.
 func ContentWithOptions(element *goquery.Selection, metadata *metadata.Metadata, doc *goquery.Document, options Options, debug bool) {
+	if !options.ProcessMath {
+		preserveMathScriptText(element)
+	}
 	standardizeSpaces(element)
 
 	// Remove HTML comments (TS order: after spaces, before headings)
 	removeHTMLComments(element)
 
 	// Handle H1 elements - remove first one and convert others to H2
-	standardizeHeadings(element, metadata.Title, doc)
+	if options.ProcessHeadings {
+		standardizeHeadings(element, metadata.Title, doc)
+	}
 
 	// Remove permalink anchors from headings
-	removeHeadingAnchors(element)
+	if options.ProcessHeadings {
+		removeHeadingAnchors(element)
+	}
 
-	if options.ProcessFootnotes {
+	if options.ProcessFootnotes && !hasAmbiguousFootnoteTargets(element) {
 		// Standardize footnotes and citations (full TS-compatible rewrite)
 		if options.FootnoteOptions == nil {
 			elements.StandardizeFootnotesInScope(doc, element)
@@ -106,7 +113,9 @@ func ContentWithOptions(element *goquery.Selection, metadata *metadata.Metadata,
 	}
 
 	// Wrap <code> with white-space:pre not inside <pre>
-	wrapPreformattedCode(element)
+	if options.ProcessCode {
+		wrapPreformattedCode(element)
+	}
 
 	if options.ProcessRoles {
 		// Convert embedded content to standard formats

@@ -36,31 +36,31 @@ type Options struct {
 	// Include Markdown in the response
 	SeparateMarkdown bool `json:"separateMarkdown,omitempty"`
 
-	// Whether to remove elements matching exact selectors like ads, social buttons, etc.
-	// nil = true (default). Use PtrBool(false) to disable.
+	// Deprecated: individual values are ignored. All five false bypass extraction.
+	// nil retains extraction (the default).
 	RemoveExactSelectors *bool `json:"removeExactSelectors,omitempty"`
 
-	// Whether to remove elements matching partial selectors like ads, social buttons, etc.
-	// nil = true (default). Use PtrBool(false) to disable.
+	// Deprecated: individual values are ignored. All five false bypass extraction.
+	// nil retains extraction (the default).
 	RemovePartialSelectors *bool `json:"removePartialSelectors,omitempty"`
 
 	// Remove images from the extracted content
 	// Defaults to false.
 	RemoveImages bool `json:"removeImages,omitempty"`
 
-	// Whether to remove hidden elements (display:none, Tailwind hidden classes).
-	// nil = true (default). Use PtrBool(false) to disable.
+	// Deprecated: individual values are ignored. All five false bypass extraction.
+	// nil retains extraction (the default).
 	RemoveHiddenElements *bool `json:"removeHiddenElements,omitempty"`
 
-	// Whether to remove low-scoring non-content blocks.
-	// nil = true (default). Use PtrBool(false) to disable.
+	// Deprecated: individual values are ignored. All five false bypass extraction.
+	// nil retains extraction (the default).
 	RemoveLowScoring *bool `json:"removeLowScoring,omitempty"`
 
-	// Whether to remove content patterns (boilerplate, breadcrumbs, etc.).
-	// nil = true (default). Use PtrBool(false) to disable.
+	// Deprecated: individual values are ignored. All five false bypass extraction.
+	// nil retains extraction (the default).
 	RemoveContentPatterns *bool `json:"removeContentPatterns,omitempty"`
 
-	// CSS selector to use for content extraction instead of auto-detection.
+	// CSS selector: first match bypasses site and generic extraction; misses continue normally.
 	ContentSelector string `json:"contentSelector,omitempty"`
 
 	// Element processing options

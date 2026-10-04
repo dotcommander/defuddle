@@ -148,11 +148,11 @@ func buildDefuddleOptions(opts *ParseOptions) *defuddle.Options {
 		ContentSelector:  opts.ContentSelector,
 	}
 	if opts.NoClutterRemoval {
-		o.RemoveExactSelectors = new(bool)
-		o.RemovePartialSelectors = new(bool)
-		o.RemoveHiddenElements = new(bool)
-		o.RemoveLowScoring = new(bool)
-		o.RemoveContentPatterns = new(bool)
+		o.RemoveExactSelectors = new(bool)   //nolint:staticcheck // All five deprecated controls preserve --no-clutter-removal compatibility.
+		o.RemovePartialSelectors = new(bool) //nolint:staticcheck // All five deprecated controls preserve --no-clutter-removal compatibility.
+		o.RemoveHiddenElements = new(bool)   //nolint:staticcheck // All five deprecated controls preserve --no-clutter-removal compatibility.
+		o.RemoveLowScoring = new(bool)       //nolint:staticcheck // All five deprecated controls preserve --no-clutter-removal compatibility.
+		o.RemoveContentPatterns = new(bool)  //nolint:staticcheck // All five deprecated controls preserve --no-clutter-removal compatibility.
 	}
 	return o
 }

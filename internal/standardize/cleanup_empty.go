@@ -108,7 +108,7 @@ func isRemovableEmptyElement(el *goquery.Selection) bool {
 	tagName := strings.ToLower(goquery.NodeName(el))
 
 	// Skip allowed empty elements
-	if constants.IsAllowedEmptyElement(tagName) {
+	if constants.IsAllowedEmptyElement(tagName) || isRichMarkup(el) {
 		return false
 	}
 

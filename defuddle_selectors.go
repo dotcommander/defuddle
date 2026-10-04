@@ -1,105 +1,6 @@
 package defuddle
 
-import (
-	"slices"
-	"strings"
-
-	"github.com/PuerkitoBio/goquery"
-	"github.com/dotcommander/defuddle/internal/constants"
-	"github.com/dotcommander/defuddle/internal/scoring"
-	"github.com/dotcommander/defuddle/internal/standardize"
-)
-
-// removeBySelector removes elements by exact and partial selectors.
-// mainContent, footnote lists, and heading elements/anchors are protected from removal.
-// mainContent protection applies in both branches via scoring.IsProtectedNode; footnote-list
-// and heading protections apply only in the removePartial branch.
-func (d *Defuddle) removeBySelector(doc *goquery.Document, removeExact, removePartial bool, mainContent *goquery.Selection) {
-	if removeExact {
-		d.removeExactSelectors(doc, mainContent)
-	}
-	if removePartial {
-		d.removePartialSelectors(doc, mainContent)
-	}
-}
-
-// removeExactSelectors removes elements matching the exact removal selectors,
-// preserving protected (main-content) nodes.
-func (d *Defuddle) removeExactSelectors(doc *goquery.Document, mainContent *goquery.Selection) {
-	exactSelectors := constants.GetExactSelectors()
-	for _, selector := range exactSelectors {
-		doc.Find(selector).Each(func(_ int, el *goquery.Selection) {
-			if scoring.IsProtectedNode(el, mainContent) {
-				return
-			}
-			if goquery.NodeName(el) == "button" {
-				preserveButtonContent(el)
-				return
-			}
-			el.Remove()
-		})
-	}
-}
-
-// removePartialSelectors removes elements whose test-attribute values match the
-// partial selector regex, preserving protected nodes, footnote lists, and headings.
-func (d *Defuddle) removePartialSelectors(doc *goquery.Document, mainContent *goquery.Selection) {
-	testAttributes := constants.GetTestAttributes()
-	partialRegex := constants.GetPartialSelectorRegex()
-
-	// Only query elements that have at least one test attribute
-	attrSelector := make([]string, len(testAttributes))
-	for i, attr := range testAttributes {
-		attrSelector[i] = "[" + attr + "]"
-	}
-	combinedSelector := strings.Join(attrSelector, ",")
-
-	doc.Find(combinedSelector).Each(func(_ int, element *goquery.Selection) {
-		if isProtectedFromPartialRemoval(element, mainContent) {
-			return
-		}
-
-		// Combine all test attribute values into one string for single regex test
-		var combined strings.Builder
-		for _, attr := range testAttributes {
-			if value, exists := element.Attr(attr); exists && value != "" {
-				combined.WriteString(value)
-				combined.WriteByte(' ')
-			}
-		}
-		attrs := strings.ToLower(combined.String())
-		if strings.TrimSpace(attrs) == "" {
-			return
-		}
-
-		if partialRegex.MatchString(attrs) {
-			element.Remove()
-		}
-	})
-}
-
-// isProtectedFromPartialRemoval reports whether element must be kept despite
-// matching a test-attribute selector: protected content nodes, footnote lists
-// (or their parents), headings, and anchors inside headings.
-func isProtectedFromPartialRemoval(element, mainContent *goquery.Selection) bool {
-	if scoring.IsProtectedNode(element, mainContent) || containsRecognizedMath(element) {
-		return true
-	}
-	if element.Closest("pre").Length() > 0 || element.ParentsMatcher(constants.FootnoteListMatcher).Length() > 0 {
-		return true
-	}
-	// Protect footnote lists and their parents (element itself or any descendant matches)
-	if element.IsMatcher(constants.FootnoteListMatcher) ||
-		element.FindMatcher(constants.FootnoteListMatcher).Length() > 0 {
-		return true
-	}
-	// Skip heading elements — their IDs often match partial selectors
-	if slices.Contains(headingTags, goquery.NodeName(element)) {
-		return true
-	}
-	// Skip anchor links inside headings
-	return element.Closest(headingSelector).Length() > 0
-}
+import "github.com/dotcommander/defuddle/internal/standardize"
 
 // mergeOptions merges override options with instance options and defaults.
 // Mirrors the TypeScript spread pattern:
@@ -207,22 +108,7 @@ func standardizeOptions(options *Options) standardize.Options {
 	}
 }
 
-// preserveButtonContent keeps media in document order without extracting an
-// image twice from a picture, and unwraps terms embedded in article text.
-func preserveButtonContent(button *goquery.Selection) {
-	media := button.Find("img, picture, video")
-	if media.Length() > 0 {
-		media.Each(func(_ int, node *goquery.Selection) {
-			if node.ParentsFiltered("img, picture, video").Length() == 0 {
-				button.BeforeSelection(node)
-			}
-		})
-		button.Remove()
-		return
-	}
-	if button.ParentsFiltered("p, li, td, th, span, h1, h2, h3, h4, h5, h6").Length() > 0 {
-		button.ReplaceWithSelection(button.Contents())
-		return
-	}
-	button.Remove()
+// extractionBypassed preserves the all-false legacy no-clutter-removal mode.
+func extractionBypassed(o *Options) bool {
+	return !BoolDefault(o.RemoveExactSelectors, true) && !BoolDefault(o.RemovePartialSelectors, true) && !BoolDefault(o.RemoveHiddenElements, true) && !BoolDefault(o.RemoveLowScoring, true) && !BoolDefault(o.RemoveContentPatterns, true)
 }

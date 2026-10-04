@@ -55,7 +55,7 @@ func TestSourceBaseURL(t *testing.T) {
 func TestParseFileResolvesRelativeURLsAgainstFileBase(t *testing.T) {
 	path := writeURLBaseFixture(t)
 	dir := filepath.Dir(path)
-	opts := &ParseOptions{Source: path, Timeout: 30 * time.Second, RenderWait: "load", RenderTimeout: 30 * time.Second}
+	opts := &ParseOptions{Source: path, ContentSelector: "article", Timeout: 30 * time.Second, RenderWait: "load", RenderTimeout: 30 * time.Second}
 
 	stdout, stderr, err := captureOutput(t, opts.Run)
 	require.NoError(t, err)
@@ -89,7 +89,7 @@ func TestParseStdinLeavesRelativeURLsUntouched(t *testing.T) {
 		os.Stdin = r
 		defer func() { os.Stdin = original }()
 
-		opts := &ParseOptions{Source: "-", Timeout: 30 * time.Second, RenderWait: "load", RenderTimeout: 30 * time.Second}
+		opts := &ParseOptions{Source: "-", ContentSelector: "article", Timeout: 30 * time.Second, RenderWait: "load", RenderTimeout: 30 * time.Second}
 		return opts.Run()
 	})
 	require.NoError(t, err)

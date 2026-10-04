@@ -15,165 +15,109 @@ import (
 	"github.com/dotcommander/defuddle/internal/urlutil"
 )
 
-// selectMainContent returns the main content element: the explicit
-// ContentSelector match if provided and present, otherwise automatic detection
-// (which may return nil).
-func (d *Defuddle) selectMainContent(workingDoc *goquery.Document, options *Options) *goquery.Selection {
-	if options.ContentSelector != "" {
-		if sel := workingDoc.Find(options.ContentSelector).First(); sel.Length() > 0 {
-			return sel
-		}
-	}
-	return d.findMainContent(workingDoc)
-}
-
-// parseInternal performs the actual parsing work.
+// parseInternal owns dispatch; explicit selection and bypass precede site engines.
 func (d *Defuddle) parseInternal(ctx context.Context, overrideOptions *Options) (*Result, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	startTime := time.Now()
-
-	// Every pass inspects a fresh preprocessed document. Extractor mutations
-	// never affect the original instance or the next retry/Parse call.
-	inspectionDoc, err := d.prepareWorkingDoc()
+	start := time.Now()
+	doc, err := d.prepareWorkingDoc()
 	if err != nil {
 		return nil, err
 	}
-	inspectionParser := *d
-	inspectionParser.doc = inspectionDoc
-	d = &inspectionParser
-
-	// Merge options with defaults
+	local := *d
+	local.doc = doc
+	d = &local
 	options := d.mergeOptions(overrideOptions)
-
-	// Extract schema.org data
-	schemaOrgData := d.extractSchemaOrgData()
-
-	// Collect meta tags
-	metaTags := d.collectMetaTags()
-
-	// Get base URL for metadata extraction
-	baseURL := options.URL
-
-	// Extract metadata
-	extractedMetadata := metadata.Extract(d.doc, schemaOrgData, metaTags, baseURL)
-
-	// Initialize debug tracking
-	if d.debugger.IsEnabled() {
-		d.debugger.StartTimer("total_parsing")
-		d.debugger.SetStatistics(debug.Statistics{
-			OriginalElementCount: d.doc.Find("*").Length(),
-		})
-	}
-
-	// Remove all images before extractor check (TS applies to doc before extractor)
+	d.debugger = debug.NewDebugger(options.Debug)
+	d.debug = options.Debug
+	schema := d.extractSchemaOrgData()
+	tags := d.collectMetaTags()
+	meta := metadata.Extract(doc, schema, tags, options.URL)
+	base := urlutil.ExtractBaseHref(doc)
+	d.debugger.StartTimer("total_parsing")
 	if options.RemoveImages {
-		d.removeAllImages(d.doc)
+		d.removeAllImages(doc)
 	}
-
-	// Try site-specific extractor first
-	if result := d.tryExtractor(ctx, options, extractedMetadata, schemaOrgData, metaTags, startTime); result != nil {
+	root := doc.Find("body").First()
+	selected := false
+	if options.ContentSelector != "" {
+		if match := doc.Find(options.ContentSelector).First(); match.Length() > 0 {
+			root = match
+			selected = true
+		}
+	}
+	if selected || extractionBypassed(options) {
+		standardize.ContentWithOptions(root, meta, doc, standardizeOptions(options), false)
+		d.debugger.AddProcessingStep("extraction_bypass", "Processed selected subtree or body", 1, "")
+		return d.finalize(ctx, root, options, meta, schema, tags, base, start)
+	}
+	if result := d.tryExtractor(ctx, options, meta, schema, tags, start); result != nil {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
 		return result, nil
 	}
-
-	// Re-parse from stored HTML to get a fresh mutable document.
-	// (goquery has no Clone method; the TypeScript version uses doc.cloneNode(true))
-	workingDoc, err := d.prepareWorkingDoc()
+	standardize.ContentWithOptions(root, meta, doc, standardizeOptions(options), false)
+	snapshot := root.Clone()
+	manifest, err := prepareRichContent(doc, root)
 	if err != nil {
 		return nil, err
 	}
-
-	// Find small images in fresh document, excluding lazy-loaded ones
-	smallImages := d.findSmallImages(workingDoc)
-
-	// Select main content: explicit selector if provided, else auto-detect
-	mainContent := d.selectMainContent(workingDoc, options)
-
-	if mainContent == nil {
-		// Fallback to body content
-		body := workingDoc.Find("body")
-		content := sanitizeHTMLFragment(selectionHTML(body))
-		wordCount := d.countWordsInSelection(body)
-		parseTime := time.Since(startTime).Milliseconds()
-
-		result := &Result{
-			Metadata: buildMetadata(extractedMetadata, schemaOrgData, wordCount, parseTime),
-			Content:  content,
-			MetaTags: metaTags,
-		}
-
-		// Add debug info if enabled (fallback case)
-		if d.debugger.IsEnabled() {
-			d.debugger.EndTimer("total_parsing")
-			d.debugger.AddProcessingStep("fallback", "Used fallback body content extraction", 1, "No main content found")
-			result.DebugInfo = d.debugger.GetInfo()
-		}
-
-		return result, nil
-	}
-
-	d.runRemovalPipeline(ctx, workingDoc, mainContent, smallImages, options)
+	// Resolve remaining ordinary references before upstream URL normalization.
+	// Rich local relationships were already captured with their original hrefs.
+	urlutil.ResolveRelativeURLs(root, options.URL, base)
+	upstream, reason := callExtraction(d.engine, doc, options)
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-
-	// Normalize the main content
-	standardize.ContentWithOptions(mainContent, extractedMetadata, workingDoc, standardizeOptions(options), d.debug)
-
-	// Resolve relative URLs against page URL
-	if options.URL != "" {
-		docBaseHref := urlutil.ExtractBaseHref(workingDoc)
-		urlutil.ResolveRelativeURLs(mainContent, options.URL, docBaseHref)
+	var content *goquery.Selection
+	if reason == "" {
+		fillEngineMetadata(meta, upstream)
+		content, err = manifest.restore(upstream.ContentNode)
+		if err != nil {
+			reason = "rich-content: " + err.Error()
+		} else if strings.TrimSpace(content.Text()) == "" && content.Find("img,math,table,pre").Length() == 0 {
+			reason = "unusable output"
+		}
 	}
+	if reason != "" {
+		content = snapshot
+		d.debugger.AddProcessingStep("extraction_recovery", "Used marker-free body snapshot", 1, reason)
+	} else {
+		d.debugger.AddProcessingStep("trafilatura", "Used Trafilatura extraction", 1, "")
+	}
+	return d.finalize(ctx, content, options, meta, schema, tags, base, start)
+}
 
-	// Strip unsafe elements and attributes (XSS safety)
-	urlutil.SanitizeUnsafe(mainContent)
-
-	content := selectionOuterHTML(mainContent)
-	wordCount := d.countWordsInSelection(mainContent)
-	parseTime := time.Since(startTime).Milliseconds()
-
-	// Convert to Markdown if requested
-	var contentMarkdown *string
+func (d *Defuddle) finalize(ctx context.Context, content *goquery.Selection, options *Options, meta *metadata.Metadata, schema any, tags []MetaTag, base string, start time.Time) (*Result, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if options.RemoveImages {
+		content.Find("img,svg,picture,video,canvas").Remove()
+	}
+	urlutil.ResolveRelativeURLs(content, options.URL, base)
+	urlutil.SanitizeUnsafe(content)
+	html, err := goquery.OuterHtml(content)
+	if err != nil {
+		return nil, err
+	}
+	result := &Result{Metadata: buildMetadata(meta, schema, d.countWordsInSelection(content), time.Since(start).Milliseconds()), Content: html, MetaTags: tags}
 	if options.wantsMarkdown() {
-		if markdownContent, err := markdown.ConvertHTML(content); err == nil {
-			contentMarkdown = &markdownContent
+		if md, err := markdown.ConvertHTML(html); err == nil {
+			result.ContentMarkdown = &md
 		} else if d.debug {
 			slog.Debug("Failed to convert to Markdown", "error", err)
 		}
 	}
-
-	result := &Result{
-		Metadata:        buildMetadata(extractedMetadata, schemaOrgData, wordCount, parseTime),
-		Content:         content,
-		ContentMarkdown: contentMarkdown,
-		MetaTags:        metaTags,
-	}
-
-	// Add debug info if enabled
+	d.debugger.EndTimer("total_parsing")
 	if d.debugger.IsEnabled() {
-		d.debugger.EndTimer("total_parsing")
-		d.debugger.AddProcessingStep("standard_parsing", "Used standard content extraction algorithm", 1, "")
-
-		// Update final statistics
-		finalStats := debug.Statistics{
-			OriginalElementCount: d.doc.Find("*").Length(),
-			FinalElementCount:    workingDoc.Find("*").Length(),
-			WordCount:            wordCount,
-			CharacterCount:       len(content),
-			ImageCount:           workingDoc.Find("img").Length(),
-			LinkCount:            workingDoc.Find("a").Length(),
-		}
-		finalStats.RemovedElementCount = finalStats.OriginalElementCount - finalStats.FinalElementCount
-		d.debugger.SetStatistics(finalStats)
-
 		result.DebugInfo = d.debugger.GetInfo()
 	}
-
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	return result, nil
 }
 
@@ -201,8 +145,12 @@ func (d *Defuddle) tryExtractor(
 			if err != nil {
 				return nil, err
 			}
-			tempDefuddle := &Defuddle{rawHTML: html, doc: tempDoc, debugger: d.debugger, skipExtractors: true}
-			tempResult, err := tempDefuddle.parseInternal(ctx, options)
+			tempDefuddle := &Defuddle{rawHTML: html, doc: tempDoc, debugger: d.debugger, debug: d.debug, skipExtractors: true}
+			// The conversation extractor has already selected this message.
+			// Apply inherited formatting and safety without extracting it again.
+			messageOptions := *options
+			messageOptions.ContentSelector = "body"
+			tempResult, err := tempDefuddle.parseInternal(ctx, &messageOptions)
 			if err != nil {
 				return nil, err
 			}
@@ -215,6 +163,9 @@ func (d *Defuddle) tryExtractor(
 
 	d.debugger.SetExtractorUsed(ext.Name())
 	extracted := ext.Extract()
+	if extracted == nil {
+		return nil
+	}
 
 	// Get site name from extractor variables or use metadata
 	siteName := extractedMetadata.Site
@@ -227,7 +178,26 @@ func (d *Defuddle) tryExtractor(
 	extractorType := strings.ToLower(strings.TrimSuffix(ext.Name(), "Extractor"))
 
 	// buildMetadata uses extractedMetadata.Site; override with siteName after.
-	contentHTML := sanitizeHTMLFragment(extracted.ContentHTML)
+	fragment, err := goquery.NewDocumentFromReader(strings.NewReader("<div>" + extracted.ContentHTML + "</div>"))
+	if err != nil {
+		return nil
+	}
+	output := fragment.Find("body > div").First()
+	// Conversation content has already passed its enabled processors once.
+	if _, conversation := ext.(extractors.ContentProcessorSetter); !conversation {
+		standardize.ContentWithOptions(output, extractedMetadata, fragment, standardizeOptions(options), false)
+	}
+	if options.RemoveImages {
+		output.Find("img,svg,picture,video,canvas").Remove()
+	}
+	if options.URL != "" {
+		urlutil.ResolveRelativeURLs(output, options.URL, urlutil.ExtractBaseHref(d.doc))
+	}
+	urlutil.SanitizeUnsafe(output)
+	contentHTML, err := output.Html()
+	if err != nil {
+		return nil
+	}
 	meta := buildMetadata(extractedMetadata, schemaOrgData, d.countWords(contentHTML), time.Since(startTime).Milliseconds())
 	meta.Site = siteName
 	result := &Result{

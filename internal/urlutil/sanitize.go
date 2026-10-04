@@ -72,13 +72,16 @@ func SanitizeUnsafe(element *goquery.Selection) {
 			selected.Remove()
 		}
 	})
+	keptRoots := element.Nodes[:0]
 	element.Each(func(_ int, selected *goquery.Selection) {
 		if isUnsafeElement(selected.Get(0)) {
 			selected.Remove()
 			return
 		}
 		sanitizeNode(selected.Get(0))
+		keptRoots = append(keptRoots, selected.Get(0))
 	})
+	element.Nodes = keptRoots
 	element.Find("*").Each(func(_ int, selected *goquery.Selection) {
 		sanitizeNode(selected.Get(0))
 	})
