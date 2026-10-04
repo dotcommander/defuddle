@@ -18,6 +18,18 @@ package elements
 //
 // insertFootnoteSection inserts the footnote section into the document
 func (p *FootnoteProcessor) insertFootnoteSection(html string, options *FootnoteProcessingOptions) {
+	if p.scope != nil {
+		// Keep generated sections inside the extraction boundary, including
+		// when the boundary itself is main/article/.content.
+		if options.SectionLocation == "after-content" && !p.scope.Is("main, article, .content") {
+			if content := p.scope.Find("main, article, .content").First(); content.Length() > 0 {
+				content.AfterHtml(html)
+				return
+			}
+		}
+		p.scope.AppendHtml(html)
+		return
+	}
 	switch options.SectionLocation {
 	case "end":
 		// Append to body

@@ -110,7 +110,7 @@ func (p *FootnoteProcessor) detectExistingFootnotes(_ *FootnoteProcessingOptions
 	var footnotes []*Footnote
 
 	// Find footnote references using TS-compatible selector list
-	p.doc.Find(FootnoteInlineReferences).Each(func(_ int, s *goquery.Selection) {
+	p.find(FootnoteInlineReferences).Each(func(_ int, s *goquery.Selection) {
 		var footnoteID string
 
 		// Science.org: a[role="doc-biblioref"] with data-xml-rid
@@ -157,7 +157,7 @@ func (p *FootnoteProcessor) detectExistingFootnotes(_ *FootnoteProcessingOptions
 		}
 
 		// Find corresponding definition (use attribute selector for IDs with special chars like colons)
-		definition := p.doc.Find(fmt.Sprintf(`[id="%s"]`, footnoteID)).First()
+		definition := p.find(fmt.Sprintf(`[id="%s"]`, footnoteID)).First()
 
 		footnote := &Footnote{
 			ID:         footnoteID,

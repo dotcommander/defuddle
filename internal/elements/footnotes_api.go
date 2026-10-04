@@ -44,3 +44,21 @@ func StandardizeFootnotesInScope(doc *goquery.Document, scope *goquery.Selection
 	processor := NewFootnoteProcessor(doc)
 	processor.StandardizeFootnotes(scope)
 }
+
+// ProcessFootnotesInScope uses the configurable stages without searching or
+// inserting sections outside the extracted content.
+func ProcessFootnotesInScope(doc *goquery.Document, scope *goquery.Selection, options *FootnoteProcessingOptions) []*Footnote {
+	if scope == nil || scope.Length() == 0 {
+		return nil
+	}
+	processor := NewFootnoteProcessor(doc)
+	processor.scope = scope
+	return processor.ProcessFootnotes(options)
+}
+
+func (p *FootnoteProcessor) find(selector string) *goquery.Selection {
+	if p.scope != nil {
+		return p.scope.Find(selector).AddSelection(p.scope.Filter(selector))
+	}
+	return p.doc.Find(selector)
+}

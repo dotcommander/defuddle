@@ -1,6 +1,9 @@
 package elements
 
-import "strings"
+import (
+	"html"
+	"strings"
+)
 
 // TypeScript original code:
 //
@@ -44,9 +47,7 @@ func (p *MathProcessor) createCleanMathElement(mathData *MathData, latex string,
 	if latex != "" {
 		mathHTML.WriteString(" data-latex=\"")
 		// Escape attribute value
-		escapedLatex := strings.ReplaceAll(latex, "\"", "&quot;")
-		escapedLatex = strings.ReplaceAll(escapedLatex, "&", "&amp;")
-		mathHTML.WriteString(escapedLatex)
+		mathHTML.WriteString(html.EscapeString(latex))
 		mathHTML.WriteString("\"")
 	}
 

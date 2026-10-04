@@ -2,6 +2,7 @@ package elements
 
 import (
 	"fmt"
+	"html"
 	"log/slog"
 	"strings"
 
@@ -63,7 +64,7 @@ func (p *CodeBlockProcessor) formatCodeBlock(s *goquery.Selection, language, con
 	preHTML.WriteString("<code")
 
 	if language != "" {
-		fmt.Fprintf(&preHTML, ` data-lang="%s" class="language-%s"`, language, language)
+		fmt.Fprintf(&preHTML, ` data-lang="%s" class="language-%s"`, html.EscapeString(language), html.EscapeString(language))
 	}
 
 	preHTML.WriteString(">")

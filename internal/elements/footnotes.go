@@ -61,7 +61,8 @@ Key functions:
 //	  }
 //	}
 type FootnoteProcessor struct {
-	doc *goquery.Document
+	doc   *goquery.Document
+	scope *goquery.Selection
 }
 
 // FootnoteProcessingOptions contains options for footnote processing

@@ -2,6 +2,7 @@ package elements
 
 import (
 	"fmt"
+	"html"
 	"strconv"
 	"strings"
 )
@@ -93,7 +94,7 @@ func (p *FootnoteProcessor) generateFootnoteSection(footnotes []*Footnote, optio
 	var sectionHTML strings.Builder
 	fmt.Fprintf(&sectionHTML, `<div class="footnotes">
 <h2>%s</h2>
-<ol>`, options.SectionTitle)
+<ol>`, html.EscapeString(options.SectionTitle))
 
 	for _, footnote := range footnotes {
 		if footnote.Content == "" {
@@ -106,7 +107,7 @@ func (p *FootnoteProcessor) generateFootnoteSection(footnotes []*Footnote, optio
 		fmt.Fprintf(&sectionHTML, `
 <li id="%s" class="footnote">
 <p>%s <a href="#%s" class="footnote-backref" title="return to article">↩</a></p>
-</li>`, defID, footnote.Content, refID)
+</li>`, html.EscapeString(defID), html.EscapeString(footnote.Content), html.EscapeString(refID))
 	}
 
 	sectionHTML.WriteString(`

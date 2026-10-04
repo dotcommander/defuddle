@@ -32,7 +32,7 @@ import (
 // detectTextFootnotes detects footnote patterns in text content
 func (p *FootnoteProcessor) detectTextFootnotes(options *FootnoteProcessingOptions) []*Footnote {
 	// Skip entirely if no footnote definition sections exist in the document.
-	if p.doc.Find(".footnotes, .notes, .references, .endnotes").Length() == 0 {
+	if p.find(".footnotes, .notes, .references, .endnotes").Length() == 0 {
 		return nil
 	}
 
@@ -54,7 +54,7 @@ func (p *FootnoteProcessor) detectTextFootnotes(options *FootnoteProcessingOptio
 
 	// Cache the candidate selection once — only elements that plausibly contain
 	// footnote references. This avoids scanning every DOM element per pattern.
-	candidates := p.doc.Find("p, li, td, dd, span")
+	candidates := p.find("p, li, td, dd, span")
 
 	for _, re := range compiledPatterns {
 		// Find all text nodes and search for patterns
@@ -123,7 +123,7 @@ func (p *FootnoteProcessor) detectWikipediaFootnotes(_ *FootnoteProcessingOption
 	var footnotes []*Footnote
 
 	// Find footnote lists using TS-compatible selector list
-	p.doc.Find(FootnoteListSelectors).Each(func(_ int, list *goquery.Selection) {
+	p.find(FootnoteListSelectors).Each(func(_ int, list *goquery.Selection) {
 		// Substack: individual footnote divs with no parent list
 		if goquery.NodeName(list) == "div" {
 			if _, ok := list.Attr("data-component-name"); ok {
@@ -166,7 +166,7 @@ func (p *FootnoteProcessor) detectWikipediaFootnotes(_ *FootnoteProcessingOption
 			if backlink.Length() > 0 {
 				href, _ := backlink.Attr("href")
 				refID := strings.TrimPrefix(href, "#")
-				if ref := p.doc.Find(fmt.Sprintf(`[id="%s"]`, refID)).First(); ref.Length() > 0 {
+				if ref := p.find(fmt.Sprintf(`[id="%s"]`, refID)).First(); ref.Length() > 0 {
 					footnote.Reference = ref
 				}
 			}

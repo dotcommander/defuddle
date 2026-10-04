@@ -1,15 +1,16 @@
 package elements
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
+	"golang.org/x/net/html/atom"
 )
 
 // RoleProcessor handles conversion of ARIA roles to semantic HTML elements
 type RoleProcessor struct {
-	doc *goquery.Document
+	doc   *goquery.Document
+	scope *goquery.Selection
 }
 
 // RoleProcessingOptions configures role processing behavior
@@ -62,7 +63,7 @@ func (p *RoleProcessor) ProcessRoles(options *RoleProcessingOptions) {
 
 // convertParagraphRoles converts elements with role="paragraph" to <p> tags
 func (p *RoleProcessor) convertParagraphRoles() {
-	p.doc.Find(`[role="paragraph"]`).Each(func(_ int, s *goquery.Selection) {
+	p.find(`[role="paragraph"]`).Each(func(_ int, s *goquery.Selection) {
 		p.replaceElementTag(s, "p")
 	})
 }
@@ -70,7 +71,7 @@ func (p *RoleProcessor) convertParagraphRoles() {
 // convertListRoles converts role-based lists to semantic HTML lists
 func (p *RoleProcessor) convertListRoles() {
 	// Convert role="list" to <ol> or <ul>
-	p.doc.Find(`[role="list"]`).Each(func(_ int, listElement *goquery.Selection) {
+	p.find(`[role="list"]`).Each(func(_ int, listElement *goquery.Selection) {
 		// Check if it's an ordered list by looking for numbered items
 		isOrdered := p.isOrderedList(listElement)
 
@@ -124,14 +125,14 @@ func (p *RoleProcessor) convertListItem(itemElement *goquery.Selection) {
 
 // convertButtonRoles converts elements with role="button" to <button> tags
 func (p *RoleProcessor) convertButtonRoles() {
-	p.doc.Find(`[role="button"]`).Each(func(_ int, s *goquery.Selection) {
+	p.find(`[role="button"]`).Each(func(_ int, s *goquery.Selection) {
 		p.replaceElementTag(s, "button")
 	})
 }
 
 // convertLinkRoles converts elements with role="link" to <a> tags
 func (p *RoleProcessor) convertLinkRoles() {
-	p.doc.Find(`[role="link"]`).Each(func(_ int, s *goquery.Selection) {
+	p.find(`[role="link"]`).Each(func(_ int, s *goquery.Selection) {
 		p.replaceElementTag(s, "a")
 	})
 }
@@ -142,30 +143,25 @@ func (p *RoleProcessor) replaceElementTag(s *goquery.Selection, newTagName strin
 		return
 	}
 
-	// Get current attributes (excluding role)
-	attrs := make(map[string]string)
-	for _, attr := range s.Get(0).Attr {
-		if attr.Key != "role" { // Remove role attribute
-			attrs[attr.Key] = attr.Val
-		}
+	// Mutate the node so attributes and child markup keep their raw values.
+	node := s.Get(0)
+	node.Data = newTagName
+	node.DataAtom = atom.Lookup([]byte(newTagName))
+	s.RemoveAttr("role")
+}
+
+// ProcessRolesInScope applies configurable conversions only within scope.
+func ProcessRolesInScope(scope *goquery.Selection, options *RoleProcessingOptions) {
+	if scope == nil || scope.Length() == 0 {
+		return
 	}
+	processor := &RoleProcessor{scope: scope}
+	processor.ProcessRoles(options)
+}
 
-	// Get inner HTML
-	innerHTML, _ := s.Html()
-
-	// Build attribute string
-	attrStrings := make([]string, 0, len(attrs)) // Pre-allocate with capacity
-	for key, value := range attrs {
-		attrStrings = append(attrStrings, fmt.Sprintf(`%s="%s"`, key, value))
+func (p *RoleProcessor) find(selector string) *goquery.Selection {
+	if p.scope != nil {
+		return p.scope.Find(selector).AddSelection(p.scope.Filter(selector))
 	}
-
-	var attrString string
-	if len(attrStrings) > 0 {
-		attrString = " " + strings.Join(attrStrings, " ")
-	}
-
-	newHTML := fmt.Sprintf("<%s%s>%s</%s>", newTagName, attrString, innerHTML, newTagName)
-
-	// Replace the element
-	s.ReplaceWithHtml(newHTML)
+	return p.doc.Find(selector)
 }

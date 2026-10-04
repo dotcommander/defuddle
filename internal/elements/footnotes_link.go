@@ -2,6 +2,7 @@ package elements
 
 import (
 	"fmt"
+	"html"
 	"regexp"
 
 	"github.com/PuerkitoBio/goquery"
@@ -36,7 +37,7 @@ func (p *FootnoteProcessor) findFootnoteDefinition(key string) *goquery.Selectio
 	}
 
 	for _, selector := range selectors {
-		if def := p.doc.Find(selector).First(); def.Length() > 0 {
+		if def := p.find(selector).First(); def.Length() > 0 {
 			return def
 		}
 	}
@@ -49,7 +50,7 @@ func (p *FootnoteProcessor) findFootnoteDefinition(key string) *goquery.Selectio
 		regexp.MustCompile(`^` + regexp.QuoteMeta(key) + `\)`),
 	}
 	var found *goquery.Selection
-	p.doc.Find(".footnotes, .notes, .references, .endnotes").Each(func(_ int, section *goquery.Selection) {
+	p.find(".footnotes, .notes, .references, .endnotes").Each(func(_ int, section *goquery.Selection) {
 		if found != nil {
 			return
 		}
@@ -108,7 +109,7 @@ func (p *FootnoteProcessor) linkFootnotes(footnotes []*Footnote, options *Footno
 		footnote.Definition.SetAttr("id", defID)
 
 		// Add backlink to definition
-		backlink := fmt.Sprintf(`<a href="#%s" class="footnote-backref">↩</a>`, refID)
+		backlink := fmt.Sprintf(`<a href="#%s" class="footnote-backref">↩</a>`, html.EscapeString(refID))
 		footnote.Definition.AppendHtml(backlink)
 
 		footnote.Linked = true
