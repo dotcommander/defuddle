@@ -23,9 +23,9 @@ fmt.Println(result.Content) // clean HTML
 URL requests preserve caller cancellation: `errors.Is(err, context.Canceled)`
 identifies cancellation, while expired deadlines match both
 `context.DeadlineExceeded` and `defuddle.ErrTimeout`. Cancellation during parsing
-or retries is returned to the caller. A failed retry can return the previously
-extracted result alongside that error, so check the error even when the result
-is non-nil.
+is returned to the caller and never becomes body
+recovery. Upstream extraction failures recover as described below; acquisition,
+parsing, and serialization failures remain errors.
 
 Unless an explicit `Options.URL` is supplied to a single-URL parse, relative
 links resolve against the final response URL after redirects. Batch parsing
@@ -182,21 +182,24 @@ type Metadata struct {
 
 ### Disable Clutter Removal
 
-Each removal stage can be toggled independently. All default to `true`. Use `PtrBool(false)` to disable:
+The five removal fields are deprecated. Individual combinations do not affect
+extraction; nil means an effective `true`. Set every field to `false` to bypass
+extraction and process the body with formatting and safety enabled:
 
 ```go
 result, err := defuddle.ParseFromURL(ctx, url, &defuddle.Options{
-    RemoveExactSelectors:   defuddle.PtrBool(false), // keep known clutter elements
-    RemovePartialSelectors: defuddle.PtrBool(false), // keep pattern-matched elements
-    RemoveHiddenElements:   defuddle.PtrBool(false), // keep hidden elements
-    RemoveLowScoring:       defuddle.PtrBool(false), // keep low-scoring blocks
-    RemoveContentPatterns:  defuddle.PtrBool(false), // keep boilerplate
+    RemoveExactSelectors:   defuddle.PtrBool(false),
+    RemovePartialSelectors: defuddle.PtrBool(false),
+    RemoveHiddenElements:   defuddle.PtrBool(false),
+    RemoveLowScoring:       defuddle.PtrBool(false),
+    RemoveContentPatterns:  defuddle.PtrBool(false),
 })
 ```
 
 ### Force a Content Root
 
-Bypass auto-detection by specifying a CSS selector:
+The first matching subtree takes precedence over site extractors and Trafilatura;
+a miss continues normal extraction:
 
 ```go
 result, err := defuddle.ParseFromURL(ctx, url, &defuddle.Options{
@@ -214,7 +217,9 @@ result, err := defuddle.ParseFromURL(ctx, url, &defuddle.Options{
 
 ## Element Processing
 
-Enable specialized processing for specific element types using the public boolean flags:
+The six processor flags default to `false`. Enable normalization with these
+flags; supported safe code, math, and local footnote markup is preserved even
+with normalization disabled:
 
 ```go
 result, err := defuddle.ParseFromURL(ctx, url, &defuddle.Options{
@@ -258,7 +263,7 @@ Defuddle defines sentinel errors for structured error handling. All are wrapped 
 |----------|---------|---------------|
 | `ErrNotHTML` | `Content-Type` is not HTML, XML, or text | Skip or route to a different handler |
 | `ErrTooLarge` | Response body exceeds 5 MB | Reject or stream the URL separately |
-| `ErrTimeout` | Context cancelled or deadline exceeded | Retry with longer timeout or skip |
+| `ErrTimeout` | Fetch deadline exceeded | Retry with longer timeout or skip |
 
 `ErrTimeout` is wrapped: `fmt.Errorf("fetch %s: %w", url, ErrTimeout)`. Unwrap with `errors.Is(err, defuddle.ErrTimeout)`.
 
@@ -271,7 +276,7 @@ if err != nil {
     case errors.Is(err, defuddle.ErrTooLarge):
         // Response exceeded 5 MB
     case errors.Is(err, defuddle.ErrTimeout):
-        // Request timed out or context cancelled
+        // Request timed out
     default:
         // Network error, DNS failure, invalid URL, etc.
     }
@@ -282,11 +287,25 @@ if err != nil {
 
 Understanding the pipeline helps when tuning options:
 
-1. **Schema.org extraction** — JSON-LD structured data is parsed first
-2. **Site extractor check** — if a registered extractor matches the URL, it runs and returns early
-3. **Entry-point detection** — looks for `<article>`, `<main>`, `[role="main"]`, and common content selectors
-4. **Content scoring** — scores every block element by word density and structure
-5. **Clutter removal** — strips ads, navigation, hidden elements, and boilerplate in stages
-6. **Standardization** — normalizes heading levels, flattens wrappers, cleans whitespace
-7. **Markdown conversion** — converts to Markdown if requested
-8. **Retry logic** — if content is under 200 words, retries with progressively relaxed removal filters
+1. **Preparation and metadata** — preprocess HTML and collect JSON-LD and meta tags.
+2. **Explicit selection or bypass** — process a matching `ContentSelector`, or the body when all five removal controls are false.
+3. **Site extractor** — use a URL-matched extractor that confirms the DOM signature.
+4. **Preparation for generic extraction** — run enabled processors once, capture a marker-free recovery snapshot, and project supported rich content with invocation-local markers.
+5. **Trafilatura v2.2.6** — extract with native fallback, comments excluded, links and tables retained, and images enabled unless `RemoveImages` is set.
+6. **Rich restoration** — restore only selected code, supported math, and local footnotes. Referenced definitions appear once in first-reference order.
+7. **Finalization** — resolve URLs against the effective page/base URL, sanitize, serialize, count words including CJK, and optionally convert to Markdown.
+
+Existing nonempty Defuddle metadata is retained. Trafilatura fills missing
+compatible fields, copies its author string directly, and formats a nonzero date
+as RFC3339. Defuddle retains favicon, schema data, and collected meta tags.
+
+Upstream errors, panics, nil or unusable results, and invalid preservation markers
+recover from the processed marker-free body snapshot. Recovery can retain clutter;
+`DebugInfo.ProcessingSteps` records the reason. Duplicate, incomplete, crossing,
+unknown, or residual markers invalidate the candidate rather than leaking markers
+or guessing matches. No local scoring, clutter-removal, or retry pass follows.
+
+Supported preservation includes block and inline code whitespace and language,
+MathML/KaTeX/MWE formulas, and unambiguous local footnotes, including rich content
+in definitions. Arbitrary widgets, canvas equations, remote footnotes, and
+ambiguous citation IDs remain outside the contract.

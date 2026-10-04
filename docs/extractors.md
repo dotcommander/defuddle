@@ -135,7 +135,11 @@ marker and sets `ExtractedContent["truncated"]` to `true`.
 
 ## Fallback Behavior
 
-If no extractor matches the URL, or if a matching extractor's `CanExtract()` returns `false`, Defuddle falls back to its general-purpose content scoring algorithm. This means every URL produces output -- extractors enhance quality for known sites but are never required.
+A matching `ContentSelector` or all-false extraction bypass takes precedence over
+site dispatch. Otherwise, if no extractor matches and confirms the DOM, Defuddle
+uses Trafilatura v2.2.6 with native fallback. An extraction or rich-restoration
+failure recovers from a processed marker-free body snapshot; acquisition and
+cancellation errors still return errors.
 
 ## Registry
 

@@ -8,8 +8,24 @@ All notable changes to this project will be documented in this file. The format 
 
 ## [Unreleased]
 
+---
+
+## [v0.16.0] — 2026-10-04
+
 ### Changed
 
+- Replace generic scoring, clutter removal, and retry passes with go-trafilatura
+  v2.2.6 and its native fallback. Retain Defuddle's public library/CLI, site
+  extractors, metadata, Markdown, and Chrome-free library boundary. Accept the
+  measured accuracy tradeoff to reduce extraction-engine maintenance.
+- A matching `ContentSelector` processes the first subtree before site dispatch;
+  a miss continues normal extraction. The five removal fields are deprecated:
+  individual combinations have no effect, while all five false bypass extraction
+  and preserve `--no-clutter-removal`. `RemoveImages` applies on every path.
+- Preserve selected code whitespace/language, supported math, and unambiguous
+  local footnotes through a bounded adapter. The six processor gates retain their
+  false defaults. Invalid markers and upstream failures recover from a processed,
+  marker-free body snapshot, with reasons recorded in debug steps.
 - `--render-auto` escalation now defaults to `networkidle` when `--render-wait`
   is unset: the JS-shell pages it escalates on hydrate after the load event,
   so the previous `load` default usually re-captured the same un-hydrated
@@ -21,6 +37,8 @@ All notable changes to this project will be documented in this file. The format 
 
 ### Fixed
 
+- Preserve the HTML atom identity on reconstructed heading links so selectors
+  and downstream processing recognize the generated anchor.
 - `--render` / `--render-auto` with a file or stdin source now print a one-line
   warning to stderr and parse statically, instead of silently ignoring the
   render flags.
@@ -33,8 +51,15 @@ All notable changes to this project will be documented in this file. The format 
   request; other schemes fail as invalid input (exit 2) instead of surfacing
   a connection error later.
 
+### Added
+
+- Isolated saved-HTML comparison tooling for Defuddle, Trafilatura, and Readability,
+  including a local corpus evaluator protocol adapter.
+
 ### Documentation
 
+- Refresh configuration, library, getting-started, extractor, and limitations
+  references for engine dispatch, rich recovery, and release sequencing.
 - Corrected the `--version` output example in `docs/cli.md` to the actual
   `<version> (commit: <hash>, built: <date>)` format and documented local-file
   relative-URL resolution and `--proxy` scheme validation.

@@ -144,10 +144,10 @@ defuddle parse https://example.com --remove-images
 # Force a specific content root (bypass auto-detection)
 defuddle parse https://example.com --content-selector "article.post-body"
 
-# Disable all clutter removal (return everything)
+# Bypass extraction (process the body with formatting and safety)
 defuddle parse https://example.com --no-clutter-removal
 
-# Debug mode (shows removed elements, timings, statistics)
+# Debug mode (shows pipeline and recovery steps, timings, statistics)
 defuddle parse https://example.com --debug
 ```
 
@@ -285,10 +285,10 @@ defuddle parse https://example.com --json | jq '{title, author, wordCount}'
 
 ```bash
 defuddle --version
-# v0.15.0 (commit: 4f1c2ab, built: 2026-10-04)
+# v0.16.0 (commit: 4f1c2ab, built: 2026-10-04)
 ```
 
-The output format is `<version> (commit: <hash>, built: <date>)`. The commit hash and build date are injected at build time; when they are not injected, both print as `unknown`. On Go 1.24+ a plain `go build` inside a VCS checkout also embeds the module's VCS-stamped version, so a tagged-but-dirty tree prints something like `v0.15.0+dirty (commit: unknown, built: unknown)`; outside a checkout (or before Go 1.24) it stays `dev (commit: unknown, built: unknown)`.
+The output format is `<version> (commit: <hash>, built: <date>)`. The commit hash and build date are injected at build time; when they are not injected, both print as `unknown`. On Go 1.24+ a plain `go build` inside a VCS checkout also embeds the module's VCS-stamped version, so a tagged-but-dirty tree prints something like `v0.16.0+dirty (commit: unknown, built: unknown)`; outside a checkout (or before Go 1.24) it stays `dev (commit: unknown, built: unknown)`.
 
 ## Examples
 

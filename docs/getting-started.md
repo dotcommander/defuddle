@@ -79,7 +79,11 @@ Every parse returns a `Result` containing:
 
 ### Automatic Content Detection
 
-Defuddle scores every block element in the page by word count, structure, and proximity to headings. The highest-scoring content block becomes your extracted content. Ads, sidebars, navigation, and boilerplate are stripped away automatically.
+Defuddle first honors a matching content selector or extraction bypass, then tries
+a supported site extractor. Other pages use Trafilatura v2.2.6 with native fallback
+to select readable article content. Defuddle restores supported rich formatting,
+resolves links, sanitizes HTML, and optionally converts it to Markdown. See
+[configuration](configuration.md) for processor gates and deprecated removal controls.
 
 ### Site-Specific Extractors
 

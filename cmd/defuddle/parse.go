@@ -37,7 +37,7 @@ type ParseOptions struct {
 	Proxy            string        `help:"Proxy URL."`
 	RemoveImages     bool          `name:"remove-images" help:"Remove images from extracted content."`
 	ContentSelector  string        `name:"content-selector" help:"CSS selector for content root."`
-	NoClutterRemoval bool          `name:"no-clutter-removal" help:"Disable all clutter removal heuristics."`
+	NoClutterRemoval bool          `name:"no-clutter-removal" help:"Bypass extraction and process the body with formatting and safety."`
 	Render           bool          `help:"Render JavaScript via headless Chrome before extracting."`
 	RenderAuto       bool          `name:"render-auto" help:"Render only pages detected as JavaScript-heavy."`
 	JS               bool          `name:"js" help:"Alias for --render."`

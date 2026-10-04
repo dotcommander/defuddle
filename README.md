@@ -519,7 +519,9 @@ Defuddle Go is open-sourced software licensed under the [MIT license](LICENSE).
 ## Generic extraction engine
 
 Defuddle uses go-trafilatura v2.2.6 for generic article extraction, with its
-native fallback enabled. Site-specific extractors, Defuddle metadata, CJK-aware
+native fallback enabled. Replacing the local scoring/removal engine reduces
+maintenance; the measured accuracy tradeoff is accepted and quality varies by
+page and corpus. Site-specific extractors, Defuddle metadata, CJK-aware
 word counts, HTML safety processing, and Markdown conversion remain available.
 A matching `ContentSelector` takes the first subtree before site dispatch; a
 selector miss continues normal extraction.
@@ -529,8 +531,8 @@ The five removal controls (`RemoveExactSelectors`, `RemovePartialSelectors`,
 deprecated compatibility fields. Individual combinations have no effect on
 extraction. Setting all five to false bypasses extraction and processes the
 selected subtree or body; the CLI's `--no-clutter-removal` retains this behavior.
-`RemoveImages` remains effective on every path. The six processor gates retain
-their defaults and control normalization independently of basic preservation.
+`RemoveImages` remains effective on every path. The six processor gates default
+to `false` and control normalization independently of basic preservation.
 
 The adapter preserves selected block and inline code, including whitespace and
 language attributes, supported MathML/KaTeX/MWE math, and supported local

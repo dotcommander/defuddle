@@ -133,7 +133,10 @@ There is no reliable general solution. Options:
 
 **Symptom:** Results are noisy or incomplete on forum threads, search results pages, category listings, or comment-heavy pages.
 
-**Why:** Defuddle's content scoring is tuned for article-shaped pages: a dominant text block, headings, paragraphs. Pages where content is distributed across many equal-weight blocks (comment threads, listing pages) confuse the scorer, and the automatic retry cascade may not recover.
+**Why:** Generic extraction uses Trafilatura, which favors article text and excludes
+comments. Distributed content such as listings or discussions can be omitted.
+Defuddle has no local scoring or retry cascade; recovery after engine or rich
+preservation failure uses the processed body and can include clutter.
 
 **What to do instead:**
 
@@ -158,3 +161,16 @@ result, err := defuddle.ParseFromURL(ctx, url, &defuddle.Options{
 | Over 5 MB | Skip, or truncate before `ParseFromString` |
 | CAPTCHA / bot-detection | Headless browser with stealth mode; official API if available |
 | Non-article page | Use `ContentSelector`; check for a site-specific extractor first |
+
+## Rich Formatting and Engine Tradeoff
+
+Defuddle preserves selected block and inline code, supported MathML/KaTeX/MWE
+math, and unambiguous local footnotes. It does not infer arbitrary widget content,
+canvas equations, remote footnotes, or ambiguous citation relationships. Disabled
+processor gates skip normalization while preserving supported safe markup.
+
+Trafilatura replaces the local scoring and removal engine to reduce maintenance.
+The measured accuracy tradeoff is accepted: extraction quality differs by corpus
+and individual pages. A selector can improve a known page layout. Invalid rich
+markers or unusable upstream results trigger body recovery, which favors content
+retention and may include navigation or other clutter; debug steps identify it.

@@ -25,7 +25,7 @@ fmt.Println(*result.ContentMarkdown)
 ### SeparateMarkdown
 
 ```go
-// Convert original HTML to markdown independently from cleaned content
+// Include Markdown alongside cleaned HTML (same conversion as Markdown)
 opts := &defuddle.Options{SeparateMarkdown: true}
 ```
 
@@ -41,31 +41,14 @@ d, _ := defuddle.NewDefuddle(html, &defuddle.Options{
 
 ## Clutter Removal
 
-Each removal stage runs independently. Disable specific stages to keep more content:
+The five removal fields are deprecated compatibility controls. Their effective
+values default to `true` when nil. Individual combinations no longer change
+extraction: Trafilatura owns generic content selection, with comments excluded,
+native fallback enabled, and links and tables retained.
 
-```go
-opts := &defuddle.Options{
-    RemoveExactSelectors:   defuddle.PtrBool(false), // keep ads, social buttons
-    RemovePartialSelectors: defuddle.PtrBool(false), // keep class/id pattern matches
-    RemoveHiddenElements:   defuddle.PtrBool(false), // keep display:none elements
-    RemoveLowScoring:       defuddle.PtrBool(false), // keep low-scoring blocks
-    RemoveContentPatterns:  defuddle.PtrBool(false), // keep boilerplate text
-}
-```
-
-All removal flags default to `true` when `nil`. Use `defuddle.PtrBool(v)` to set explicit values.
-
-### Stages
-
-| Stage | Default | What It Removes |
-|-------|---------|-----------------|
-| ExactSelectors | on | Ads, social widgets, share buttons via exact CSS selectors |
-| PartialSelectors | on | Elements matching ad/clutter patterns in class and id attributes |
-| HiddenElements | on | Elements with `display:none`, `visibility:hidden`, or Tailwind hidden classes |
-| LowScoring | on | Blocks that score below the content threshold (sidebars, footers, related articles) |
-| ContentPatterns | on | Boilerplate text (read time, breadcrumbs, article cards) |
-
-### Remove All Clutter Removal
+Set **all five** to `false` to bypass extraction and process the body (or a
+matching `ContentSelector`). Formatting, URL resolution, safety processing, and
+`RemoveImages` still apply. This preserves `--no-clutter-removal`:
 
 ```go
 // Equivalent to --no-clutter-removal in the CLI
@@ -82,7 +65,8 @@ opts := &defuddle.Options{
 
 ### ContentSelector
 
-Force a specific element as the content root, bypassing auto-detection:
+Process the first matching subtree before site-specific or generic extraction.
+A selector miss continues normal extraction:
 
 ```go
 opts := &defuddle.Options{
@@ -92,7 +76,7 @@ opts := &defuddle.Options{
 
 ### RemoveImages
 
-Strip all images from the extracted content:
+Strip images on selector, bypass, site-extractor, generic, and recovery paths:
 
 ```go
 opts := &defuddle.Options{RemoveImages: true}
@@ -125,7 +109,9 @@ opts := &defuddle.Options{MaxConcurrency: 10} // default: 5
 
 ## Element Processing
 
-Enable specialized processors for specific content types via the public boolean flags. The per-processor option structs (`CodeOptions`, `ImageOptions`, `MathOptions`, `FootnoteOptions`, `HeadingOptions`, `RoleOptions`) reference types in an internal package and are not part of the public external API — external modules cannot import them. The boolean flags below enable each processor with sensible defaults and are the supported external surface.
+All six `Process*` flags default to `false`. Enable normalization for specific
+content types via the public boolean flags. Basic preservation of supported safe
+code, math, and local footnotes remains active when their normalization is off. The per-processor option structs (`CodeOptions`, `ImageOptions`, `MathOptions`, `FootnoteOptions`, `HeadingOptions`, `RoleOptions`) reference types in an internal package and are not part of the public external API — external modules cannot import them. The boolean flags below enable each processor with sensible defaults and are the supported external surface.
 
 ### Code Blocks
 
@@ -139,7 +125,7 @@ opts := &defuddle.Options{
 
 ```go
 opts := &defuddle.Options{
-    ProcessImages: true, // normalize images and drop very small images
+    ProcessImages: true, // normalize image markup
 }
 ```
 
@@ -205,8 +191,10 @@ for _, step := range info.ProcessingSteps {
 
 Debug output includes:
 
-- **RemovedElements** -- each element removed, with reason and selector
-- **ProcessingSteps** -- ordered list of pipeline steps executed
+- **RemovedElements** -- retained compatibility data; generic extraction no longer
+  supplies the old per-element clutter-removal trace
+- **ProcessingSteps** -- ordered pipeline steps, including `trafilatura`,
+  `extraction_bypass`, or `extraction_recovery` and its reason
 - **Timings** -- nanosecond-precision timing for each stage
 - **Statistics** -- element counts, word count, image count, link count
 - **ExtractorUsed** -- name of the site extractor, if any
