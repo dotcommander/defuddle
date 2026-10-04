@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 	"io/fs"
+	"net"
 
 	"github.com/dotcommander/defuddle"
 	"github.com/dotcommander/defuddle/cmd/defuddle/internal/render"
@@ -60,6 +61,10 @@ func exitCodeFor(err error) int {
 		errors.Is(err, defuddle.ErrTooLarge):
 		return exitValidation
 	default:
+		var networkError net.Error
+		if errors.As(err, &networkError) {
+			return exitUpstream
+		}
 		return exitError
 	}
 }

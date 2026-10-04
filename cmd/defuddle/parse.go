@@ -19,6 +19,8 @@ import (
 )
 
 type ParseOptions struct {
+	parent context.Context
+
 	Source           string        `arg:"" optional:"" name:"source" help:"URL or HTML file; reads stdin when omitted."`
 	JSON             bool          `short:"j" help:"Output as JSON with metadata and content."`
 	TablesJSON       bool          `name:"tables-json" help:"Output detected tables as structured JSON."`
@@ -46,6 +48,13 @@ type ParseOptions struct {
 }
 
 func (opts *ParseOptions) Run() error {
+	return opts.run(commandContext(opts.parent))
+}
+
+func (opts *ParseOptions) run(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	// Resolve source: positional arg, or "-" sentinel when stdin is piped.
 	// loadResult (below) already handles the "-" → os.Stdin branch.
 	var source string
@@ -65,22 +74,28 @@ func (opts *ParseOptions) Run() error {
 		slog.SetLogLoggerLevel(slog.LevelDebug)
 	}
 
-	return executeParseContent(opts)
+	return executeParseContent(ctx, opts)
+}
+
+func commandContext(parent context.Context) context.Context {
+	if parent != nil {
+		return parent
+	}
+	return context.Background()
 }
 
 // buildContext returns a context (with optional timeout) and its cancel func.
 // Callers must always defer cancel().
-func buildContext(timeout time.Duration) (context.Context, context.CancelFunc) {
-	ctx := context.Background()
+func buildContext(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
 	if timeout > 0 {
-		return context.WithTimeout(ctx, timeout)
+		return context.WithTimeout(parent, timeout)
 	}
-	return context.WithCancel(ctx)
+	return context.WithCancel(parent)
 }
 
-func executeParseContent(opts *ParseOptions) error {
+func executeParseContent(ctx context.Context, opts *ParseOptions) error {
 	// Build HTTP client from fetch flags (validates headers, applies UA/proxy/timeout).
-	// Returns nil client when no flags are set, so defuddle uses its hardened default.
+	// Returns nil client when no flags are set, so fetchHTML uses equivalent defaults.
 	fetch, err := buildHTTPClient(opts.UserAgent, opts.Headers, opts.Proxy, opts.Timeout)
 	if err != nil {
 		return err
@@ -91,9 +106,6 @@ func executeParseContent(opts *ParseOptions) error {
 		defuddleOpts.Client = fetch.client
 		defuddleOpts.Headers = fetch.headers
 	}
-
-	ctx, cancel := buildContext(opts.Timeout)
-	defer cancel()
 
 	result, err := loadResult(ctx, opts, defuddleOpts)
 	if err != nil {
@@ -130,6 +142,9 @@ func buildDefuddleOptions(opts *ParseOptions) *defuddle.Options {
 
 // loadResult fetches and parses content from stdin, a URL, or a local file.
 func loadResult(ctx context.Context, opts *ParseOptions, defuddleOpts *defuddle.Options) (*defuddle.Result, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	switch {
 	case opts.Source == "-":
 		stdinBytes, err := readCapped(os.Stdin, "stdin")
@@ -148,7 +163,18 @@ func loadResult(ctx context.Context, opts *ParseOptions, defuddleOpts *defuddle.
 		if opts.RenderAuto {
 			return autoRenderAndParse(ctx, opts, defuddleOpts)
 		}
-		return defuddle.ParseFromURL(ctx, opts.Source, defuddleOpts)
+		fetchCtx, cancel := buildContext(ctx, opts.Timeout)
+		document, err := fetchHTML(fetchCtx, opts.Source, defuddleOpts.Client, defuddleOpts.Headers)
+		cancel()
+		if err != nil {
+			return nil, err
+		}
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		networkOptions := *defuddleOpts
+		networkOptions.URL = document.URL
+		return defuddle.ParseFromString(ctx, document.HTML, &networkOptions)
 	default:
 		htmlContent, err := readFile(opts.Source)
 		if err != nil {

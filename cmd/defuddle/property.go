@@ -26,6 +26,7 @@ type propertyAccessor struct {
 // The keys are the canonical list of valid --property values.
 var propertyExtractors = map[string]propertyAccessor{
 	"content":     {"content", func(r *defuddle.Result) string { return r.Content }},
+	"language":    {"language", func(r *defuddle.Result) string { return r.Language }},
 	"title":       {"title", func(r *defuddle.Result) string { return r.Title }},
 	"description": {"description", func(r *defuddle.Result) string { return r.Description }},
 	"domain":      {"domain", func(r *defuddle.Result) string { return r.Domain }},

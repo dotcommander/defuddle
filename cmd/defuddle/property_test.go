@@ -16,6 +16,7 @@ func TestGetPropertyAcceptsDocumentedCamelCaseNames(t *testing.T) {
 	result := &defuddle.Result{
 		Metadata: defuddle.Metadata{
 			Title:     "Example Title",
+			Language:  "en",
 			WordCount: 42,
 			ParseTime: 17,
 		},
@@ -27,6 +28,8 @@ func TestGetPropertyAcceptsDocumentedCamelCaseNames(t *testing.T) {
 		name string
 		want string
 	}{
+		{name: "language", want: "en"},
+		{name: "LANGUAGE", want: "en"},
 		{name: "title", want: "Example Title"},
 		{name: "wordCount", want: "42"},
 		{name: "parseTime", want: "17"},
@@ -52,7 +55,7 @@ func TestGetPropertyAcceptsDocumentedCamelCaseNames(t *testing.T) {
 func TestKnownPropertiesUsesDocumentedDisplayNames(t *testing.T) {
 	t.Parallel()
 
-	for _, want := range []string{"content", "wordCount", "parseTime", "metaTags", "schemaOrgData", "extractorType", "contentMarkdown"} {
+	for _, want := range []string{"language", "content", "wordCount", "parseTime", "metaTags", "schemaOrgData", "extractorType", "contentMarkdown"} {
 		if !slices.Contains(knownProperties, want) {
 			t.Fatalf("knownProperties missing %q: %s", want, strings.Join(knownProperties, ", "))
 		}
@@ -61,5 +64,12 @@ func TestKnownPropertiesUsesDocumentedDisplayNames(t *testing.T) {
 		if slices.Contains(knownProperties, unexpected) {
 			t.Fatalf("knownProperties contains internal key %q: %s", unexpected, strings.Join(knownProperties, ", "))
 		}
+	}
+}
+
+func TestGetPropertyUnknownStillRejected(t *testing.T) {
+	t.Parallel()
+	if _, ok := getProperty(&defuddle.Result{}, "unknown"); ok {
+		t.Fatal("unknown property accepted")
 	}
 }

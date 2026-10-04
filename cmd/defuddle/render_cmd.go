@@ -11,8 +11,11 @@ import (
 // render-timeout context (independent of the fetch --timeout). Shared by the
 // explicit --render path (renderAndParse) and the auto path (autoRenderAndParse)
 // so the two never drift.
-func renderToHTML(opts *ParseOptions) (string, error) {
-	renderCtx, cancel := buildContext(opts.RenderTimeout)
+func renderToHTML(ctx context.Context, opts *ParseOptions) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	renderCtx, cancel := buildContext(ctx, opts.RenderTimeout)
 	defer cancel()
 	return render.RenderHTML(renderCtx, opts.Source, buildRenderConfig(opts))
 }
@@ -33,8 +36,11 @@ func buildRenderConfig(opts *ParseOptions) render.Config {
 // into the UNCHANGED library entrypoint defuddle.ParseFromString. The render
 // deadline comes from opts.RenderTimeout, independent of the fetch --timeout.
 func renderAndParse(ctx context.Context, opts *ParseOptions, defuddleOpts *defuddle.Options) (*defuddle.Result, error) {
-	html, err := renderToHTML(opts)
+	html, err := renderToHTML(ctx, opts)
 	if err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	return defuddle.ParseFromString(ctx, html, defuddleOpts)

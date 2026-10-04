@@ -9,6 +9,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -24,6 +25,8 @@ import (
 const maxURLLineSize = 64 * 1024
 
 type BatchOptions struct {
+	parent context.Context
+
 	Input           string        `short:"i" help:"Read URLs from file instead of stdin."`
 	Concurrency     int           `short:"c" default:"5" help:"Maximum concurrent requests."`
 	Markdown        bool          `short:"m" help:"Include markdown in output."`
@@ -48,12 +51,18 @@ func scanURLs(r io.Reader) ([]string, error) {
 		urls = append(urls, line)
 	}
 	if err := scanner.Err(); err != nil {
+		if errors.Is(err, bufio.ErrTooLong) {
+			return nil, fmt.Errorf("%w: scanning input: %w", ErrCLIUsage, err)
+		}
 		return nil, fmt.Errorf("scanning input: %w", err)
 	}
 	return urls, nil
 }
 
 func (opts *BatchOptions) Run() error {
+	if err := commandContext(opts.parent).Err(); err != nil {
+		return err
+	}
 	if err := validateConcurrency(opts.Concurrency); err != nil {
 		return err
 	}
@@ -83,7 +92,7 @@ func (opts *BatchOptions) Run() error {
 		MaxConcurrency:   opts.Concurrency,
 	}
 
-	ctx, cancel := batchContext(opts.Timeout)
+	ctx, cancel := buildContext(commandContext(opts.parent), opts.Timeout)
 	defer cancel()
 
 	results := defuddle.ParseFromURLs(ctx, urls, parseOpts)

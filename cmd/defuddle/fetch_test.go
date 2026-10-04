@@ -22,8 +22,8 @@ func TestFetchHTML_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("fetchHTML: unexpected error: %v", err)
 	}
-	if body != fixtureHTML {
-		t.Fatalf("fetchHTML body mismatch:\n got: %q\nwant: %q", body, fixtureHTML)
+	if body.HTML != fixtureHTML {
+		t.Fatalf("fetchHTML body mismatch:\n got: %q\nwant: %q", body.HTML, fixtureHTML)
 	}
 }
 
@@ -88,8 +88,8 @@ func TestFetchHTML_ContentTypeValidation(t *testing.T) {
 			if err != nil {
 				t.Fatalf("fetchHTML: %v", err)
 			}
-			if body != fixtureHTML {
-				t.Fatalf("fetchHTML body mismatch: got %q, want %q", body, fixtureHTML)
+			if body.HTML != fixtureHTML {
+				t.Fatalf("fetchHTML body mismatch: got %q, want %q", body.HTML, fixtureHTML)
 			}
 		})
 	}

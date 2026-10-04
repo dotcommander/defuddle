@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -67,22 +68,24 @@ func newParser(cli *CLI, stdout, stderr io.Writer) (*kong.Kong, error) {
 }
 
 func main() {
-	extractors.InitializeBuiltins()
-	cli := &CLI{}
-	parser, err := newParser(cli, os.Stdout, os.Stderr)
-	if err == nil {
-		var ctx *kong.Context
-		ctx, err = parser.Parse(os.Args[1:])
-		if err != nil {
-			err = fmt.Errorf("%w: %w", ErrCLIUsage, err)
-		} else {
-			err = ctx.Run()
-		}
-	} else {
-		err = fmt.Errorf("constructing command parser: %w", err)
-	}
-	if err != nil {
+	if err := run(context.Background()); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(exitCodeFor(err))
 	}
+}
+
+func run(parent context.Context) error {
+	extractors.InitializeBuiltins()
+	cli := &CLI{}
+	cli.Parse.parent = parent
+	cli.Batch.parent = parent
+	parser, err := newParser(cli, os.Stdout, os.Stderr)
+	if err != nil {
+		return fmt.Errorf("constructing command parser: %w", err)
+	}
+	ctx, err := parser.Parse(os.Args[1:])
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrCLIUsage, err)
+	}
+	return ctx.Run()
 }

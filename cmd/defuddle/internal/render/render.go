@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/chromedp/chromedp"
+	"github.com/dotcommander/defuddle"
 )
 
 // WaitStrategy selects when the rendered HTML snapshot is taken.
@@ -48,7 +49,7 @@ type Config struct {
 	// Applies regardless of Wait strategy and independently of IdleDelay.
 	Settle time.Duration
 	// MaxHTMLBytes caps the rendered HTML returned. Zero => no extra cap
-	// (the library applies its own 5 MiB ceiling downstream).
+	// (ParseFromString does not enforce a downstream size cap).
 	MaxHTMLBytes int
 }
 
@@ -57,6 +58,9 @@ type Config struct {
 // document.documentElement.outerHTML. The caller's ctx bounds the whole
 // operation; RenderHTML adds no deadline of its own.
 func RenderHTML(ctx context.Context, url string, cfg Config) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", renderContextError(url, err)
+	}
 	allocOpts := append([]chromedp.ExecAllocatorOption{}, chromedp.DefaultExecAllocatorOptions[:]...)
 	if cfg.ChromePath != "" {
 		allocOpts = append(allocOpts, chromedp.ExecPath(cfg.ChromePath))
@@ -96,20 +100,17 @@ func RenderHTML(ctx context.Context, url string, cfg Config) (string, error) {
 	tasks = append(tasks, chromedp.OuterHTML("html", &html, chromedp.ByQuery))
 
 	if err := chromedp.Run(browserCtx, tasks); err != nil {
+		if ctx.Err() != nil {
+			return "", renderContextError(url, ctx.Err())
+		}
 		// chromedp surfaces a missing/unstartable browser as an exec error.
 		if isChromeStartFailure(err) {
 			return "", fmt.Errorf("%w: %w", ErrChromeNotFound, err)
 		}
-		if ctx.Err() != nil {
-			return "", fmt.Errorf("render %s timed out: %w", url, ctx.Err())
-		}
 		return "", fmt.Errorf("render %s: %w", url, err)
 	}
 
-	if cfg.MaxHTMLBytes > 0 && len(html) > cfg.MaxHTMLBytes {
-		html = html[:cfg.MaxHTMLBytes]
-	}
-	return html, nil
+	return cappedHTML(html, cfg.MaxHTMLBytes)
 }
 
 // isChromeStartFailure reports whether err indicates Chrome could not be
@@ -123,4 +124,18 @@ func isChromeStartFailure(err error) bool {
 		strings.Contains(msg, "no such file or directory") ||
 		strings.Contains(msg, "exec:") ||
 		strings.Contains(msg, "failed to start")
+}
+
+func cappedHTML(html string, limit int) (string, error) {
+	if limit > 0 && len(html) > limit {
+		return "", fmt.Errorf("rendered HTML exceeds %d bytes: %w", limit, defuddle.ErrTooLarge)
+	}
+	return html, nil
+}
+
+func renderContextError(url string, err error) error {
+	if errors.Is(err, context.DeadlineExceeded) {
+		err = errors.Join(defuddle.ErrTimeout, err)
+	}
+	return fmt.Errorf("render %s: %w", url, err)
 }
