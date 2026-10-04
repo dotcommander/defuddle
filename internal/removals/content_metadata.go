@@ -43,7 +43,7 @@ func removeSinglePassMetadata(mainContent *goquery.Selection, mainNode *html.Nod
 		}
 
 		// DIV metadata blocks near top (date but no sentence punctuation).
-		if tag == "DIV" && words >= 1 && words <= 10 && hasDate && !metadataLabelPattern.MatchString(text) && !sentencePunctRe.MatchString(text) && getPos() <= 400 {
+		if tag == "DIV" && words >= 1 && words <= 10 && hasDate && !metadataLabelPattern.MatchString(text) && !sentencePunctRe.MatchString(text) && getPos() >= 0 && getPos() <= 400 {
 			hasBigPara := false
 			el.Find("p, h1, h2, h3, h4, h5, h6").Each(func(_ int, sub *goquery.Selection) {
 				if textutil.CountWords(sub.Text()) > 8 {
@@ -60,7 +60,7 @@ func removeSinglePassMetadata(mainContent *goquery.Selection, mainNode *html.Nod
 		}
 
 		// Author byline "By Name" near start.
-		if !bylineFound && startsByPattern.MatchString(text) && words >= 2 && !sentencePunctEndRe.MatchString(text) && getPos() <= 600 {
+		if !bylineFound && startsByPattern.MatchString(text) && words >= 2 && !sentencePunctEndRe.MatchString(text) && getPos() >= 0 && getPos() <= 600 {
 			target := walkUpToWrapper(node, mainNode, text)
 			if debug {
 				slog.Debug("removeByContentPattern: author byline", "text", previewNode(target))
@@ -88,7 +88,7 @@ func removeSinglePassMetadata(mainContent *goquery.Selection, mainNode *html.Nod
 		}
 
 		// Author + date combo near start.
-		if !authorDateFound && words >= 2 && words <= 10 && hasDate && !metadataLabelPattern.MatchString(text) && getPos() <= 500 {
+		if !authorDateFound && words >= 2 && words <= 10 && hasDate && !metadataLabelPattern.MatchString(text) && getPos() >= 0 && getPos() <= 500 {
 			residual := metadataStripMonth.ReplaceAllString(text, "")
 			residual = metadataStripWeekday.ReplaceAllString(residual, "")
 			residual = metadataStripNumber.ReplaceAllString(residual, "")
@@ -113,6 +113,10 @@ func removeSinglePassMetadata(mainContent *goquery.Selection, mainNode *html.Nod
 // removeStandaloneTimeElements removes <time> elements near content boundaries
 // that are not inline within prose.
 func removeStandaloneTimeElements(mainContent *goquery.Selection, debug bool) {
+	if mainContent == nil || mainContent.Length() == 0 {
+		return
+	}
+	mainNode := mainContent.Nodes[0]
 	contentText := strings.TrimSpace(mainContent.Text())
 
 	mainContent.Find("time").Each(func(_ int, timeSel *goquery.Selection) {
@@ -123,7 +127,7 @@ func removeStandaloneTimeElements(mainContent *goquery.Selection, debug bool) {
 		// Walk up through inline wrappers only.
 		target := timeNode
 		targetText := strings.TrimSpace(nodeText(target))
-		for target.Parent != nil {
+		for target.Parent != nil && target.Parent != mainNode {
 			parentTag := strings.ToLower(target.Parent.Data)
 			parentText := strings.TrimSpace(nodeText(target.Parent))
 			if parentTag == "p" && parentText == targetText {
@@ -190,6 +194,9 @@ func removeBlogMetadataLists(mainContent *goquery.Selection, debug bool) {
 
 		listText := strings.TrimSpace(list.Text())
 		listPos := strings.Index(contentText, listText)
+		if listPos < 0 {
+			return
+		}
 		distFromEnd := len(contentText) - (listPos + len(listText))
 		if listPos > 500 && distFromEnd > 500 {
 			return

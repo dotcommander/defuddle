@@ -60,6 +60,9 @@ var (
 // navigational fragments from mainContent. It is a faithful port of the
 // TypeScript removeByContentPattern function.
 func RemoveByContentPattern(mainContent *goquery.Selection, _ *goquery.Document, debug bool, pageURL string) {
+	if mainContent == nil || mainContent.Length() == 0 {
+		return
+	}
 	mainNode := mainContent.Nodes[0]
 
 	removeBreadcrumbList(mainContent, mainNode, debug)

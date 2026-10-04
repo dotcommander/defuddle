@@ -4,6 +4,8 @@ import (
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
+
+	textutil "github.com/dotcommander/defuddle/internal/text"
 	"golang.org/x/net/html"
 )
 
@@ -67,13 +69,9 @@ func treeContainsTag(n *html.Node, tags map[string]bool) bool {
 	return false
 }
 
-// countWords counts whitespace-separated words in s (simple Latin approximation).
-// Delegates to the shared text package via the package-level shim below.
+// countWords shares the library word-count contract, including CJK characters.
 func countWords(s string) int {
-	if s == "" {
-		return 0
-	}
-	return len(strings.Fields(s))
+	return textutil.CountWords(s)
 }
 
 // hasContentElementsGoquery checks a goquery selection for content elements.

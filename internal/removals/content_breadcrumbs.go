@@ -50,7 +50,7 @@ func removePromotionalBanners(mainContent *goquery.Selection, debug bool) {
 			return
 		}
 		// Link must come before h1 in document order.
-		if !nodePrecedes(linkNode, h1Node) {
+		if nodeContains(linkNode, h1Node) || !nodePrecedes(linkNode, h1Node) {
 			return
 		}
 		if link.Find("div").Length() == 0 {
@@ -82,7 +82,7 @@ func removeHeroHeader(mainContent *goquery.Selection, mainNode *html.Node, debug
 		timeNode := timeSel.Nodes[0]
 		timeText := strings.TrimSpace(timeSel.Text())
 		pos := strings.Index(contentText, timeText)
-		if pos > 300 {
+		if pos < 0 || pos > 300 {
 			return
 		}
 

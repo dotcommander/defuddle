@@ -29,6 +29,9 @@ func removeSectionBreadcrumbs(mainContent *goquery.Selection, pageURL string, de
 		if elNode.Parent == nil {
 			return
 		}
+		if firstHeading.Length() > 0 && nodeContains(elNode, firstHeading.Nodes[0]) {
+			return
+		}
 		text := strings.TrimSpace(el.Text())
 		if textutil.CountWords(text) > 10 {
 			return
@@ -104,7 +107,7 @@ func removeTrailingExternalLinkLists(mainContent *goquery.Selection, pageURL str
 		return
 	}
 	parsed, err := url.Parse(pageURL)
-	if err != nil {
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
 		return
 	}
 	pageHost := parsed.Hostname()
@@ -170,10 +173,13 @@ func removeTrailingExternalLinkLists(mainContent *goquery.Selection, pageURL str
 				linkTextLen += len(strings.TrimSpace(a.Text()))
 				href, _ := a.Attr("href")
 				lp, e := url.Parse(href)
-				if e == nil && lp.IsAbs() {
-					if sameRegisteredDomain(lp.Hostname(), pageHost) {
-						allExternal = false
-					}
+				if e != nil {
+					allExternal = false
+					return
+				}
+				resolved := parsed.ResolveReference(lp)
+				if (resolved.Scheme != "http" && resolved.Scheme != "https") || resolved.Hostname() == "" || sameRegisteredDomain(resolved.Hostname(), pageHost) {
+					allExternal = false
 				}
 			})
 			if !allExternal {

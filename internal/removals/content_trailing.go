@@ -90,6 +90,9 @@ func removeTrailingRelatedPostsBlock(_ *goquery.Selection, mainNode *html.Node, 
 // removeTrailingThinSections removes trailing direct children of mainContent
 // that form a heading + thin CTA/promo block.
 func removeTrailingThinSections(mainContent *goquery.Selection, debug bool) {
+	if mainContent == nil || mainContent.Length() == 0 {
+		return
+	}
 	totalWords := textutil.CountWords(strings.TrimSpace(mainContent.Text()))
 	if totalWords <= 300 {
 		return

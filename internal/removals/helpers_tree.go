@@ -6,8 +6,17 @@ import (
 	"golang.org/x/net/html"
 )
 
-// nodePrecedes returns true when a appears before b in document order.
+// nodePrecedes reports strict preorder within a shared tree.
 func nodePrecedes(a, b *html.Node) bool {
+	if a == nil || b == nil || a == b {
+		return false
+	}
+	if nodeContains(a, b) {
+		return true
+	}
+	if nodeContains(b, a) {
+		return false
+	}
 	aChain := make(map[*html.Node]int)
 	for n, depth := a, 0; n != nil; n, depth = n.Parent, depth+1 {
 		aChain[n] = depth
