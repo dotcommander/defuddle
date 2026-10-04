@@ -32,6 +32,10 @@ func (d *Defuddle) removeExactSelectors(doc *goquery.Document, mainContent *goqu
 			if scoring.IsProtectedNode(el, mainContent) {
 				return
 			}
+			if goquery.NodeName(el) == "button" {
+				preserveButtonContent(el)
+				return
+			}
 			el.Remove()
 		})
 	}
@@ -78,7 +82,10 @@ func (d *Defuddle) removePartialSelectors(doc *goquery.Document, mainContent *go
 // matching a test-attribute selector: protected content nodes, footnote lists
 // (or their parents), headings, and anchors inside headings.
 func isProtectedFromPartialRemoval(element, mainContent *goquery.Selection) bool {
-	if scoring.IsProtectedNode(element, mainContent) {
+	if scoring.IsProtectedNode(element, mainContent) || containsRecognizedMath(element) {
+		return true
+	}
+	if element.Closest("pre").Length() > 0 || element.ParentsMatcher(constants.FootnoteListMatcher).Length() > 0 {
 		return true
 	}
 	// Protect footnote lists and their parents (element itself or any descendant matches)
@@ -169,6 +176,9 @@ func applyOptions(dst, src *Options) {
 	if src.RoleOptions != nil {
 		dst.RoleOptions = src.RoleOptions
 	}
+	if src.Headers != nil {
+		dst.Headers = src.Headers.Clone()
+	}
 	if src.Client != nil {
 		dst.Client = src.Client
 	}
@@ -188,5 +198,31 @@ func standardizeOptions(options *Options) standardize.Options {
 		ProcessMath:      options.ProcessMath,
 		ProcessFootnotes: options.ProcessFootnotes,
 		ProcessRoles:     options.ProcessRoles,
+		CodeOptions:      options.CodeOptions,
+		ImageOptions:     options.ImageOptions,
+		HeadingOptions:   options.HeadingOptions,
+		MathOptions:      options.MathOptions,
+		FootnoteOptions:  options.FootnoteOptions,
+		RoleOptions:      options.RoleOptions,
 	}
+}
+
+// preserveButtonContent keeps media in document order without extracting an
+// image twice from a picture, and unwraps terms embedded in article text.
+func preserveButtonContent(button *goquery.Selection) {
+	media := button.Find("img, picture, video")
+	if media.Length() > 0 {
+		media.Each(func(_ int, node *goquery.Selection) {
+			if node.ParentsFiltered("img, picture, video").Length() == 0 {
+				button.BeforeSelection(node)
+			}
+		})
+		button.Remove()
+		return
+	}
+	if button.ParentsFiltered("p, li, td, th, span, h1, h2, h3, h4, h5, h6").Length() > 0 {
+		button.ReplaceWithSelection(button.Contents())
+		return
+	}
+	button.Remove()
 }

@@ -13,7 +13,6 @@ import (
 // Pre-compiled regex patterns for JSON-LD content cleaning.
 var (
 	htmlCommentRe   = regexp.MustCompile(`<!--[\s\S]*?-->`)
-	jsCommentRe     = regexp.MustCompile(`/\*[\s\S]*?\*/|^\s*//.*$`)
 	cdataRe         = regexp.MustCompile(`^\s*<!\[CDATA\[([\s\S]*?)\]\]>\s*$`)
 	commentMarkerRe = regexp.MustCompile(`^\s*(\*/|/\*)\s*|\s*(\*/|/\*)\s*$`)
 )
@@ -109,7 +108,7 @@ func (d *Defuddle) cleanJSONLDContent(content string) string {
 	content = htmlCommentRe.ReplaceAllString(content, "")
 
 	// Remove JavaScript-style comments
-	content = jsCommentRe.ReplaceAllString(content, "")
+	content = stripJSONLDComments(content)
 
 	// Handle CDATA sections
 	if matches := cdataRe.FindStringSubmatch(content); len(matches) > 1 {
@@ -267,4 +266,51 @@ func schemaItemTypes(item any) []string {
 		return types
 	}
 	return nil
+}
+
+// stripJSONLDComments recognizes comments only outside quoted JSON strings.
+func stripJSONLDComments(content string) string {
+	var out strings.Builder
+	quoted, escaped := false, false
+	for i := 0; i < len(content); i++ {
+		c := content[i]
+		if quoted {
+			out.WriteByte(c)
+			switch {
+			case escaped:
+				escaped = false
+			case c == '\\':
+				escaped = true
+			case c == '"':
+				quoted = false
+			}
+			continue
+		}
+		if c == '"' {
+			quoted = true
+			out.WriteByte(c)
+			continue
+		}
+		if c == '/' && i+1 < len(content) {
+			if content[i+1] == '/' {
+				for i+1 < len(content) && content[i+1] != '\n' && content[i+1] != '\r' {
+					i++
+				}
+				out.WriteByte(' ')
+				continue
+			}
+			if content[i+1] == '*' {
+				end := strings.Index(content[i+2:], "*/")
+				if end < 0 {
+					out.WriteString(content[i:])
+					break
+				}
+				i += end + 3
+				out.WriteByte(' ')
+				continue
+			}
+		}
+		out.WriteByte(c)
+	}
+	return out.String()
 }

@@ -37,12 +37,12 @@ func extractTable(t *goquery.Selection) Table {
 	tbl := Table{Headers: []string{}, Rows: [][]string{}}
 	tbl.Caption = collapseWhitespace(t.ChildrenFiltered("caption").Text())
 
-	t.Find("thead th").Each(func(_ int, c *goquery.Selection) {
+	t.Find("thead th").FilterFunction(func(_ int, c *goquery.Selection) bool { return c.Closest("table").Get(0) == t.Get(0) }).Each(func(_ int, c *goquery.Selection) {
 		tbl.Headers = append(tbl.Headers, collapseWhitespace(c.Text()))
 	})
 
 	headerRow := -1
-	t.Find("tr").Each(func(i int, tr *goquery.Selection) {
+	t.Find("tr").FilterFunction(func(_ int, row *goquery.Selection) bool { return row.Closest("table").Get(0) == t.Get(0) }).Each(func(i int, tr *goquery.Selection) {
 		if tr.Closest("thead").Length() > 0 {
 			return // header cells already captured above (or empty thead)
 		}

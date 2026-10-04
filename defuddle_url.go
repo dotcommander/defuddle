@@ -2,6 +2,7 @@ package defuddle
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -23,6 +24,8 @@ func ParseFromURL(ctx context.Context, url string, options *Options) (*Result, e
 	if options == nil {
 		options = &Options{}
 	}
+	copiedOptions := *options
+	options = &copiedOptions
 
 	useResponseURL := options.URL == ""
 
@@ -39,7 +42,11 @@ func ParseFromURL(ctx context.Context, url string, options *Options) (*Result, e
 	fetched, err := fetchCapped(ctx, client, options.Headers, url)
 	if err != nil {
 		if ctx.Err() != nil {
-			return nil, fmt.Errorf("fetch %s: %w", url, ErrTimeout)
+			cause := ctx.Err()
+			if errors.Is(cause, context.DeadlineExceeded) {
+				cause = errors.Join(ErrTimeout, cause)
+			}
+			return nil, fmt.Errorf("fetch %s: %w", url, cause)
 		}
 		return nil, err
 	}
@@ -184,6 +191,8 @@ type URLResult struct {
 
 // ParseFromURLs fetches and parses multiple URLs concurrently.
 // MaxConcurrency in options controls parallelism (default 5).
+// Each item uses its final response URL as the document base, ignoring a shared
+// Options.URL override; URLResult.URL always retains the submitted URL.
 func ParseFromURLs(ctx context.Context, urls []string, options *Options) []URLResult {
 	if options == nil {
 		options = &Options{}
@@ -202,7 +211,7 @@ func ParseFromURLs(ctx context.Context, urls []string, options *Options) []URLRe
 		g.Go(func() error {
 			// Copy options per URL so URL field doesn't collide
 			opts := *options
-			opts.URL = u
+			opts.URL = ""
 			result, err := ParseFromURL(gctx, u, &opts)
 			results[i] = URLResult{URL: u, Result: result, Err: err}
 			return nil

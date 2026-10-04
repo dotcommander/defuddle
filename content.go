@@ -117,18 +117,23 @@ func (d *Defuddle) findMainContent(doc *goquery.Document) *goquery.Selection {
 // preferSpecificChild returns the highest-scoring candidate, descending to a
 // contained child candidate that matched a higher-priority (lower-index) selector
 // and has substantial text (>50 words) so a contained <article> can win over its
-// <main> parent. The descent is skipped on listing pages (top candidate has 3+ articles).
+// <main> parent. The descent is skipped when the original top contains multiple candidates
+// matching the same selector index.
 func preferSpecificChild(candidates []contentCandidate) contentCandidate {
-	best := candidates[0]
-	// Don't descend into child on listing pages (multiple articles)
-	if best.element.Find("article").Length() < 3 {
-		for i := 1; i < len(candidates); i++ {
-			child := candidates[i]
-			childText := strings.TrimSpace(child.element.Text())
-			childWords := text.CountWords(childText)
-			if child.selectorIndex < best.selectorIndex && scoring.NodeContains(best.element, child.element) && childWords > 50 {
-				best = child
+	top := candidates[0]
+	best := top
+	for _, child := range candidates[1:] {
+		if child.selectorIndex >= best.selectorIndex || !scoring.NodeContains(best.element, child.element) || text.CountWords(strings.TrimSpace(child.element.Text())) <= 50 {
+			continue
+		}
+		atIndex := 0
+		for _, candidate := range candidates {
+			if candidate.selectorIndex == child.selectorIndex && scoring.NodeContains(top.element, candidate.element) {
+				atIndex++
 			}
+		}
+		if atIndex <= 1 {
+			best = child
 		}
 	}
 	return best
@@ -185,6 +190,14 @@ func (d *Defuddle) findTableBasedContent(doc *goquery.Document) *goquery.Selecti
 	})
 
 	if bestScore > 50 {
+		body := doc.Find("body").First()
+		if body.Length() == 0 {
+			body = doc.Find("html").First()
+		}
+		// Upstream rejects cells containing less than half the body's words.
+		if d.countWordsInSelection(bestElement)*2 < d.countWordsInSelection(body) {
+			return nil
+		}
 		return bestElement
 	}
 	return nil

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
+	"golang.org/x/net/html"
 )
 
 // removeHiddenElements removes elements that are hidden via CSS
@@ -39,18 +40,11 @@ func (d *Defuddle) removeHiddenElements(doc *goquery.Document) {
 // class (including responsive prefix:hidden variants). Math elements (math tag,
 // data-mathml, katex-mathml/MathJax classes) are never treated as hidden.
 func isHiddenElement(element *goquery.Selection) bool {
-	// Protect math elements from removal
-	tag := goquery.NodeName(element)
-	if tag == "math" {
-		return false
-	}
-	if _, hasMathML := element.Attr("data-mathml"); hasMathML {
+	// Hidden wrappers must survive until their contained math is processed.
+	if containsRecognizedMath(element) {
 		return false
 	}
 	className := element.AttrOr("class", "")
-	if strings.Contains(className, "katex-mathml") || strings.Contains(className, "MathJax") {
-		return false
-	}
 
 	// Check inline styles for hidden elements
 	if style, exists := element.Attr("style"); exists {
@@ -97,16 +91,60 @@ func resolveReactStreaming(doc *goquery.Document) {
 		for _, m := range matches {
 			boundaryID, slotID := m[1], m[2]
 
-			boundary := doc.Find(`template[id="` + boundaryID + `"]`)
-			slot := doc.Find(`[id="` + slotID + `"]`)
-
-			if boundary.Length() > 0 && slot.Length() > 0 {
-				slotHTML, _ := slot.Html()
-				if slotHTML != "" {
-					boundary.ReplaceWithHtml(slotHTML)
-					slot.Remove()
+			boundary := elementByID(doc, boundaryID)
+			slot := elementByID(doc, slotID)
+			if boundary == nil || slot == nil || boundary.Data != "template" || boundary.Parent == nil || slot.Parent == nil {
+				continue
+			}
+			opening := boundary.PrevSibling
+			if opening == nil || opening.Type != html.CommentNode || !isSuspenseOpening(opening.Data) {
+				continue
+			}
+			depth := 0
+			var closing *html.Node
+			for node := boundary.NextSibling; node != nil; node = node.NextSibling {
+				if node.Type != html.CommentNode {
+					continue
+				}
+				if isSuspenseOpening(node.Data) {
+					depth++
+				}
+				if node.Data == "/$" {
+					if depth == 0 {
+						closing = node
+						break
+					}
+					depth--
 				}
 			}
+			if closing == nil {
+				continue
+			}
+			parent := boundary.Parent
+			// A malformed slot inside its own fallback cannot be moved safely.
+			insideFallback := false
+			for node := boundary; node != closing; node = node.NextSibling {
+				for ancestor := slot; ancestor != nil; ancestor = ancestor.Parent {
+					if ancestor == node {
+						insideFallback = true
+					}
+				}
+			}
+			if insideFallback {
+				continue
+			}
+			for node := boundary; node != closing; {
+				next := node.NextSibling
+				parent.RemoveChild(node)
+				node = next
+			}
+			for slot.FirstChild != nil {
+				child := slot.FirstChild
+				slot.RemoveChild(child)
+				parent.InsertBefore(child, closing)
+			}
+			opening.Data = "$"
+			slot.Parent.RemoveChild(slot)
 		}
 	})
 }
@@ -120,12 +158,42 @@ func flattenShadowDOM(doc *goquery.Document) {
 		if parent.Length() == 0 {
 			return
 		}
-		// Move template children into the parent, replacing the template
-		inner, _ := tmpl.Html()
-		if inner != "" {
-			tmpl.ReplaceWithHtml(inner)
-		} else {
-			tmpl.Remove()
-		}
+		// Move the nodes themselves so nested templates remain in the original
+		// traversal and their children are flattened as well.
+		tmpl.ReplaceWithSelection(tmpl.Contents())
 	})
+}
+
+// containsRecognizedMath identifies a math node or an ancestor containing one.
+func containsRecognizedMath(element *goquery.Selection) bool {
+	return isRecognizedMath(element) || element.Find("*").FilterFunction(func(_ int, child *goquery.Selection) bool {
+		return isRecognizedMath(child)
+	}).Length() > 0
+}
+
+func isRecognizedMath(element *goquery.Selection) bool {
+	if goquery.NodeName(element) == "math" {
+		return true
+	}
+	if _, ok := element.Attr("data-mathml"); ok {
+		return true
+	}
+	className := element.AttrOr("class", "")
+	return strings.Contains(className, "katex-mathml") || strings.Contains(className, "MathJax")
+}
+
+func elementByID(doc *goquery.Document, id string) *html.Node {
+	var found *html.Node
+	doc.Find("[id]").EachWithBreak(func(_ int, element *goquery.Selection) bool {
+		if element.AttrOr("id", "") == id {
+			found = element.Get(0)
+			return false
+		}
+		return true
+	})
+	return found
+}
+
+func isSuspenseOpening(marker string) bool {
+	return marker == "$" || marker == "$?" || marker == "$!"
 }

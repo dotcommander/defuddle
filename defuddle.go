@@ -27,6 +27,9 @@ type Defuddle struct {
 	options  *Options
 	debug    bool
 	debugger *debug.Debugger
+
+	// Secondary conversation normalization must use the generic pipeline.
+	skipExtractors bool
 }
 
 // NewDefuddle creates a new Defuddle instance from HTML content
@@ -130,6 +133,9 @@ func (d *Defuddle) Parse(ctx context.Context) (*Result, error) {
 
 		retryResult, retryErr := d.parseInternal(ctx, retryOpts)
 		if retryErr != nil {
+			if ctx.Err() != nil {
+				return result, ctx.Err()
+			}
 			// First retry propagates error; subsequent retries are best-effort.
 			if step.trigger == 200 {
 				return result, retryErr
@@ -145,5 +151,8 @@ func (d *Defuddle) Parse(ctx context.Context) (*Result, error) {
 		}
 	}
 
+	if err := ctx.Err(); err != nil {
+		return result, err
+	}
 	return result, nil
 }

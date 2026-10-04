@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -195,7 +196,10 @@ func TestParseFromURL_UsesRedirectTargetForImplicitMetadataURL(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	assert.Equal(t, srv.URL+"/articles/story/", options.URL)
+	assert.Empty(t, options.URL, "fetching must preserve caller options")
+	finalURL, err := url.Parse(srv.URL + "/articles/story/")
+	require.NoError(t, err)
+	assert.Equal(t, finalURL.Hostname(), result.Domain)
 	assert.Equal(t, srv.URL+"/articles/story/icon.svg", result.Favicon)
 }
 

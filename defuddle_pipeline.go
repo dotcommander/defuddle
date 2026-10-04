@@ -29,7 +29,20 @@ func (d *Defuddle) selectMainContent(workingDoc *goquery.Document, options *Opti
 
 // parseInternal performs the actual parsing work.
 func (d *Defuddle) parseInternal(ctx context.Context, overrideOptions *Options) (*Result, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	startTime := time.Now()
+
+	// Every pass inspects a fresh preprocessed document. Extractor mutations
+	// never affect the original instance or the next retry/Parse call.
+	inspectionDoc, err := d.prepareWorkingDoc()
+	if err != nil {
+		return nil, err
+	}
+	inspectionParser := *d
+	inspectionParser.doc = inspectionDoc
+	d = &inspectionParser
 
 	// Merge options with defaults
 	options := d.mergeOptions(overrideOptions)
@@ -61,6 +74,9 @@ func (d *Defuddle) parseInternal(ctx context.Context, overrideOptions *Options) 
 
 	// Try site-specific extractor first
 	if result := d.tryExtractor(ctx, options, extractedMetadata, schemaOrgData, metaTags, startTime); result != nil {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		return result, nil
 	}
 
@@ -101,6 +117,9 @@ func (d *Defuddle) parseInternal(ctx context.Context, overrideOptions *Options) 
 	}
 
 	d.runRemovalPipeline(ctx, workingDoc, mainContent, smallImages, options)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 
 	// Normalize the main content
 	standardize.ContentWithOptions(mainContent, extractedMetadata, workingDoc, standardizeOptions(options), d.debug)
@@ -167,6 +186,9 @@ func (d *Defuddle) tryExtractor(
 	metaTags []MetaTag,
 	startTime time.Time,
 ) *Result {
+	if d.skipExtractors {
+		return nil
+	}
 	ext := extractors.FindExtractor(d.doc, options.URL, schemaOrgData)
 	if ext == nil || !ext.CanExtract() {
 		return nil
@@ -179,7 +201,7 @@ func (d *Defuddle) tryExtractor(
 			if err != nil {
 				return nil, err
 			}
-			tempDefuddle := &Defuddle{rawHTML: html, doc: tempDoc, debugger: d.debugger}
+			tempDefuddle := &Defuddle{rawHTML: html, doc: tempDoc, debugger: d.debugger, skipExtractors: true}
 			tempResult, err := tempDefuddle.parseInternal(ctx, options)
 			if err != nil {
 				return nil, err
