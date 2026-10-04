@@ -5,6 +5,7 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 	"golang.org/x/net/html"
+	"golang.org/x/net/html/atom"
 )
 
 // unwrapSpecialLinks fixes problematic link structures:
@@ -34,9 +35,10 @@ func restructureHeadingLink(link *goquery.Selection) {
 
 	// Create inner <a> with the href, move heading's children into it
 	innerLink := &html.Node{
-		Type: html.ElementNode,
-		Data: "a",
-		Attr: []html.Attribute{{Key: "href", Val: href}},
+		Type:     html.ElementNode,
+		DataAtom: atom.A,
+		Data:     "a",
+		Attr:     []html.Attribute{{Key: "href", Val: href}},
 	}
 	for headingNode.FirstChild != nil {
 		child := headingNode.FirstChild

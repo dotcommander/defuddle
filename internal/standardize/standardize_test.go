@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/html"
+	"golang.org/x/net/html/atom"
 )
 
 // parseDoc parses an HTML string into a goquery Document.
@@ -22,6 +23,49 @@ func parseDoc(t *testing.T, html string) *goquery.Document {
 // meta returns a minimal Metadata with the given title.
 func meta(title string) *metadata.Metadata {
 	return &metadata.Metadata{Title: title}
+}
+
+func TestRestructureHeadingLink_AnchorNodeInvariant(t *testing.T) {
+	t.Parallel()
+
+	doc := parseDoc(t, `<article><a href="/target"><h2><div>Linked heading</div></h2></a><p>Body text.</p></article>`)
+	article := doc.Find("article")
+	restructureHeadingLink(article.ChildrenFiltered("a"))
+
+	link := article.Find("h2 > a")
+	require.Equal(t, 1, link.Length())
+	node := link.Get(0)
+	assert.Equal(t, html.ElementNode, node.Type)
+	assert.Equal(t, "a", node.Data)
+	assert.Equal(t, atom.A, node.DataAtom)
+	assert.Equal(t, "/target", link.AttrOr("href", ""))
+	assert.Equal(t, "Linked heading", link.Text())
+	assert.Equal(t, 0, article.ChildrenFiltered("a").Length())
+
+	// Wrapper flattening parses replacement HTML using the new anchor as context.
+	_, err := html.ParseFragment(strings.NewReader("<p>Linked heading</p>"), node)
+	require.NoError(t, err)
+}
+
+func TestContentWithOptions_LinkedHeadingNestedBlock(t *testing.T) {
+	t.Parallel()
+
+	doc := parseDoc(t, `<article><a href="/target"><h2><div>Linked heading</div></h2></a><p>Body text.</p></article>`)
+	article := doc.Find("article")
+
+	require.NotPanics(t, func() {
+		ContentWithOptions(article, meta("Page title"), doc, Options{}, false)
+	})
+
+	heading := article.Find("h2")
+	require.Equal(t, 1, heading.Length())
+	assert.Equal(t, "Linked heading", strings.TrimSpace(heading.Text()))
+	link := heading.Find(`a[href="/target"]`)
+	require.Equal(t, 1, link.Length())
+	assert.Equal(t, atom.A, link.Get(0).DataAtom)
+	assert.Equal(t, "Linked heading", strings.TrimSpace(link.Text()))
+	assert.Contains(t, article.Text(), "Body text.")
+	assert.Equal(t, 0, link.Find("div").Length(), "normal flattening must process the nested block")
 }
 
 func TestContent_StandardizesSpaces(t *testing.T) {
