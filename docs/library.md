@@ -20,6 +20,19 @@ fmt.Println(result.Title)
 fmt.Println(result.Content) // clean HTML
 ```
 
+URL requests preserve caller cancellation: `errors.Is(err, context.Canceled)`
+identifies cancellation, while expired deadlines match both
+`context.DeadlineExceeded` and `defuddle.ErrTimeout`. Cancellation during parsing
+or retries is returned to the caller. A failed retry can return the previously
+extracted result alongside that error, so check the error even when the result
+is non-nil.
+
+Unless an explicit `Options.URL` is supplied to a single-URL parse, relative
+links resolve against the final response URL after redirects. Batch parsing
+uses each response's final URL independently, retains input order, and records
+the original input in `URLResult.URL`; a shared `Options.URL` does not replace
+those per-page bases. Fetching does not mutate the caller's options.
+
 ## Parse an HTML String
 
 When you already have HTML (browser automation, local files, test fixtures):

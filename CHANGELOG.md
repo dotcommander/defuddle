@@ -10,6 +10,70 @@ All notable changes to this project will be documented in this file. The format 
 
 ---
 
+## [v0.15.0] — 2026-10-04
+
+### Security
+
+- Remove `script` elements from extracted content in every namespace; the
+  previous MathML exemption no longer spares scripts embedded in math
+  annotations, while surrounding MathML semantics are preserved.
+- Escape attribute values and generated markup in code-block, footnote, math,
+  callout, and standardization output instead of interpolating raw values.
+
+### Added
+
+- `defuddle parse --property language` prints the detected page language.
+- Processor options (`CodeOptions`, `ImageOptions`, `HeadingOptions`,
+  `MathOptions`, `FootnoteOptions`, `RoleOptions`) now reach their stages;
+  non-nil role and footnote options run scoped to the extracted content,
+  including footnote section placement inside it.
+
+### Fixed
+
+- Honor caller cancellation and deadline semantics across fetching, parsing,
+  retries, rendering, and automatic-render fallback; expired deadlines wrap
+  `defuddle.ErrTimeout`, and a canceled context never degrades into fallback
+  output.
+- Resolve relative URLs against the final response URL after redirects for
+  static URL parses, and decode fetched HTML by its declared charset in the
+  CLI before parsing. Batch parsing bases each page on its own final URL,
+  preserves input order, and no longer mutates the caller's options.
+- Fail oversized rendered snapshots with `defuddle.ErrTooLarge` instead of
+  parsing truncated HTML; `--render-auto` still falls back to the static
+  fetch for render-stage size errors.
+- Give every parse pass a fresh working document so extractor mutations
+  cannot leak into retries or later `Parse` calls, and run nested extractor
+  parsing through the generic pipeline.
+- Reevaluate extractor DOM eligibility on every lookup instead of caching by
+  URL, so later mappings can serve documents a constructor declines;
+  `ClearCache` remains a compatibility no-op.
+- Resolve `srcset` and `data-srcset` candidates — including comma-bearing
+  data URLs — without corrupting descriptors, and sanitize lazy candidate
+  lists.
+- Strip JSON-LD comments only outside quoted strings.
+- Resolve React streaming suspense boundaries with balanced markers, flatten
+  shadow-DOM templates by moving nodes, and keep hidden wrappers that contain
+  recognized math.
+- Remove empty Markdown links without touching code spans, fences, or
+  balanced and quoted destinations, and restore complex-link child topology
+  even when rendering panics.
+- Accept `name="dc.creator"` author metadata alongside the `property` form,
+  deduplicate citation and Dublin Core authors, and suppress broad navigation
+  byline heuristics.
+- Guard removal heuristics against missing text positions, non-shared trees,
+  and non-HTTP page URLs; oversized stdin lines report a usage error.
+- Descend to a specific child candidate only when it is the unique match at
+  its selector index, extract tables without absorbing nested tables' rows,
+  and reject table-based fallback candidates holding under half the body's
+  words (upstream parity).
+- Preserve embedded media and unwrap inline buttons when exact-selector
+  removal drops button elements.
+- Parse fetch content types strictly so parameters such as `charset=` no
+  longer trigger false `ErrNotHTML` rejections, and map wrapped network
+  errors to the CLI's upstream exit class.
+
+---
+
 ## [v0.14.0] — 2026-08-20
 
 ### Added

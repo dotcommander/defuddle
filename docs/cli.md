@@ -51,7 +51,7 @@ curl -s https://example.com | defuddle parse     # piped stdin (auto)
 curl -s https://example.com | defuddle parse -   # explicit stdin
 ```
 
-Local input (files and stdin) is capped at **5 MiB**; larger input returns an error wrapping `defuddle.ErrTooLarge` with the source path or `stdin` in the message. URL fetches have their own internal cap enforced by the library.
+Local input (files and stdin) is capped at **5 MiB**; larger input returns an error wrapping `defuddle.ErrTooLarge` with the source path or `stdin` in the message. URL fetches cap downloaded bytes before charset decoding. Rendered snapshots over **5 MiB** fail with `defuddle.ErrTooLarge` (exit 2 for explicit `--render`); no partial HTML is parsed. With `--render-auto`, a render-cap error falls back to the capped static fetch, just like other render-stage failures.
 
 ### Output formats
 
@@ -66,7 +66,7 @@ defuddle parse URL --output out.html   # write to a file instead of stdout (-o)
 
 When more than one is set, precedence is `--property` > `--json` > `--markdown` > default HTML. `--markdown` falls back to HTML if no markdown was produced.
 
-`--property` accepts: `content`, `title`, `description`, `domain`, `favicon`, `image`, `author`, `site`, `published`, `wordCount`, `parseTime`, `metaTags`, `schemaOrgData`, `extractorType`, `contentMarkdown`.
+`--property` accepts: `content`, `language`, `title`, `description`, `domain`, `favicon`, `image`, `author`, `site`, `published`, `wordCount`, `parseTime`, `metaTags`, `schemaOrgData`, `extractorType`, `contentMarkdown`.
 
 See [JSON output](#json-output) for the full object shape.
 
@@ -118,6 +118,8 @@ defuddle parse https://example.com --proxy socks5://localhost:1080
 ```
 
 Headers must use the `Key: Value` form. Invalid headers are rejected before any HTTP request is issued. Proxy URLs accept `http://`, `https://`, and `socks5://` schemes.
+
+Fetch `--timeout` and `--render-timeout` are independent stage budgets. Parsing after a successful stage uses the caller context. Caller cancellation stops rendering and automatic fallback; a render-stage timeout alone still permits `--render-auto` static fallback. Static URL parsing resolves relative URLs against the final response URL after redirects. Rendered snapshots retain the configured source URL as their base.
 
 ### Content control flags
 

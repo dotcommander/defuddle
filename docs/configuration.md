@@ -175,6 +175,21 @@ opts := &defuddle.Options{
 }
 ```
 
+### Custom processor settings
+
+Each `Process*` flag enables its stage. The corresponding `CodeOptions`,
+`ImageOptions`, `HeadingOptions`, `MathOptions`, `FootnoteOptions`, or
+`RoleOptions` pointer configures that stage; a pointer alone does not enable it.
+Nil pointers retain the existing default processing path. Non-nil role and
+footnote options use the configurable processors within the selected content
+root, including footnote section generation there.
+
+Custom options expose the behavior already supported by those processors.
+Image lazy-loading, responsive, alt-text, optimization, and maximum-size fields
+remain outside this change; forwarding them does not add implementations.
+Footnote section locations retain the existing `end`, `after-content`, and
+`custom` behavior rather than adding new placement modes.
+
 ## Debug Mode
 
 ```go
