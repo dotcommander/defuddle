@@ -1,6 +1,7 @@
 package metadata
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -180,7 +181,15 @@ func searchSchema(data any, props []string, isExactMatch bool) []string {
 		// If not exact match, search nested objects and arrays
 		if !isExactMatch {
 			var nestedResults []string
-			for _, value := range obj {
+			// Maps no longer retain JSON insertion order. Lexical traversal
+			// makes recursive fallback stable without changing array order.
+			keys := make([]string, 0, len(obj))
+			for key := range obj {
+				keys = append(keys, key)
+			}
+			slices.Sort(keys)
+			for _, key := range keys {
+				value := obj[key]
 				switch value.(type) {
 				case map[string]any, []any:
 					results := searchSchema(value, props, false)

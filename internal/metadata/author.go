@@ -91,7 +91,7 @@ func getAuthor(doc *goquery.Document, schemaOrgData any, metaTags []MetaTag) str
 	// Research paper meta tags: citation_author, dc.creator (support multi-value)
 	citationAuthors := getMetaContents(metaTags, "name", "citation_author")
 	if len(citationAuthors) == 0 {
-		citationAuthors = getMetaContents(metaTags, "property", "dc.creator")
+		citationAuthors = append(getMetaContents(metaTags, "name", "dc.creator"), getMetaContents(metaTags, "property", "dc.creator")...)
 	}
 	if len(citationAuthors) > 0 {
 		reversed := make([]string, 0, len(citationAuthors))
@@ -103,7 +103,7 @@ func getAuthor(doc *goquery.Document, schemaOrgData any, metaTags []MetaTag) str
 				reversed = append(reversed, strings.TrimSpace(s))
 			}
 		}
-		return strings.Join(reversed, ", ")
+		return strings.Join(removeDuplicates(reversed), ", ")
 	}
 
 	// Standard meta tags - use cmp.Or for cleaner fallback chain (Go 1.22+)
@@ -119,10 +119,7 @@ func getAuthor(doc *goquery.Document, schemaOrgData any, metaTags []MetaTag) str
 	}
 
 	// Schema.org data - deduplicate if it's a list
-	schemaAuthors := cmp.Or(
-		getSchemaProperty(schemaOrgData, "author.name"),
-		getSchemaProperty(schemaOrgData, "author.[].name"),
-	)
+	schemaAuthors := getSchemaProperty(schemaOrgData, "author.name")
 
 	if schemaAuthors != "" {
 		parts := strings.Split(schemaAuthors, ",")
@@ -156,12 +153,18 @@ func getAuthor(doc *goquery.Document, schemaOrgData any, metaTags []MetaTag) str
 	domAuthorSelectors := []string{
 		`[itemprop="author"]`,
 		".author",
-		`[href*="author"]`,
+		`[href*="/author/"]`,
 		".authors a",
 	}
 
 	for _, selector := range domAuthorSelectors {
-		doc.Find(selector).Each(func(_ int, el *goquery.Selection) {
+		matches := doc.Find(selector)
+		// Explicit semantic authors are unrestricted; broad heuristics with
+		// many matches usually describe navigation rather than a byline.
+		if selector != `[itemprop="author"]` && matches.Length() > 3 {
+			continue
+		}
+		matches.Each(func(_ int, el *goquery.Selection) {
 			addDomAuthor(strings.TrimSpace(el.Text()))
 		})
 	}
