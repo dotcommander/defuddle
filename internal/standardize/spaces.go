@@ -3,6 +3,7 @@ package standardize
 import (
 	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/PuerkitoBio/goquery"
 	"golang.org/x/net/html"
@@ -104,7 +105,7 @@ func standardizeSpacesNode(node *html.Node) {
 		// Replace &nbsp; with regular spaces, except when it's a single &nbsp; between words
 		newText := nbspRe.ReplaceAllStringFunc(text, func(match string) string {
 			// If it's a single &nbsp; between word characters, preserve it
-			if len(match) == 1 {
+			if utf8.RuneCountInString(match) == 1 {
 				// Check previous sibling
 				var prev string
 				if node.PrevSibling != nil && node.PrevSibling.Type == html.TextNode {
@@ -125,10 +126,10 @@ func standardizeSpacesNode(node *html.Node) {
 
 				// If between word characters, preserve the &nbsp;
 				if isWordChar(prev) && isWordChar(next) {
-					return "\xA0"
+					return "\u00a0"
 				}
 			}
-			return strings.Repeat(" ", len(match))
+			return strings.Repeat(" ", utf8.RuneCountInString(match))
 		})
 
 		if newText != text {

@@ -1,6 +1,7 @@
 package standardize
 
 import (
+	htmlstd "html"
 	"log/slog"
 	"strings"
 
@@ -74,7 +75,7 @@ var elementStandardizationRules = []StandardizationRule{
 				inner, _ = el.Html()
 			}
 
-			el.ReplaceWithHtml(`<blockquote data-callout="` + calloutType + `">` + inner + `</blockquote>`)
+			el.ReplaceWithHtml(`<blockquote data-callout="` + htmlstd.EscapeString(calloutType) + `">` + inner + `</blockquote>`)
 			return nil
 		},
 	},
@@ -95,7 +96,7 @@ var elementStandardizationRules = []StandardizationRule{
 				node := el.Get(0)
 				for _, attr := range node.Attr {
 					if constants.IsAllowedAttribute(attr.Key) && attr.Key != "role" {
-						newHTML.WriteString(` ` + attr.Key + `="` + attr.Val + `"`)
+						newHTML.WriteString(` ` + attr.Key + `="` + htmlstd.EscapeString(attr.Val) + `"`)
 					}
 				}
 			}
@@ -153,10 +154,22 @@ var elementStandardizationRules = []StandardizationRule{
 //		});
 //	}
 func standardizeElements(element *goquery.Selection, doc *goquery.Document, debug bool) {
+	standardizeElementsWithRoles(element, doc, debug, true)
+}
+
+func standardizeElementsWithRoles(element *goquery.Selection, doc *goquery.Document, debug, defaultRoles bool) {
 	processedCount := 0
 
 	// Process each standardization rule
 	for _, rule := range elementStandardizationRules {
+		if !defaultRoles {
+			switch rule.Element {
+			case "ul", "li":
+				continue
+			case "p":
+				rule.Selector = `div[data-testid^="paragraph"]:not([role])`
+			}
+		}
 		element.Find(rule.Selector).Each(func(_ int, el *goquery.Selection) {
 			if rule.Transform != nil {
 				// Use custom transform function
@@ -209,8 +222,8 @@ func convertLiteYouTube(element *goquery.Selection) int {
 		}
 
 		iframeHTML := `<iframe width="560" height="315" ` +
-			`src="https://www.youtube.com/embed/` + videoID + `" ` +
-			`title="` + videoTitle + `" ` +
+			`src="https://www.youtube.com/embed/` + htmlstd.EscapeString(videoID) + `" ` +
+			`title="` + htmlstd.EscapeString(videoTitle) + `" ` +
 			`frameborder="0" ` +
 			`allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" ` +
 			`allowfullscreen></iframe>`
@@ -231,7 +244,7 @@ func writeAllowedAttributes(b *strings.Builder, sel *goquery.Selection) {
 	node := sel.Get(0)
 	for _, attr := range node.Attr {
 		if constants.IsAllowedAttribute(attr.Key) {
-			b.WriteString(` ` + attr.Key + `="` + attr.Val + `"`)
+			b.WriteString(` ` + attr.Key + `="` + htmlstd.EscapeString(attr.Val) + `"`)
 		}
 	}
 }

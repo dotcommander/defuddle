@@ -97,7 +97,7 @@ func stripElementAttributes(el *goquery.Selection, debug bool) int {
 
 	// Skip SVG elements - preserve all their attributes
 	tagName := strings.ToLower(node.Data)
-	if tagName == "svg" || node.Namespace == "http://www.w3.org/2000/svg" {
+	if tagName == "svg" || node.Namespace == "svg" {
 		return 0
 	}
 

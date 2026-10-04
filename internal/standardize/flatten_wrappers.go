@@ -115,7 +115,7 @@ import (
 //
 //		// ... (complex processing logic continues)
 //	}
-func flattenWrapperElements(element *goquery.Selection, _ *goquery.Document, debug bool) {
+func flattenWrapperElements(element *goquery.Selection, _ *goquery.Document, debug, preserveRoles bool) {
 	processedCount := 0
 	startTime := time.Now()
 
@@ -127,6 +127,9 @@ func flattenWrapperElements(element *goquery.Selection, _ *goquery.Document, deb
 	keepProcessing := true
 
 	processElement := func(el *goquery.Selection) bool {
+		if preserveRoles && isConfigurableRole(el) {
+			return false
+		}
 		modified := flattenElement(el, element, blockElements)
 		if modified {
 			processedCount++
@@ -179,6 +182,9 @@ func flattenWrapperElements(element *goquery.Selection, _ *goquery.Document, deb
 		modified := false
 
 		element.Find(blockSelector).Each(func(_ int, el *goquery.Selection) {
+			if preserveRoles && isConfigurableRole(el) {
+				return
+			}
 			// Check if element only contains paragraphs
 			children := el.Children()
 			onlyParagraphs := children.Length() > 0
@@ -222,4 +228,10 @@ func flattenWrapperElements(element *goquery.Selection, _ *goquery.Document, deb
 			"count", processedCount,
 			"processingTime", processingTime)
 	}
+}
+
+// Explicit role options must remain effective through the later wrapper cleanup.
+// Nil options retain the original flattening path.
+func isConfigurableRole(element *goquery.Selection) bool {
+	return slices.Contains([]string{"paragraph", "list", "listitem", "button", "link"}, element.AttrOr("role", ""))
 }

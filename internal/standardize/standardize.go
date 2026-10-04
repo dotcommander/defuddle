@@ -16,6 +16,12 @@ type Options struct {
 	ProcessMath      bool
 	ProcessFootnotes bool
 	ProcessRoles     bool
+	CodeOptions      *elements.CodeBlockProcessingOptions
+	ImageOptions     *elements.ImageProcessingOptions
+	HeadingOptions   *elements.HeadingProcessingOptions
+	MathOptions      *elements.MathProcessingOptions
+	FootnoteOptions  *elements.FootnoteProcessingOptions
+	RoleOptions      *elements.RoleProcessingOptions
 }
 
 // Content standardizes and cleans up the main content element
@@ -92,7 +98,11 @@ func ContentWithOptions(element *goquery.Selection, metadata *metadata.Metadata,
 
 	if options.ProcessFootnotes {
 		// Standardize footnotes and citations (full TS-compatible rewrite)
-		elements.StandardizeFootnotesInScope(doc, element)
+		if options.FootnoteOptions == nil {
+			elements.StandardizeFootnotesInScope(doc, element)
+		} else {
+			elements.ProcessFootnotesInScope(doc, element, options.FootnoteOptions)
+		}
 	}
 
 	// Wrap <code> with white-space:pre not inside <pre>
@@ -100,21 +110,24 @@ func ContentWithOptions(element *goquery.Selection, metadata *metadata.Metadata,
 
 	if options.ProcessRoles {
 		// Convert embedded content to standard formats
-		standardizeElements(element, doc, debug)
+		standardizeElementsWithRoles(element, doc, debug, options.RoleOptions == nil)
+		if options.RoleOptions != nil {
+			elements.ProcessRolesInScope(element, options.RoleOptions)
+		}
 	}
 
 	// Process element-specific enhancements within the extracted content scope
 	if options.ProcessCode {
-		elements.ProcessCodeBlocksInScope(element, nil)
+		elements.ProcessCodeBlocksInScope(element, options.CodeOptions)
 	}
 	if options.ProcessMath {
-		elements.ProcessMathInScope(element, nil)
+		elements.ProcessMathInScope(element, options.MathOptions)
 	}
 	if options.ProcessHeadings {
-		elements.ProcessHeadingsInScope(element, nil)
+		elements.ProcessHeadingsInScope(element, options.HeadingOptions)
 	}
 	if options.ProcessImages {
-		elements.ProcessImagesInScope(element, nil)
+		elements.ProcessImagesInScope(element, options.ImageOptions)
 	}
 
 	// Unwrap special links (javascript:, block-wrapping, section anchors)
@@ -123,7 +136,7 @@ func ContentWithOptions(element *goquery.Selection, metadata *metadata.Metadata,
 	// If not debug mode, do the full cleanup
 	if !debug {
 		// First pass of div flattening
-		flattenWrapperElements(element, doc, debug)
+		flattenWrapperElements(element, doc, debug, options.ProcessRoles && options.RoleOptions != nil)
 
 		// Strip unwanted attributes
 		stripUnwantedAttributes(element, debug)
@@ -144,7 +157,7 @@ func ContentWithOptions(element *goquery.Selection, metadata *metadata.Metadata,
 		removeOrphanedDividers(element)
 
 		// Final pass of div flattening after cleanup operations
-		flattenWrapperElements(element, doc, debug)
+		flattenWrapperElements(element, doc, debug, options.ProcessRoles && options.RoleOptions != nil)
 
 		// Remove orphaned dividers again after second flatten (pass 2)
 		removeOrphanedDividers(element)
