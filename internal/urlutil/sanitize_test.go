@@ -34,15 +34,18 @@ func TestSanitizeUnsafe_RemovesUnsafeElements(t *testing.T) {
 	}
 }
 
-func TestSanitizeUnsafe_PreservesMathMLScript(t *testing.T) {
+func TestSanitizeUnsafe_RemovesScriptsInEveryNamespace(t *testing.T) {
 	t.Parallel()
 
-	sel := parseSelection(t, `<div><math><semantics><annotation-xml encoding="application/xhtml+xml"><script>math data</script></annotation-xml><script>math expression</script></semantics></math><script>alert(1)</script></div>`)
+	sel := parseSelection(t, `<div><math><semantics><annotation-xml encoding="application/xhtml+xml"><script>math data</script></annotation-xml><script>math expression</script><msub><mi>x</mi><mn>1</mn></msub><msup><mi>y</mi><mn>2</mn></msup></semantics></math><script>alert(1)</script></div>`)
 	SanitizeUnsafe(sel)
 	out, err := sel.Html()
 	require.NoError(t, err)
 	assert.NotContains(t, out, "alert(1)")
-	assert.Contains(t, out, "math expression")
+	assert.NotContains(t, out, "math expression")
+	assert.Empty(t, sel.Find("script").Nodes)
+	assert.Equal(t, 1, sel.Find("msub").Length())
+	assert.Equal(t, 1, sel.Find("msup").Length())
 }
 
 func TestSanitizeUnsafe_SanitizesSelectedRoot(t *testing.T) {

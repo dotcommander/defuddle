@@ -31,7 +31,7 @@ func ResolveRelativeURLs(element *goquery.Selection, pageURL string, docBaseHref
 }
 
 // urlAttrs are the element attributes that contain a single resolvable URL.
-var urlAttrs = []string{"href", "src", "poster", "data-src", "data-srcset", "action"}
+var urlAttrs = []string{"href", "src", "poster", "data-src", "action"}
 
 // resolveElementURLs resolves every single-URL attribute and the srcset on el
 // against baseURL.
@@ -46,9 +46,11 @@ func resolveElementURLs(el *goquery.Selection, baseURL *url.URL) {
 		}
 	}
 
-	// Handle srcset (comma-separated list of "url descriptor" pairs)
-	if srcset, exists := el.Attr("srcset"); exists && srcset != "" {
-		el.SetAttr("srcset", resolveSrcset(srcset, baseURL))
+	// Both eager and lazy image candidates use the same URL/descriptor grammar.
+	for _, attr := range []string{"srcset", "data-srcset"} {
+		if value, exists := el.Attr(attr); exists && value != "" {
+			el.SetAttr(attr, resolveSrcset(value, baseURL))
+		}
 	}
 }
 
@@ -86,24 +88,16 @@ func resolveURL(raw string, base *url.URL) string {
 // resolveSrcset resolves URLs in an HTML srcset attribute value.
 // Format: "url1 1x, url2 2x" or "url1 300w, url2 600w"
 func resolveSrcset(srcset string, base *url.URL) string {
-	entries := strings.Split(srcset, ",")
-	resolved := make([]string, 0, len(entries))
-
-	for _, entry := range entries {
-		entry = strings.TrimSpace(entry)
-		if entry == "" {
-			continue
+	candidates := parseSrcsetCandidates(srcset)
+	resolved := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		// URL tokens may contain commas (notably data URLs); descriptors begin
+		// at the first ASCII whitespace. Keep the descriptor bytes intact.
+		end := 0
+		for end < len(candidate.raw) && !isASCIIWhitespace(candidate.raw[end]) {
+			end++
 		}
-
-		// Split into URL and optional descriptor (e.g. "1x", "300w")
-		parts := strings.Fields(entry)
-		if len(parts) == 0 {
-			continue
-		}
-
-		parts[0] = resolveURL(parts[0], base)
-		resolved = append(resolved, strings.Join(parts, " "))
+		resolved = append(resolved, resolveURL(candidate.raw[:end], base)+candidate.raw[end:])
 	}
-
 	return strings.Join(resolved, ", ")
 }

@@ -9,7 +9,7 @@ import (
 )
 
 // unsafeElementNames are active HTML elements that must never survive in
-// extracted content. MathML script elements are data, not executable HTML.
+// extracted content, regardless of their namespace.
 var unsafeElementNames = map[string]struct{}{
 	"applet":   {},
 	"base":     {},
@@ -89,9 +89,6 @@ func isUnsafeElement(n *html.Node) bool {
 		return false
 	}
 	name := strings.ToLower(n.Data)
-	if name == "script" && n.Namespace == "math" {
-		return false
-	}
 	_, unsafe := unsafeElementNames[name]
 	return unsafe
 }

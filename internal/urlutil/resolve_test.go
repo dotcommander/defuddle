@@ -215,3 +215,27 @@ func TestResolveRelativeURLs(t *testing.T) {
 		})
 	}
 }
+
+func TestResolveRelativeURLs_LazyCandidateLists(t *testing.T) {
+	t.Parallel()
+	const input = `small.png 1x, /large.png 2x, https://cdn.example/a.png 3x, data:image/png;base64,AAAA 4x`
+	const want = `https://example.com/blog/small.png 1x, https://example.com/large.png 2x, https://cdn.example/a.png 3x, data:image/png;base64,AAAA 4x`
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(`<div><img srcset="` + input + `" data-srcset="` + input + `"></div>`))
+	require.NoError(t, err)
+	ResolveRelativeURLs(doc.Find("div"), "https://example.com/blog/post", "")
+	for _, attr := range []string{"srcset", "data-srcset"} {
+		got, exists := doc.Find("img").Attr(attr)
+		require.True(t, exists)
+		assert.Equal(t, want, got)
+	}
+}
+
+func TestResolveRelativeURLs_LazyCandidatesRemainSanitized(t *testing.T) {
+	t.Parallel()
+	sel := parseSelection(t, `<div><img data-srcset="small.png 300w, javascript:alert(1) 600w, data:image/png;base64,AAAA 900w"></div>`)
+	ResolveRelativeURLs(sel, "https://example.com/blog/post", "")
+	SanitizeUnsafe(sel)
+	got, exists := sel.Find("img").Attr("data-srcset")
+	require.True(t, exists)
+	assert.Equal(t, `https://example.com/blog/small.png 300w, data:image/png;base64,AAAA 900w`, got)
+}
