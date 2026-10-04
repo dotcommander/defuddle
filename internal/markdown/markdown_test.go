@@ -1,9 +1,11 @@
 package markdown
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
+	"github.com/JohannesKaufmann/html-to-markdown/v2/converter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/html"
@@ -324,4 +326,90 @@ func TestConvertHTML_StyleRemoved(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotContains(t, md, ".foo")
 	assert.Contains(t, md, "Content")
+}
+
+func TestRemoveEmptyLinks_BalancedDestinationsAndLiteralCode(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ name, input, want string }{
+		{"nested", "before[](https://example.com/a(b(c)))after", "beforeafter"},
+		{"escaped", `before[](a\(b\))after`, "beforeafter"},
+		{"double title", `before[](url "title (detail)")after`, "beforeafter"},
+		{"single title", `before[](url 'title ) detail')after`, "beforeafter"},
+		{"parenthesized title", "before[](url (title (detail)))after", "beforeafter"},
+		{"angle destination", "before[](<url(with spaces)>)after", "beforeafter"},
+		{"whitespace", "before \n[](url)\n after", "before \n\n after"},
+		{"empty destination", "before[]()after", "beforeafter"},
+		{"image", "before![](a(b))after", "before![](a(b))after"},
+		{"inline code", "before `[](a(b))` after", "before `[](a(b))` after"},
+		{"multiple ticks", "before `` literal ` [](a(b)) `` after", "before `` literal ` [](a(b)) `` after"},
+		{"escaped opener", `before\[](url)after`, `before\[](url)after`},
+		{"unfinished", "before[](a(b)after", "before[](a(b)after"},
+		{"consecutive", "a[](x(b))[](c)d", "ad"},
+		{"fenced", "```md\n[](a(b))\n```\n[](gone)", "```md\n[](a(b))\n```\n"},
+		{"tilde fenced", "   ~~~~md\n[](a(b))\n   ~~~~\n[](gone)", "   ~~~~md\n[](a(b))\n   ~~~~\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, removeEmptyLinks(tc.input))
+		})
+	}
+}
+
+// Embed the unused context methods so this fixture exercises precisely the
+// complex-link renderer and its child traversal, including panic unwinding.
+type complexLinkTestContext struct {
+	converter.Context
+	calls            int
+	panicOnRemainder bool
+}
+
+func (c *complexLinkTestContext) RenderChildNodes(_ converter.Context, w converter.Writer, n *html.Node) {
+	c.calls++
+	if c.panicOnRemainder && c.calls == 2 {
+		panic("render failure")
+	}
+	var writeText func(*html.Node)
+	writeText = func(node *html.Node) {
+		if node.Type == html.TextNode {
+			w.WriteString(node.Data)
+		}
+		for child := node.FirstChild; child != nil; child = child.NextSibling {
+			writeText(child)
+		}
+	}
+	for child := n.FirstChild; child != nil; child = child.NextSibling {
+		writeText(child)
+	}
+}
+
+func TestRenderComplexLink_RestoresChildTopology(t *testing.T) {
+	t.Parallel()
+	for _, fail := range []bool{false, true} {
+		t.Run(map[bool]string{false: "success", true: "render panic"}[fail], func(t *testing.T) {
+			n := &html.Node{Type: html.ElementNode, Data: "a", Attr: []html.Attribute{{Key: "href", Val: "https://example.com/article"}}}
+			before := &html.Node{Type: html.TextNode, Data: "Before "}
+			heading := &html.Node{Type: html.ElementNode, Data: "h2"}
+			heading.AppendChild(&html.Node{Type: html.TextNode, Data: "Heading"})
+			after := &html.Node{Type: html.TextNode, Data: " After"}
+			for _, child := range []*html.Node{before, heading, after} {
+				n.AppendChild(child)
+			}
+			ctx := &complexLinkTestContext{panicOnRemainder: fail}
+			var out bytes.Buffer
+			if fail {
+				assert.Panics(t, func() { renderComplexLink(ctx, &out, n) })
+			} else {
+				renderComplexLink(ctx, &out, n)
+				assert.Equal(t, 1, strings.Count(out.String(), "Heading"))
+				assert.Equal(t, 1, strings.Count(out.String(), "Before"))
+				assert.Equal(t, 1, strings.Count(out.String(), "After"))
+			}
+			assert.Same(t, before, n.FirstChild)
+			assert.Same(t, after, n.LastChild)
+			assert.Same(t, heading, before.NextSibling)
+			assert.Same(t, before, heading.PrevSibling)
+			assert.Same(t, after, heading.NextSibling)
+			assert.Same(t, heading, after.PrevSibling)
+			assert.Same(t, n, heading.Parent)
+		})
+	}
 }

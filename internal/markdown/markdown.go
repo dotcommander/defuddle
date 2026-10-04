@@ -19,7 +19,6 @@ import (
 // Pre-compiled patterns for post-processing.
 var (
 	leadingTitleRe      = regexp.MustCompile(`^#\s+.+\n+`)
-	emptyLinkRe         = regexp.MustCompile(`\n*([^!]|^)\[]\([^)]+\)\n*`)
 	tripleNewline       = regexp.MustCompile(`\n{3,}`)
 	bangBeforeImageRe   = regexp.MustCompile(`!(!\[|\[!\[)`)
 	wbrTagRe            = regexp.MustCompile(`(?i)<wbr\s*/?>`)
@@ -68,9 +67,8 @@ func postProcess(md string) string {
 	// Remove the title from the beginning of the content if it exists
 	md = leadingTitleRe.ReplaceAllString(md, "")
 
-	// Remove any empty links [](url) but not image links ![](url).
-	// Group 1 captures the non-! character before [ so we can restore it.
-	md = emptyLinkRe.ReplaceAllString(md, "$1")
+	// Remove complete empty links while preserving images and literal code.
+	md = removeEmptyLinks(md)
 
 	// Add a space between exclamation marks and image syntax ![
 	// e.g. "Yey!![IMG](url)" becomes "Yey! ![IMG](url)"
@@ -149,4 +147,136 @@ func (p *defuddlePlugin) Init(conv *converter.Converter) error {
 	conv.Register.RendererFor("sub", converter.TagTypeInline, renderKeepHTML, converter.PriorityEarly)
 
 	return nil
+}
+
+// removeEmptyLinks scans Markdown without rewriting destinations or adjacent
+// whitespace. Backslash escapes, code spans and fenced code stay literal.
+func removeEmptyLinks(md string) string {
+	var out strings.Builder
+	var fence byte
+	fenceLength := 0
+	for i := 0; i < len(md); {
+		if i == 0 || md[i-1] == '\n' {
+			lineEnd := strings.IndexByte(md[i:], '\n')
+			if lineEnd < 0 {
+				lineEnd = len(md)
+			} else {
+				lineEnd += i + 1
+			}
+			start := i
+			for start < lineEnd && start-i < 3 && md[start] == ' ' {
+				start++
+			}
+			end := start
+			if start < lineEnd && (md[start] == '`' || md[start] == '~') {
+				for end < lineEnd && md[end] == md[start] {
+					end++
+				}
+			}
+			if fence != 0 {
+				if end-start >= fenceLength && md[start] == fence && strings.TrimSpace(md[end:lineEnd]) == "" {
+					fence = 0
+				}
+				out.WriteString(md[i:lineEnd])
+				i = lineEnd
+				continue
+			}
+			if end-start >= 3 {
+				fence, fenceLength = md[start], end-start
+				out.WriteString(md[i:lineEnd])
+				i = lineEnd
+				continue
+			}
+		}
+		if md[i] == '\\' && i+1 < len(md) {
+			out.WriteString(md[i : i+2])
+			i += 2
+			continue
+		}
+		if md[i] == '`' {
+			end := i
+			for end < len(md) && md[end] == '`' {
+				end++
+			}
+			if close := codeSpanEnd(md, end, end-i); close >= 0 {
+				out.WriteString(md[i:close])
+				i = close
+				continue
+			}
+			out.WriteString(md[i:end])
+			i = end
+			continue
+		}
+		if strings.HasPrefix(md[i:], "[](") && (i == 0 || md[i-1] != '!') {
+			if end := emptyLinkEnd(md, i+3); end >= 0 {
+				i = end
+				continue
+			}
+			// An unfinished destination is retained, along with its remainder.
+			out.WriteString(md[i:])
+			break
+		}
+		out.WriteByte(md[i])
+		i++
+	}
+	return out.String()
+}
+
+func codeSpanEnd(md string, start, length int) int {
+	for i := start; i < len(md); {
+		if md[i] != '`' {
+			i++
+			continue
+		}
+		end := i
+		for end < len(md) && md[end] == '`' {
+			end++
+		}
+		if end-i == length {
+			return end
+		}
+		i = end
+	}
+	return -1
+}
+
+// emptyLinkEnd finds the closing delimiter with balanced destination
+// parentheses. Quoted titles and angle destinations can contain parentheses.
+func emptyLinkEnd(md string, start int) int {
+	depth := 1
+	var quote byte
+	angle := false
+	for i := start; i < len(md); i++ {
+		c := md[i]
+		if c == '\\' && i+1 < len(md) {
+			i++
+			continue
+		}
+		if quote != 0 {
+			if c == quote {
+				quote = 0
+			}
+			continue
+		}
+		if angle {
+			if c == '>' {
+				angle = false
+			}
+			continue
+		}
+		switch {
+		case c == '<' && (i == start || md[i-1] == ' ' || md[i-1] == '\n'):
+			angle = true
+		case (c == '\'' || c == '"') && i > start && (md[i-1] == ' ' || md[i-1] == '\n' || md[i-1] == '\t'):
+			quote = c
+		case c == '(':
+			depth++
+		case c == ')':
+			depth--
+			if depth == 0 {
+				return i + 1
+			}
+		}
+	}
+	return -1
 }

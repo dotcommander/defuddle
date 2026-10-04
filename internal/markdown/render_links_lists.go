@@ -105,7 +105,9 @@ func renderComplexLink(ctx converter.Context, w converter.Writer, n *html.Node) 
 
 	// Remove heading from parent temporarily to render remaining content
 	if headingNode != nil {
+		next := headingNode.NextSibling
 		n.RemoveChild(headingNode)
+		defer n.InsertBefore(headingNode, next)
 	}
 	var remainBuf bytes.Buffer
 	ctx.RenderChildNodes(ctx, &remainBuf, n)
