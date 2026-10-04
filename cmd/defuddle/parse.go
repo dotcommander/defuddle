@@ -11,7 +11,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -124,7 +126,7 @@ func executeParseContent(ctx context.Context, opts *ParseOptions) error {
 func buildDefuddleOptions(opts *ParseOptions) *defuddle.Options {
 	o := &defuddle.Options{
 		Debug:            opts.Debug,
-		URL:              opts.Source,
+		URL:              sourceBaseURL(opts.Source),
 		Markdown:         opts.Markdown,
 		SeparateMarkdown: opts.Markdown,
 		RemoveImages:     opts.RemoveImages,
@@ -138,6 +140,27 @@ func buildDefuddleOptions(opts *ParseOptions) *defuddle.Options {
 		o.RemoveContentPatterns = new(bool)
 	}
 	return o
+}
+
+// sourceBaseURL returns the base URL used to resolve relative URLs in
+// extracted content. HTTP(S) sources are their own base; a local file input
+// resolves against a file:// URL derived from its absolute path, matching the
+// upstream TypeScript CLI (JSDOM.fromFile exposes a file:// document URL and
+// the TS CLI passes no explicit URL for local files). Stdin ("-") has no
+// meaningful base: an empty URL leaves relative references untouched instead
+// of fabricating malformed ones.
+func sourceBaseURL(source string) string {
+	switch {
+	case source == "", source == "-":
+		return ""
+	case strings.HasPrefix(source, "http://") || strings.HasPrefix(source, "https://"):
+		return source
+	}
+	abs, err := filepath.Abs(source)
+	if err != nil {
+		return ""
+	}
+	return (&url.URL{Scheme: "file", Path: abs}).String()
 }
 
 // loadResult fetches and parses content from stdin, a URL, or a local file.

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -67,6 +68,27 @@ func TestBuildHTTPClient_InvalidHeader(t *testing.T) {
 	_, err := buildHTTPClient("", []string{"no-colon"}, "", 30*time.Second)
 	if err == nil {
 		t.Fatalf("expected error for invalid header, got nil")
+	}
+}
+
+func TestBuildHTTPClient_ProxySchemeValidation(t *testing.T) {
+	t.Parallel()
+
+	for _, proxy := range []string{"ftp://127.0.0.1:1", "socks4://127.0.0.1:1", "/no/scheme"} {
+		_, err := buildHTTPClient("", nil, proxy, 30*time.Second)
+		if !errors.Is(err, ErrInvalidProxyScheme) {
+			t.Fatalf("proxy %q: expected ErrInvalidProxyScheme, got %v", proxy, err)
+		}
+	}
+
+	for _, proxy := range []string{"http://127.0.0.1:8080", "https://127.0.0.1:8443", "socks5://127.0.0.1:1080"} {
+		c, err := buildHTTPClient("", nil, proxy, 30*time.Second)
+		if err != nil {
+			t.Fatalf("proxy %q: unexpected error: %v", proxy, err)
+		}
+		if c == nil || c.client == nil {
+			t.Fatalf("proxy %q: expected constructed client", proxy)
+		}
 	}
 }
 

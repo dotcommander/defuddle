@@ -53,6 +53,8 @@ curl -s https://example.com | defuddle parse -   # explicit stdin
 
 Local input (files and stdin) is capped at **5 MiB**; larger input returns an error wrapping `defuddle.ErrTooLarge` with the source path or `stdin` in the message. URL fetches cap downloaded bytes before charset decoding. Rendered snapshots over **5 MiB** fail with `defuddle.ErrTooLarge` (exit 2 for explicit `--render`); no partial HTML is parsed. With `--render-auto`, a render-cap error falls back to the capped static fetch, just like other render-stage failures.
 
+For a local file source, relative URLs in the extracted content resolve against a `file://` URL derived from the file's absolute path (matching the TypeScript CLI's `JSDOM.fromFile` behavior); parsing from stdin leaves relative URLs untouched.
+
 ### Output formats
 
 By default `parse` prints the extracted **HTML** content to stdout. Change the format with:
@@ -117,7 +119,7 @@ defuddle parse https://example.com --proxy http://localhost:8080
 defuddle parse https://example.com --proxy socks5://localhost:1080
 ```
 
-Headers must use the `Key: Value` form. Invalid headers are rejected before any HTTP request is issued. Proxy URLs accept `http://`, `https://`, and `socks5://` schemes.
+Headers must use the `Key: Value` form. Invalid headers are rejected before any HTTP request is issued. Proxy URLs accept `http://`, `https://`, and `socks5://` schemes; any other scheme is rejected as invalid input (exit 2) before a request is made.
 
 Fetch `--timeout` and `--render-timeout` are independent stage budgets. Parsing after a successful stage uses the caller context. Caller cancellation stops rendering and automatic fallback; a render-stage timeout alone still permits `--render-auto` static fallback. Static URL parsing resolves relative URLs against the final response URL after redirects. Rendered snapshots retain the configured source URL as their base.
 
@@ -271,10 +273,10 @@ defuddle parse https://example.com --json | jq '{title, author, wordCount}'
 
 ```bash
 defuddle --version
-# defuddle version 0.7.3 (commit: abc1234, built: 2026-06-16)
+# v0.15.0 (commit: 4f1c2ab, built: 2026-10-04)
 ```
 
-The version, commit, and build date are injected at build time; a plain `go build` reports `dev`.
+The output format is `<version> (commit: <hash>, built: <date>)`. The commit hash and build date are injected at build time; when they are not injected, both print as `unknown` (for example `dev (commit: unknown, built: unknown)` from a plain `go build`).
 
 ## Examples
 

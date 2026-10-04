@@ -42,6 +42,7 @@ var (
 	ErrParseUsage          = errors.New("usage: defuddle parse <url|file> (or pipe HTML via stdin)")
 	ErrInvalidMatchURL     = errors.New("invalid match URL")
 	ErrInvalidConcurrency  = errors.New("concurrency must be at least 1")
+	ErrInvalidProxyScheme  = errors.New("invalid proxy URL scheme")
 	ErrCLIUsage            = errors.New("invalid command line")
 )
 

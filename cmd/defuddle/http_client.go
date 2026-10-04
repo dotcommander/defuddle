@@ -7,6 +7,7 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"net/url"
 	"time"
@@ -54,6 +55,11 @@ func buildHTTPClient(userAgent string, headers []string, proxy string, timeout t
 		proxyURL, err := url.Parse(proxy)
 		if err != nil {
 			return nil, err
+		}
+		switch proxyURL.Scheme {
+		case "http", "https", "socks5":
+		default:
+			return nil, fmt.Errorf("%w: %q (accepted schemes: http, https, socks5)", ErrInvalidProxyScheme, proxy)
 		}
 		transport.Proxy = http.ProxyURL(proxyURL)
 	}

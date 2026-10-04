@@ -57,6 +57,7 @@ func exitCodeFor(err error) int {
 		errors.Is(err, ErrParseUsage),
 		errors.Is(err, ErrInvalidMatchURL),
 		errors.Is(err, ErrInvalidConcurrency),
+		errors.Is(err, ErrInvalidProxyScheme),
 		errors.Is(err, defuddle.ErrNotHTML),
 		errors.Is(err, defuddle.ErrTooLarge):
 		return exitValidation

@@ -8,6 +8,22 @@ All notable changes to this project will be documented in this file. The format 
 
 ## [Unreleased]
 
+### Fixed
+
+- `defuddle parse <file>` now resolves relative URLs in extracted content
+  against a `file://` URL derived from the input path (matching the TypeScript
+  CLI's local-file behavior) instead of fabricating malformed bases; parsing
+  from stdin leaves relative URLs untouched.
+- `--proxy` now validates its scheme (`http`, `https`, `socks5`) before any
+  request; other schemes fail as invalid input (exit 2) instead of surfacing
+  a connection error later.
+
+### Documentation
+
+- Corrected the `--version` output example in `docs/cli.md` to the actual
+  `<version> (commit: <hash>, built: <date>)` format and documented local-file
+  relative-URL resolution and `--proxy` scheme validation.
+
 ---
 
 ## [v0.15.0] — 2026-10-04
