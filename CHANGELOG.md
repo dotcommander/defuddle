@@ -10,6 +10,20 @@ All notable changes to this project will be documented in this file. The format 
 
 ---
 
+## [v0.16.1] — 2026-10-31
+
+### Fixed
+
+- Recover a single clean semantic article when generic extraction retains surrounding
+  clutter or drops its heading. Leave ambiguous or internally noisy articles on
+  the normal extraction path, and preserve site-specific and explicit selection.
+
+### Changed
+
+- Refresh library and CLI dependencies, including the Chrome rendering API.
+
+---
+
 ## [v0.16.0] — 2026-10-04
 
 ### Changed

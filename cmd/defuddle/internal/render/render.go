@@ -82,8 +82,7 @@ func RenderHTML(ctx context.Context, url string, cfg Config) (string, error) {
 	)
 	defer cancelBrowser()
 
-	var html string
-	tasks := chromedp.Tasks{chromedp.Navigate(url)}
+	tasks := []chromedp.Action[chromedp.Void]{chromedp.Navigate(url)}
 	if cfg.Wait == WaitIdle {
 		delay := cfg.IdleDelay
 		if delay <= 0 {
@@ -95,11 +94,14 @@ func RenderHTML(ctx context.Context, url string, cfg Config) (string, error) {
 		tasks = append(tasks, chromedp.Sleep(cfg.Settle))
 	}
 	if cfg.WaitForSelector != "" {
-		tasks = append(tasks, chromedp.WaitVisible(cfg.WaitForSelector, chromedp.ByQuery))
+		tasks = append(tasks, chromedp.WaitVisible(chromedp.CSS(cfg.WaitForSelector)))
 	}
-	tasks = append(tasks, chromedp.OuterHTML("html", &html, chromedp.ByQuery))
-
-	if err := chromedp.Run(browserCtx, tasks); err != nil {
+	err := chromedp.Do(browserCtx, tasks...)
+	var html string
+	if err == nil {
+		html, err = chromedp.Run(browserCtx, chromedp.OuterHTML(chromedp.CSS("html")))
+	}
+	if err != nil {
 		if ctx.Err() != nil {
 			return "", renderContextError(url, ctx.Err())
 		}

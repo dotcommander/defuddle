@@ -58,6 +58,10 @@ func (d *Defuddle) parseInternal(ctx context.Context, overrideOptions *Options) 
 		}
 		return result, nil
 	}
+	var semanticArticle *goquery.Selection
+	if articles := root.Find("article"); articles.Length() == 1 {
+		semanticArticle = articles.First().Clone()
+	}
 	standardize.ContentWithOptions(root, meta, doc, standardizeOptions(options), false)
 	snapshot := root.Clone()
 	manifest, err := prepareRichContent(doc, root)
@@ -71,6 +75,7 @@ func (d *Defuddle) parseInternal(ctx context.Context, overrideOptions *Options) 
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	sourceTitle := meta.Title
 	var content *goquery.Selection
 	if reason == "" {
 		fillEngineMetadata(meta, upstream)
@@ -84,6 +89,9 @@ func (d *Defuddle) parseInternal(ctx context.Context, overrideOptions *Options) 
 	if reason != "" {
 		content = snapshot
 		d.debugger.AddProcessingStep("extraction_recovery", "Used marker-free body snapshot", 1, reason)
+	} else if candidate, ok := recoverSemanticArticle(semanticArticle, content, meta, sourceTitle, doc, options); ok {
+		content = candidate
+		d.debugger.AddProcessingStep("semantic_article_recovery", "Used the sole clean article after generic extraction lost its heading or included outside content", 1, "")
 	} else {
 		d.debugger.AddProcessingStep("trafilatura", "Used Trafilatura extraction", 1, "")
 	}
