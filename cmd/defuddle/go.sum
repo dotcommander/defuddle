@@ -18,8 +18,8 @@ github.com/chromedp/cdproto v0.159.0 h1:wepTaKq5AGTwIxXh6h5bESQcvcfnSb2ItnFChA62
 github.com/chromedp/cdproto v0.159.0/go.mod h1:h68JaIuFr9o3yiayxEYhBdvaxgYO3shDrPSYhNlyfu0=
 github.com/chromedp/chromedp v0.21.0 h1:nVHgS2LHyhZJ1l3BWRbG2eFIFYiJMnvkJbELbd8WBoQ=
 github.com/chromedp/chromedp v0.21.0/go.mod h1:6z1Y5FdKUxRzxx2qcC5h1xjaBJrSWrZp1mjgITfNZig=
-github.com/dotcommander/defuddle v0.16.0 h1:eLSk9Q2fRg+KD2tPCFAJ+2fUQWIZc3d9JA72p90f9Ts=
-github.com/dotcommander/defuddle v0.16.0/go.mod h1:YWAEDtmF+ZyLIE5OgY+Xf+PkkkGB3XQ2G9h0xwRgiZo=
+github.com/dotcommander/defuddle v0.16.1 h1:Hk5tNdYsIfqpdv5g0I7r54M370z0l/eSNT9AS0/80bk=
+github.com/dotcommander/defuddle v0.16.1/go.mod h1:j20/O62BmYAeZk1iIF64wX1eUcNbVkz6Q8WKPskm3sQ=
 github.com/forPelevin/gomoji v1.4.1 h1:7U+Bl8o6RV/dOQz7coQFWj/jX6Ram6/cWFOuFDEPEUo=
 github.com/forPelevin/gomoji v1.4.1/go.mod h1:mM6GtmCgpoQP2usDArc6GjbXrti5+FffolyQfGgPboQ=
 github.com/go-json-experiment/json v0.0.0-20260820222146-c27c302e5fc3 h1:UADEEmDKgfXbtnGJZ97beY5XLo9ZechG1nlU4KnRrkE=
