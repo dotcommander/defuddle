@@ -25,10 +25,10 @@ Update the CLI library requirement before creating either release tag:
 
 ```bash
 cd cmd/defuddle
-go mod edit -require=github.com/dotcommander/defuddle@v0.16.0
+go mod edit -require=github.com/dotcommander/defuddle@v0.16.1
 cd ../..
 git add cmd/defuddle/go.mod
-git commit -m "build(cli): require defuddle v0.16.0"
+git commit -m "build(cli): require defuddle v0.16.1"
 ```
 
 The CLI's new library version cannot resolve remotely until the root tag is
@@ -36,7 +36,7 @@ published. For prepublication workspace build/test/vet/lint gates, add this
 **temporary**, version-qualified mapping to the actual `go.work`:
 
 ```go
-replace github.com/dotcommander/defuddle v0.16.0 => .
+replace github.com/dotcommander/defuddle v0.16.1 => .
 ```
 
 Remove only that mapping after the gates pass; never commit it. Required workspace
@@ -55,7 +55,7 @@ standard-library vulnerabilities.
 ## Publish both modules
 
 ```bash
-task tag VERSION=v0.16.0
+task tag VERSION=v0.16.1
 ```
 
 `task tag` deliberately releases in this order:
@@ -79,13 +79,13 @@ after the version resolves; do not change the already-correct CLI version pin.
 
 When a verifier has already completed the applicable checks on the unchanged
 release tree, reuse those receipts rather than rerunning `task tag`'s gates.
-Create the annotated root `v0.16.0` tag on the prepared commit and push the branch
+Create the annotated root `v0.16.1` tag on the prepared commit and push the branch
 and root tag. Then, inside `cmd/defuddle`, run the standalone phase with
 `GOWORK=off`: tidy, build, tests, vet, configured lint, and module verification.
 Commit resulting module sums and workspace-maintained `go.work.sum` before creating and
-pushing `cmd/defuddle/v0.16.0`. Do not alter the already-published root tag.
+pushing `cmd/defuddle/v0.16.1`. Do not alter the already-published root tag.
 
-Create a GitHub release for the root tag with the v0.16.0 changelog notes. The
+Create a GitHub release for the root tag with the v0.16.1 changelog notes. The
 CLI tag publishes the nested Go module; it does not require a second GitHub
 release. Consumer projects such as jinn and webfetch retain their existing calls
 and can bump the library dependency after publication; no engine migration is
@@ -94,10 +94,10 @@ needed in those projects.
 ## Verify the public release
 
 ```bash
-git ls-remote --tags origin v0.16.0 cmd/defuddle/v0.16.0
+git ls-remote --tags origin v0.16.1 cmd/defuddle/v0.16.1
 # Use a scoped GOBIN to avoid replacing an existing installation.
 release_bin=$(mktemp -d)
-GOBIN="$release_bin" GOWORK=off go install github.com/dotcommander/defuddle/cmd/defuddle@v0.16.0
+GOBIN="$release_bin" GOWORK=off go install github.com/dotcommander/defuddle/cmd/defuddle@v0.16.1
 "$release_bin/defuddle" --version
 ```
 
