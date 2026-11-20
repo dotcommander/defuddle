@@ -2,8 +2,10 @@ package markdown
 
 import (
 	"bytes"
-	"fmt"
+	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/JohannesKaufmann/html-to-markdown/v2/converter"
 	"golang.org/x/net/html"
@@ -14,16 +16,18 @@ func renderCallout(ctx converter.Context, w converter.Writer, n *html.Node) conv
 		return converter.RenderTryNext
 	}
 	class := getAttr(n, "class")
-	if !strings.Contains(class, "markdown-alert") {
+	if !hasExactClass(class, "markdown-alert") {
 		return converter.RenderTryNext
 	}
 
 	// Extract alert type from class (e.g. markdown-alert-note → NOTE)
 	alertType := "NOTE"
 	for _, token := range strings.Fields(class) {
-		if strings.HasPrefix(token, "markdown-alert-") && token != "markdown-alert" {
-			alertType = strings.ToUpper(strings.TrimPrefix(token, "markdown-alert-"))
-			break
+		if strings.HasPrefix(token, "markdown-alert-") && token != "markdown-alert-title" {
+			if suffix := strings.TrimPrefix(token, "markdown-alert-"); suffix != "" {
+				alertType = strings.ToUpper(suffix)
+				break
+			}
 		}
 	}
 
@@ -32,11 +36,8 @@ func renderCallout(ctx converter.Context, w converter.Writer, n *html.Node) conv
 	content := strings.TrimSpace(buf.String())
 	// Remove the alert title label (GitHub renders it as ".markdown-alert-title")
 	// which appears as the first word in the extracted text. Strip case-insensitively
-	// since the DOM may contain "Note", "NOTE", etc.
-	if strings.HasPrefix(strings.ToUpper(content), alertType) {
-		content = strings.TrimSpace(content[len(alertType):])
-	}
-	content = strings.TrimSpace(content)
+	// on a token boundary so words like "Notebook" or multi-byte characters are safe.
+	content = stripLeadingAlertTitle(content, alertType)
 
 	lines := strings.Split(content, "\n")
 	w.WriteString("\n> [!" + alertType + "]\n")
@@ -45,6 +46,23 @@ func renderCallout(ctx converter.Context, w converter.Writer, n *html.Node) conv
 	}
 	w.WriteString("\n")
 	return converter.RenderSuccess
+}
+
+func stripLeadingAlertTitle(content, alertType string) string {
+	if content == "" || alertType == "" {
+		return content
+	}
+	end := strings.IndexFunc(content, unicode.IsSpace)
+	firstToken := content
+	rest := ""
+	if end >= 0 {
+		firstToken = content[:end]
+		rest = content[end:]
+	}
+	if strings.EqualFold(firstToken, alertType) {
+		return strings.TrimSpace(rest)
+	}
+	return content
 }
 
 func renderCalloutBlockquote(ctx converter.Context, w converter.Writer, n *html.Node) converter.RenderStatus {
@@ -56,7 +74,8 @@ func renderCalloutBlockquote(ctx converter.Context, w converter.Writer, n *html.
 		return converter.RenderTryNext
 	}
 
-	title := strings.ToUpper(calloutType[:1]) + calloutType[1:]
+	firstRune, size := utf8.DecodeRuneInString(calloutType)
+	title := strings.ToUpper(string(firstRune)) + calloutType[size:]
 	var buf bytes.Buffer
 	ctx.RenderChildNodes(ctx, &buf, n)
 	content := strings.TrimSpace(buf.String())
@@ -75,18 +94,22 @@ func renderImage(_ converter.Context, w converter.Writer, n *html.Node) converte
 		return converter.RenderTryNext
 	}
 
-	alt := getAttr(n, "alt")
+	alt := escapeMarkdownAlt(getAttr(n, "alt"))
 	src := getBestImageSrc(n)
 	if src == "" {
 		return converter.RenderTryNext
 	}
 	title := getAttr(n, "title")
-	titlePart := ""
-	if title != "" {
-		titlePart = ` "` + title + `"`
-	}
-	w.WriteString("![" + alt + "](" + src + titlePart + ")")
+	w.WriteString("![" + alt + "](" + formatMarkdownLinkDestination(src) + formatMarkdownLinkTitle(title) + ")")
 	return converter.RenderSuccess
+}
+
+func escapeMarkdownAlt(alt string) string {
+	if alt == "" {
+		return ""
+	}
+	alt = linkTitleNewlineRe.ReplaceAllString(alt, " ")
+	return strings.NewReplacer("[", `\[`, "]", `\]`).Replace(alt)
 }
 
 func renderKeepHTML(_ converter.Context, w converter.Writer, n *html.Node) converter.RenderStatus {
@@ -125,6 +148,15 @@ func getAttr(n *html.Node, key string) string {
 		}
 	}
 	return ""
+}
+
+func hasAttr(n *html.Node, key string) bool {
+	for _, a := range n.Attr {
+		if a.Key == key {
+			return true
+		}
+	}
+	return false
 }
 
 // extractLangFromClass extracts a language identifier from CSS class tokens
@@ -172,31 +204,57 @@ func getBestImageSrc(n *html.Node) string {
 	return getAttr(n, "src")
 }
 
-// bestSrcsetURL returns the URL with the largest width descriptor in a srcset,
-// or "" if none can be parsed.
+// bestSrcsetURL parses an HTML srcset candidate list and returns the URL with
+// the largest width descriptor, or "" if none can be parsed.
 func bestSrcsetURL(srcset string) string {
 	var bestURL string
 	var bestWidth int
-	var urlParts []string
 
-	for _, token := range strings.Fields(strings.TrimSpace(srcset)) {
-		if m := widthDescriptorRe.FindStringSubmatch(token); m != nil {
-			width := 0
-			fmt.Sscanf(m[1], "%d", &width)
-			if len(urlParts) > 0 && width > bestWidth {
-				u := strings.TrimLeft(strings.Join(urlParts, " "), ", ")
-				if u != "" {
-					bestWidth = width
-					bestURL = u
-				}
-			}
-			urlParts = nil
-		} else if densityDescriptorRe.MatchString(token) {
-			// Density descriptor (e.g. 2x) — skip
-			urlParts = nil
+	s := srcset
+	for len(s) > 0 {
+		s = strings.TrimLeft(s, " \t\n\r\f,")
+		if len(s) == 0 {
+			break
+		}
+
+		wsIdx := strings.IndexAny(s, " \t\n\r\f")
+		var rawURL string
+		if wsIdx < 0 {
+			rawURL = s
+			s = ""
 		} else {
-			urlParts = append(urlParts, token)
+			rawURL = s[:wsIdx]
+			s = s[wsIdx:]
+		}
+
+		// A trailing comma ends a descriptor-less candidate; internal commas
+		// (e.g. CDN transform paths like w_424,c_limit,f_webp) stay part of rawURL.
+		if strings.HasSuffix(rawURL, ",") {
+			continue
+		}
+
+		s = strings.TrimLeft(s, " \t\n\r\f")
+		if len(s) == 0 {
+			break
+		}
+
+		var desc string
+		if commaIdx := strings.IndexByte(s, ','); commaIdx >= 0 {
+			desc = strings.TrimSpace(s[:commaIdx])
+			s = s[commaIdx+1:]
+		} else {
+			desc = strings.TrimSpace(s)
+			s = ""
+		}
+
+		if m := widthDescriptorRe.FindStringSubmatch(desc); m != nil {
+			width, err := strconv.Atoi(m[1])
+			if err == nil && width > bestWidth {
+				bestWidth = width
+				bestURL = rawURL
+			}
 		}
 	}
+
 	return bestURL
 }

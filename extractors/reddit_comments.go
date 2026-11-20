@@ -3,6 +3,7 @@ package extractors
 import (
 	"log/slog"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
@@ -31,10 +32,6 @@ func (r *RedditExtractor) extractComments() string {
 			"div[data-testid='comment']",
 			".comment",
 			".comment-area .comment",
-			"div[data-click-id='text']",
-			"div[data-click-id='body']",
-			"div[id^='thing_t3_']", // Reddit post format
-			".thing.link",          // Old Reddit format
 		}
 
 		if sel := firstMatchingSelection(r.document, redditCommentFallbacks); sel.Length() > 0 {
@@ -138,6 +135,9 @@ func (r *RedditExtractor) processComments(comments []*goquery.Selection) string 
 
 		contentElement := comment.Find(`[slot="comment"]`).First()
 		content, _ := contentElement.Html()
+		if strings.TrimSpace(author) == "" && strings.TrimSpace(content) == "" {
+			continue
+		}
 
 		// Get timestamp from faceplate-timeago element.
 		timeElement := comment.Find("faceplate-timeago").First()
@@ -149,9 +149,9 @@ func (r *RedditExtractor) processComments(comments []*goquery.Selection) string 
 			if ts, err := strconv.ParseInt(timestamp, 10, 64); err == nil {
 				if ts > 1e12 {
 					// Milliseconds
-					date = time.Unix(ts/1000, 0).Format("2006-01-02")
+					date = time.Unix(ts/1000, 0).UTC().Format("2006-01-02")
 				} else {
-					date = time.Unix(ts, 0).Format("2006-01-02")
+					date = time.Unix(ts, 0).UTC().Format("2006-01-02")
 				}
 			} else if t, err := time.Parse(time.RFC3339, timestamp); err == nil {
 				// ISO 8601 string
@@ -173,6 +173,10 @@ func (r *RedditExtractor) processComments(comments []*goquery.Selection) string 
 		})
 	}
 
-	slog.Debug("Reddit extractor: comments processed", "processedCount", len(comments))
+	if len(data) == 0 {
+		return ""
+	}
+
+	slog.Debug("Reddit extractor: comments processed", "processedCount", len(data))
 	return renderCommentThread(data)
 }

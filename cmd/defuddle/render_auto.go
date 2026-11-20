@@ -25,7 +25,7 @@ func autoRenderAndParse(ctx context.Context, opts *ParseOptions, defuddleOpts *d
 	}
 
 	return parseAutoDocument(ctx, opts, defuddleOpts, document, func(ctx context.Context, o *ParseOptions) (string, error) {
-		return renderToHTML(ctx, effectiveAutoRenderOpts(o))
+		return renderToHTML(ctx, effectiveAutoRenderOpts(o), defuddleOpts.Headers)
 	})
 }
 

@@ -137,8 +137,11 @@ func (p *MathProcessor) getLaTeXFromElement(s *goquery.Selection) string {
 //	  return false;
 //	};
 func (p *MathProcessor) isBlockDisplay(s *goquery.Selection) bool {
-	// Check explicit display attribute in math element
-	mathEl := s.Find("math").First()
+	// Check explicit display attribute on math element itself or descendant
+	mathEl := s.Filter("math").First()
+	if mathEl.Length() == 0 {
+		mathEl = s.Find("math").First()
+	}
 	if mathEl.Length() > 0 {
 		if display, hasDisplay := mathEl.Attr("display"); hasDisplay {
 			return display == "block"

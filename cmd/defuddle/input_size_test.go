@@ -104,3 +104,18 @@ func TestReadFile_OversizedFileRejected(t *testing.T) {
 		t.Errorf("readFile oversized: error should mention path %q, got %q", path, err.Error())
 	}
 }
+
+func TestValidateFilePathConsistentAcrossIO(t *testing.T) {
+	t.Parallel()
+
+	traversal := filepath.Join("..", "outside.html")
+	if _, err := readFile(traversal); !errors.Is(err, ErrDirectoryTraversal) || exitCodeFor(err) != exitValidation {
+		t.Fatalf("readFile traversal: got err=%v code=%d", err, exitCodeFor(err))
+	}
+	if err := writeOutput(traversal, "content"); !errors.Is(err, ErrDirectoryTraversal) || exitCodeFor(err) != exitValidation {
+		t.Fatalf("writeOutput traversal: got err=%v code=%d", err, exitCodeFor(err))
+	}
+	if err := (&BatchOptions{Input: traversal, Concurrency: 1}).Run(); !errors.Is(err, ErrDirectoryTraversal) || exitCodeFor(err) != exitValidation {
+		t.Fatalf("batch -i traversal: got err=%v code=%d", err, exitCodeFor(err))
+	}
+}

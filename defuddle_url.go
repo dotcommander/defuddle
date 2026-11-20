@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"mime"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -48,6 +49,9 @@ func ParseFromURL(ctx context.Context, url string, options *Options) (*Result, e
 			}
 			return nil, fmt.Errorf("fetch %s: %w", url, cause)
 		}
+		if isTimeoutError(err) {
+			return nil, fmt.Errorf("%w: %w", ErrTimeout, err)
+		}
 		return nil, err
 	}
 	if useResponseURL && fetched.URL != "" {
@@ -67,6 +71,14 @@ func ParseFromURL(ctx context.Context, url string, options *Options) (*Result, e
 	}
 
 	return defuddle.Parse(ctx)
+}
+
+func isTimeoutError(err error) bool {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	var netErr net.Error
+	return errors.As(err, &netErr) && netErr.Timeout()
 }
 
 type fetchResult struct {

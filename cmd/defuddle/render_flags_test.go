@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"net/http"
 	"path/filepath"
 	"testing"
 
@@ -123,4 +124,39 @@ func TestPropertyOutputEndsWithNewline(t *testing.T) {
 	out, err := renderOutput(&defuddle.Result{Metadata: defuddle.Metadata{Title: "T"}}, &ParseOptions{Property: "title"})
 	require.NoError(t, err)
 	assert.Equal(t, "T\n", out)
+}
+
+func TestBuildRenderConfigPropagatesProxyAndHeaders(t *testing.T) {
+	t.Parallel()
+
+	headers := http.Header{
+		"Authorization": []string{"Bearer tok"},
+		"User-Agent":    []string{"FetchUA/1.0"},
+	}
+	opts := &ParseOptions{
+		Proxy:    "http://127.0.0.1:8080",
+		RenderUA: "RenderUA/2.0",
+	}
+	cfg := buildRenderConfig(opts, headers)
+	assert.Equal(t, "http://127.0.0.1:8080", cfg.Proxy)
+	assert.Equal(t, "RenderUA/2.0", cfg.UserAgent)
+	assert.Equal(t, "Bearer tok", cfg.Headers.Get("Authorization"))
+	assert.Empty(t, cfg.Headers.Get("User-Agent"), "RenderUA must take precedence over fetch User-Agent header")
+	assert.Equal(t, "FetchUA/1.0", headers.Get("User-Agent"), "caller headers must not be mutated")
+}
+
+func TestPropertyContentMarkdownEnablesMarkdown(t *testing.T) {
+	opts := &ParseOptions{
+		Source:   writeFixture(t),
+		Property: "contentMarkdown",
+	}
+	defuddleOpts := buildDefuddleOptions(opts)
+	assert.True(t, defuddleOpts.Markdown)
+	assert.True(t, defuddleOpts.SeparateMarkdown)
+
+	stdout, stderr, err := captureOutput(t, opts.Run)
+	require.NoError(t, err)
+	assert.Empty(t, stderr)
+	assert.Contains(t, stdout, "Article body for parse cmd integration test")
+	assert.NotContains(t, stdout, "<article>")
 }

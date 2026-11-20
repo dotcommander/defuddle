@@ -51,6 +51,18 @@ func resolveReactStreaming(doc *goquery.Document) {
 				continue
 			}
 			parent := boundary.Parent
+			// A malformed slot equal to or an ancestor of the boundary parent would
+			// create a DOM cycle or infinite loop when moving its children.
+			slotIsAncestor := false
+			for p := parent; p != nil; p = p.Parent {
+				if p == slot {
+					slotIsAncestor = true
+					break
+				}
+			}
+			if slotIsAncestor {
+				continue
+			}
 			// A malformed slot inside its own fallback cannot be moved safely.
 			insideFallback := false
 			for node := boundary; node != closing; node = node.NextSibling {

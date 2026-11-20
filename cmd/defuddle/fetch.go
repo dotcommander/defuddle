@@ -18,9 +18,9 @@ import (
 	"fmt"
 	"io"
 	"mime"
+	"net"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/dotcommander/defuddle"
 	"golang.org/x/net/html/charset"
@@ -33,11 +33,11 @@ type fetchedDocument struct {
 
 // fetchHTML GETs rawURL and returns the response body. client carries the CLI's
 // --user-agent/--header/--proxy/--timeout overrides (may be nil, in which case
-// the library-equivalent 30s client is used; context also bounds the fetch).
+// an unbounded http.Client is used and ctx alone bounds the fetch).
 func fetchHTML(ctx context.Context, rawURL string, client *http.Client, headers http.Header) (fetchedDocument, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
-		return fetchedDocument{}, fmt.Errorf("fetch %s: %w", rawURL, err)
+		return fetchedDocument{}, fmt.Errorf("%w: fetch %s: %w", ErrCLIUsage, rawURL, err)
 	}
 
 	for key, values := range headers {
@@ -50,13 +50,16 @@ func fetchHTML(ctx context.Context, rawURL string, client *http.Client, headers 
 	}
 	httpClient := client
 	if httpClient == nil {
-		httpClient = &http.Client{Timeout: 30 * time.Second}
+		httpClient = &http.Client{}
 	}
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		if ctx.Err() != nil {
 			return fetchedDocument{}, fetchContextError(rawURL, ctx.Err())
+		}
+		if isTimeoutError(err) {
+			return fetchedDocument{}, fmt.Errorf("fetch %s: %w", rawURL, errors.Join(defuddle.ErrTimeout, err))
 		}
 		return fetchedDocument{}, fmt.Errorf("fetch %s: %w", rawURL, err)
 	}
@@ -78,6 +81,9 @@ func fetchHTML(ctx context.Context, rawURL string, client *http.Client, headers 
 	if err != nil {
 		if ctx.Err() != nil {
 			return fetchedDocument{}, fetchContextError(rawURL, ctx.Err())
+		}
+		if isTimeoutError(err) {
+			return fetchedDocument{}, fmt.Errorf("fetch %s: %w", rawURL, errors.Join(defuddle.ErrTimeout, err))
 		}
 		return fetchedDocument{}, err
 	}
@@ -115,4 +121,12 @@ func fetchContextError(rawURL string, err error) error {
 		err = errors.Join(defuddle.ErrTimeout, err)
 	}
 	return fmt.Errorf("fetch %s: %w", rawURL, err)
+}
+
+func isTimeoutError(err error) bool {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	var netErr net.Error
+	return errors.As(err, &netErr) && netErr.Timeout()
 }

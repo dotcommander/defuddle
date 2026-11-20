@@ -2,6 +2,7 @@ package extractors
 
 import (
 	"fmt"
+	"html"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
@@ -134,14 +135,14 @@ func (t *TwitterExtractor) formatTweetText(text string) string {
 	// Convert emoji images to alt text
 	doc.Find(`img[src*="/emoji/"]`).Each(func(_ int, img *goquery.Selection) {
 		if alt, exists := img.Attr("alt"); exists && alt != "" {
-			img.ReplaceWithHtml(alt)
+			img.ReplaceWithHtml(html.EscapeString(alt))
 		}
 	})
 
 	// Convert links to plain text with @ handles
 	doc.Find("a").Each(func(_ int, link *goquery.Selection) {
 		handle := strings.TrimSpace(link.Text())
-		link.ReplaceWithHtml(handle)
+		link.ReplaceWithHtml(html.EscapeString(handle))
 	})
 
 	// Remove unnecessary spans and divs but keep their child nodes
@@ -151,7 +152,7 @@ func (t *TwitterExtractor) formatTweetText(text string) string {
 	})
 
 	// Get cleaned text and split into paragraphs
-	cleanText, _ := doc.Html()
+	cleanText, _ := doc.Find("body").Html()
 	paragraphs := strings.Split(cleanText, "\n")
 
 	var formattedParagraphs []string

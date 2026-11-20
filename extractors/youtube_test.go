@@ -41,8 +41,11 @@ func TestYouTubeExtractor_CanExtract(t *testing.T) {
 	}{
 		{"youtube.com watch URL", "https://www.youtube.com/watch?v=dQw4w9WgXcQ", true},
 		{"youtube.com short path", "https://youtube.com/shorts/abc123", true},
+		{"youtube.com embed path", "https://www.youtube.com/embed/dQw4w9WgXcQ", true},
 		{"youtu.be short link", "https://youtu.be/dQw4w9WgXcQ", true},
-		{"unrelated URL still true", "https://example.com/video", true},
+		{"youtube.com homepage", "https://www.youtube.com/", false},
+		{"youtube.com channel", "https://www.youtube.com/@RickAstleyYT", false},
+		{"unrelated URL", "https://example.com/video", false},
 	}
 
 	for _, tc := range cases {

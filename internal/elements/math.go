@@ -14,6 +14,45 @@ import (
 // Pre-compiled regex for WordPress LaTeX URL extraction.
 var wpLatexRe = regexp.MustCompile(`latex\.php\?latex=([^&]+)`)
 
+// mathCombinedSelector matches all supported math containers and inline formulas
+// across WordPress, MathJax, MediaWiki, KaTeX, and generic MathML/LaTeX markup.
+var mathCombinedSelector = strings.Join([]string{
+	// WordPress LaTeX images
+	`img.latex[src*="latex.php"]`,
+	// MathJax elements (v2 and v3)
+	"span.MathJax",
+	".MathJax",
+	"mjx-container",
+	`.MathJax_Preview + script[type="math/tex"]`,
+	".MathJax_Display",
+	".MathJax_SVG",
+	".MathJax_MathML",
+	"[data-mathjax]",
+	// MediaWiki math elements
+	".mwe-math-element",
+	".mwe-math-fallback-image-inline",
+	".mwe-math-fallback-image-display",
+	".mwe-math-mathml-inline",
+	".mwe-math-mathml-display",
+	// KaTeX elements
+	".katex",
+	".katex-display",
+	".katex-block",
+	".katex-mathml",
+	".katex-html",
+	"[data-katex]",
+	`script[type="math/katex"]`,
+	// Generic math elements
+	"math",
+	"[data-math]",
+	"[data-latex]",
+	"[data-tex]",
+	`script[type^="math/"]`,
+	`script[type="application/x-tex"]`,
+	`script[type="text/latex"]`,
+	`annotation[encoding="application/x-tex"]`,
+}, ", ")
+
 /*
 TypeScript source code (math.core.ts, 68 lines and math.base.ts, 222 lines):
 
@@ -135,44 +174,13 @@ func (p *MathProcessor) ProcessMath(options *MathProcessingOptions) {
 
 	slog.Debug("processing mathematical formulas", "extractMathML", options.ExtractMathML, "extractLaTeX", options.ExtractLaTeX)
 
-	// Math element selectors matching TypeScript mathSelectors
-	selectors := []string{
-		// WordPress LaTeX images
-		`img.latex[src*="latex.php"]`,
-		// MathJax elements (v2 and v3)
-		"span.MathJax",
-		"mjx-container",
-		`.MathJax_Preview + script[type="math/tex"]`,
-		".MathJax_Display",
-		".MathJax_SVG",
-		".MathJax_MathML",
-		// MediaWiki math elements
-		".mwe-math-element",
-		".mwe-math-fallback-image-inline",
-		".mwe-math-fallback-image-display",
-		".mwe-math-mathml-inline",
-		".mwe-math-mathml-display",
-		// KaTeX elements
-		".katex",
-		".katex-display",
-		".katex-mathml",
-		".katex-html",
-		"[data-katex]",
-		`script[type="math/katex"]`,
-		// Generic math elements
-		"math",
-		"[data-math]",
-		"[data-latex]",
-		"[data-tex]",
-		`script[type^="math/"]`,
-		`annotation[encoding="application/x-tex"]`,
-	}
-
-	combinedSelector := strings.Join(selectors, ", ")
-	slog.Debug("using math selector", "selector", combinedSelector)
+	slog.Debug("using math selector", "selector", mathCombinedSelector)
 
 	var processedCount int
-	p.doc.Find(combinedSelector).Each(func(_ int, s *goquery.Selection) {
+	p.doc.Find(mathCombinedSelector).Each(func(_ int, s *goquery.Selection) {
+		if s.Length() == 0 || s.Get(0).Parent == nil {
+			return
+		}
 		p.processMathElement(s, options)
 		processedCount++
 	})

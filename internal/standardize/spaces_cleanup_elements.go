@@ -6,11 +6,20 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/dotcommander/defuddle/internal/constants"
 	"golang.org/x/net/html"
 )
+
+// containerBlockElements are structural table/list container elements that must
+// be treated as block-level containers for whitespace normalization so
+// ensureInlineSpacing does not inject spaces between their children.
+var containerBlockElements = []string{
+	"li", "td", "th", "tr", "table", "tbody", "thead", "tfoot", "dl", "dt", "dd",
+}
 
 // cleanupEmptyElements is the second pass: clean up empty elements and normalize
 // spacing. removedCount accumulates removals (diagnostic only).
@@ -19,9 +28,9 @@ func cleanupEmptyElements(node *html.Node, blockElements []string, removedCount 
 		return
 	}
 
-	// Skip pre and code elements
+	// Skip pre, code, and math elements
 	tag := strings.ToLower(node.Data)
-	if tag == "pre" || tag == "code" {
+	if tag == "pre" || tag == "code" || tag == "math" {
 		return
 	}
 
@@ -37,14 +46,9 @@ func cleanupEmptyElements(node *html.Node, blockElements []string, removedCount 
 	}
 
 	// Determine if this is a block element (simplified check)
-	isBlockElement := slices.Contains(blockElements, tag)
-
-	// Additional block elements
-	if !isBlockElement {
-		if slices.Contains(additionalBlockElements, tag) {
-			isBlockElement = true
-		}
-	}
+	isBlockElement := slices.Contains(blockElements, tag) ||
+		slices.Contains(additionalBlockElements, tag) ||
+		slices.Contains(containerBlockElements, tag)
 
 	// Only remove empty text nodes at the start and end if they contain just newlines/tabs
 	// For block elements, also remove spaces
@@ -94,24 +98,26 @@ func ensureInlineSpacing(node *html.Node) {
 
 		// Only add space between elements or between element and text
 		if current.Type == html.ElementNode || next.Type == html.ElementNode {
-			// Get the text content (simplified)
-			var nextContent, currentContent string
-			if next.Type == html.TextNode {
-				nextContent = next.Data
+			// Do not insert spaces before superscripts/subscripts (e.g. footnote refs <a>foo</a><sup>1</sup>)
+			if next.Type == html.ElementNode {
+				nextTag := strings.ToLower(next.Data)
+				if nextTag == "sup" || nextTag == "sub" {
+					continue
+				}
 			}
-			if current.Type == html.TextNode {
-				currentContent = current.Data
-			}
+
+			// Extract full text content so punctuation/whitespace checks work on ElementNodes too.
+			currentContent := extractSubtreeText(current)
+			nextContent := extractSubtreeText(next)
 
 			// Don't add space if:
 			// 1. Next content starts with punctuation or closing parenthesis
 			// 2. Current content ends with punctuation or opening parenthesis
-			// 3. There's already a space
+			// 3. There's already whitespace at the boundary
 			nextStartsWithPunctuation := startsWithPunctRe.MatchString(nextContent)
 			currentEndsWithPunctuation := endsWithPunctRe.MatchString(currentContent)
 
-			hasSpace := (current.Type == html.TextNode && strings.HasSuffix(current.Data, " ")) ||
-				(next.Type == html.TextNode && strings.HasPrefix(next.Data, " "))
+			hasSpace := endsWithSpace(currentContent) || startsWithSpace(nextContent)
 
 			// Only add space if none of the above conditions are true
 			if !nextStartsWithPunctuation &&
@@ -125,6 +131,36 @@ func ensureInlineSpacing(node *html.Node) {
 			}
 		}
 	}
+}
+
+func extractSubtreeText(n *html.Node) string {
+	if n == nil {
+		return ""
+	}
+	if n.Type == html.TextNode {
+		return n.Data
+	}
+	var b strings.Builder
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		b.WriteString(extractSubtreeText(c))
+	}
+	return b.String()
+}
+
+func startsWithSpace(s string) bool {
+	if s == "" {
+		return false
+	}
+	r, _ := utf8.DecodeRuneInString(s)
+	return unicode.IsSpace(r)
+}
+
+func endsWithSpace(s string) bool {
+	if s == "" {
+		return false
+	}
+	r, _ := utf8.DecodeLastRuneInString(s)
+	return unicode.IsSpace(r)
 }
 
 // removeEmptyLines runs the two whitespace-normalization passes over element.

@@ -2,6 +2,7 @@ package extractors
 
 import (
 	"fmt"
+	"html"
 	"log/slog"
 	"strconv"
 	"strings"
@@ -26,7 +27,7 @@ func conversationFootnotesHTML(footnotes []Footnote) string {
 							<p>
 								<a href="%s" target="_blank">%s</a>&nbsp;<a href="#fnref:%d" class="footnote-backref">↩</a>
 							</p>
-						</li>`, footnoteNum, footnote.URL, footnote.Text, footnoteNum)
+						</li>`, footnoteNum, html.EscapeString(footnote.URL), html.EscapeString(footnote.Text), footnoteNum)
 			footnotesBuilder.WriteString(footnoteHTML)
 		}
 

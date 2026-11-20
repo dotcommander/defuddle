@@ -106,7 +106,7 @@ func TestCLIAutoRenderParentCancellationIsTerminal(t *testing.T) {
 	if err := opts.run(parent); !errors.Is(err, context.Canceled) {
 		t.Fatalf("command cancellation=%v", err)
 	}
-	if _, err := renderToHTML(parent, opts); !errors.Is(err, context.Canceled) {
+	if _, err := renderToHTML(parent, opts, nil); !errors.Is(err, context.Canceled) {
 		t.Fatalf("render cancellation=%v", err)
 	}
 }

@@ -69,7 +69,10 @@ func (opts *BatchOptions) Run() error {
 
 	var reader io.Reader = os.Stdin
 	if opts.Input != "" {
-		f, err := os.Open(opts.Input) // #nosec G304 - user-provided input file
+		if err := validateFilePath(opts.Input); err != nil {
+			return err
+		}
+		f, err := os.Open(opts.Input) // #nosec G304 - path validated above
 		if err != nil {
 			return fmt.Errorf("opening input file: %w", err)
 		}

@@ -47,10 +47,14 @@ CLI tidy/checksum finalization until root publication and complete it before the
 CLI tag. Both tags must reference commits whose `go.mod` already has the intended
 version. Workspace checks do not establish standalone CLI acceptance.
 
-The module minimum remains Go 1.26.4. Run the vulnerability gate with an installed,
-patched toolchain (Go 1.27.1 for this release) and record its actual version. A
-passed scan with that toolchain does not establish that Go 1.26.4 is free of
-standard-library vulnerabilities.
+The module minimum remains Go 1.26.4. Run the vulnerability gate with an
+installed, patched toolchain and record its actual version. A passed scan with
+that toolchain does not establish that Go 1.26.4 is free of standard-library
+vulnerabilities.
+
+If the pinned golangci-lint 2.12.2 rejects Go 1.27.4 export data, run the
+configured lint checks with `GOTOOLCHAIN=go1.27.1`. Use the patched toolchain
+for the vulnerability gate separately.
 
 ## Publish both modules
 

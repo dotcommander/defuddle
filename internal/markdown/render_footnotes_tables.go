@@ -3,6 +3,7 @@ package markdown
 import (
 	"bytes"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/JohannesKaufmann/html-to-markdown/v2/converter"
@@ -46,22 +47,28 @@ func renderFootnotesList(ctx converter.Context, w converter.Writer, n *html.Node
 // leading sup marker and trailing backlink. Returns "" when the content is empty.
 func footnoteDefinition(ctx converter.Context, li *html.Node) string {
 	// Extract footnote ID from li's id attribute
-	liID := getAttr(li, "id")
+	liID := strings.TrimSpace(getAttr(li, "id"))
 	id := liID
 	if strings.HasPrefix(liID, "fn:") {
 		id = strings.TrimPrefix(liID, "fn:")
-	} else if idx := strings.LastIndex(liID, "/"); idx >= 0 {
-		// Handle cite_note-style IDs
-		tail := liID[idx+1:]
+	} else {
+		tail := liID
+		if idx := strings.LastIndex(liID, "/"); idx >= 0 {
+			tail = liID[idx+1:]
+		}
 		if strings.HasPrefix(tail, "cite_note-") {
 			id = strings.TrimPrefix(tail, "cite_note-")
 		}
+	}
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return ""
 	}
 
 	// Remove leading <sup> if its text matches the footnote ID
 	for c := li.FirstChild; c != nil; c = c.NextSibling {
 		if c.Type == html.ElementNode && c.Data == "sup" {
-			if strings.TrimSpace(extractText(c)) == id {
+			if strings.EqualFold(strings.TrimSpace(extractText(c)), id) {
 				li.RemoveChild(c)
 			}
 			break
@@ -80,6 +87,15 @@ func footnoteDefinition(ctx converter.Context, li *html.Node) string {
 
 	if content == "" {
 		return ""
+	}
+	if strings.Contains(content, "\n") {
+		lines := strings.Split(content, "\n")
+		for i := 1; i < len(lines); i++ {
+			if lines[i] != "" {
+				lines[i] = "    " + lines[i]
+			}
+		}
+		content = strings.Join(lines, "\n")
 	}
 	return fmt.Sprintf("[^%s]: %s", strings.ToLower(id), content)
 }
@@ -143,7 +159,7 @@ func collectArXivEquations(n *html.Node) []string {
 	return equations
 }
 
-// hasComplexTableStructure checks if any td/th has colspan or rowspan.
+// hasComplexTableStructure checks if any td/th has colspan or rowspan > 1.
 func hasComplexTableStructure(n *html.Node) bool {
 	found := false
 	walkChildren(n, func(child *html.Node) bool {
@@ -151,7 +167,7 @@ func hasComplexTableStructure(n *html.Node) bool {
 			return false
 		}
 		if child.Type == html.ElementNode && (child.Data == "td" || child.Data == "th") {
-			if getAttr(child, "colspan") != "" || getAttr(child, "rowspan") != "" {
+			if hasSpanGreaterThanOne(child, "colspan") || hasSpanGreaterThanOne(child, "rowspan") {
 				found = true
 				return false
 			}
@@ -159,6 +175,15 @@ func hasComplexTableStructure(n *html.Node) bool {
 		return true
 	})
 	return found
+}
+
+func hasSpanGreaterThanOne(n *html.Node, attr string) bool {
+	val := strings.TrimSpace(getAttr(n, attr))
+	if val == "" {
+		return false
+	}
+	span, err := strconv.Atoi(val)
+	return err == nil && span > 1
 }
 
 // cleanupTableHTML strips non-essential attributes from a table, preserving layout attrs.

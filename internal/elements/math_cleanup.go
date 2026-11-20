@@ -2,7 +2,6 @@ package elements
 
 import (
 	"regexp"
-	"strings"
 
 	"github.com/PuerkitoBio/goquery"
 )
@@ -61,23 +60,10 @@ func ProcessMathInScope(scope *goquery.Selection, options *MathProcessingOptions
 	if options == nil {
 		options = DefaultMathProcessingOptions()
 	}
-	combinedSelector := strings.Join([]string{
-		"math",
-		".MathJax",
-		".MathJax_Display",
-		".MathJax_Preview",
-		".katex",
-		".katex-display",
-		".katex-block",
-		`script[type^="math/"]`,
-		`script[type="application/x-tex"]`,
-		`script[type="text/latex"]`,
-		"[data-math]",
-		"[data-latex]",
-		"[data-katex]",
-		"[data-mathjax]",
-	}, ", ")
-	scope.Find(combinedSelector).Each(func(_ int, s *goquery.Selection) {
+	scope.Find(mathCombinedSelector).Each(func(_ int, s *goquery.Selection) {
+		if s.Length() == 0 || s.Get(0).Parent == nil {
+			return
+		}
 		processor.processMathElement(s, options)
 	})
 }

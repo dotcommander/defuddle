@@ -7,10 +7,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/chromedp/cdproto/cdp"
+	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
 	"github.com/dotcommander/defuddle"
 )
@@ -36,6 +39,11 @@ type Config struct {
 	ChromePath string
 	// UserAgent overrides the navigator user-agent. Empty => Chrome default.
 	UserAgent string
+	// Proxy configures Chrome's --proxy-server flag. Empty => no proxy override.
+	Proxy string
+	// Headers specifies extra HTTP headers sent on page requests via CDP
+	// Network.setExtraHTTPHeaders. Empty => no extra headers.
+	Headers http.Header
 	// Wait selects the snapshot point. Empty => WaitLoad.
 	Wait WaitStrategy
 	// IdleDelay is the settle delay applied for WaitIdle. Zero => 500ms when WaitIdle.
@@ -68,6 +76,9 @@ func RenderHTML(ctx context.Context, url string, cfg Config) (string, error) {
 	if cfg.UserAgent != "" {
 		allocOpts = append(allocOpts, chromedp.UserAgent(cfg.UserAgent))
 	}
+	if cfg.Proxy != "" {
+		allocOpts = append(allocOpts, chromedp.ProxyServer(cfg.Proxy))
+	}
 
 	allocCtx, cancelAlloc := chromedp.NewExecAllocator(ctx, allocOpts...)
 	defer cancelAlloc()
@@ -82,7 +93,19 @@ func RenderHTML(ctx context.Context, url string, cfg Config) (string, error) {
 	)
 	defer cancelBrowser()
 
-	tasks := []chromedp.Action[chromedp.Void]{chromedp.Navigate(url)}
+	var tasks []chromedp.Action[chromedp.Void]
+	if extraHeaders := buildExtraHTTPHeaders(cfg.Headers); len(extraHeaders) > 0 {
+		tasks = append(tasks, chromedp.Func(func(ctx context.Context, t *chromedp.Target) error {
+			if _, err := cdp.Call(ctx, t, network.Enable, network.EnableParams{}); err != nil {
+				return err
+			}
+			_, err := cdp.Call(ctx, t, network.SetExtraHTTPHeaders, network.SetExtraHTTPHeadersParams{
+				Headers: extraHeaders,
+			})
+			return err
+		}))
+	}
+	tasks = append(tasks, chromedp.Navigate(url))
 	if cfg.Wait == WaitIdle {
 		delay := cfg.IdleDelay
 		if delay <= 0 {
@@ -140,4 +163,21 @@ func renderContextError(url string, err error) error {
 		err = errors.Join(defuddle.ErrTimeout, err)
 	}
 	return fmt.Errorf("render %s: %w", url, err)
+}
+
+func buildExtraHTTPHeaders(h http.Header) network.Headers {
+	if len(h) == 0 {
+		return nil
+	}
+	out := make(network.Headers, len(h))
+	for k, vals := range h {
+		if len(vals) == 0 {
+			continue
+		}
+		out[k] = strings.Join(vals, ", ")
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }

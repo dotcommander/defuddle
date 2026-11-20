@@ -1,6 +1,11 @@
 package elements
 
-import "github.com/PuerkitoBio/goquery"
+import (
+	"strings"
+
+	"github.com/PuerkitoBio/goquery"
+	"golang.org/x/net/html"
+)
 
 // --- Transform 4: span:has(img) → figure ---
 
@@ -11,8 +16,26 @@ func (p *ImageProcessor) transformSpanImages(scope *goquery.Selection) {
 			return
 		}
 
+		// Preserve spans that contain multiple images/media elements.
+		if el.Find("img").Length() > 1 || el.Find("picture").Length() > 1 || el.Find("video").Length() > 1 {
+			return
+		}
+
 		imgEl := findMainImage(el)
 		if imgEl == nil || imgEl.Length() == 0 {
+			return
+		}
+
+		caption := findCaption(el)
+		hasCaption := caption != nil && caption.Length() > 0 && hasMeaningfulCaption(caption)
+
+		var excludedCaption *html.Node
+		if hasCaption && isDescendantNode(el.Get(0), caption.Get(0)) {
+			excludedCaption = caption.Get(0)
+		}
+
+		// Preserve spans that contain meaningful surrounding prose outside any caption.
+		if hasTextOutside(el.Get(0), excludedCaption) {
 			return
 		}
 
@@ -21,9 +44,11 @@ func (p *ImageProcessor) transformSpanImages(scope *goquery.Selection) {
 			return
 		}
 
-		caption := findCaption(el)
-		if caption != nil && caption.Length() > 0 && hasMeaningfulCaption(caption) {
+		if hasCaption {
 			captionHTML, _ := caption.Html()
+			if !isDescendantNode(el.Get(0), caption.Get(0)) {
+				caption.Remove()
+			}
 			el.ReplaceWithHtml("<figure>" + imgHTML + "<figcaption>" + captionHTML + "</figcaption></figure>")
 		} else {
 			el.ReplaceWithHtml(imgHTML)
@@ -68,6 +93,39 @@ func (p *ImageProcessor) transformFigures(scope *goquery.Selection) {
 			return
 		}
 		captionHTML, _ := caption.Html()
+		if !isDescendantNode(el.Get(0), caption.Get(0)) {
+			caption.Remove()
+		}
 		el.ReplaceWithHtml("<figure>" + imgHTML + "<figcaption>" + captionHTML + "</figcaption></figure>")
 	})
+}
+
+// isDescendantNode reports whether node is equal to or a descendant of ancestor.
+func isDescendantNode(ancestor, node *html.Node) bool {
+	if ancestor == nil || node == nil {
+		return false
+	}
+	for cur := node; cur != nil; cur = cur.Parent {
+		if cur == ancestor {
+			return true
+		}
+	}
+	return false
+}
+
+// hasTextOutside reports whether root contains any non-whitespace text node
+// outside the excluded subtree.
+func hasTextOutside(root, excluded *html.Node) bool {
+	if root == nil || root == excluded {
+		return false
+	}
+	if root.Type == html.TextNode {
+		return strings.TrimSpace(root.Data) != ""
+	}
+	for c := root.FirstChild; c != nil; c = c.NextSibling {
+		if hasTextOutside(c, excluded) {
+			return true
+		}
+	}
+	return false
 }

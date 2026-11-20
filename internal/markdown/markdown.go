@@ -18,15 +18,14 @@ import (
 
 // Pre-compiled patterns for post-processing.
 var (
-	leadingTitleRe      = regexp.MustCompile(`^#\s+.+\n+`)
-	tripleNewline       = regexp.MustCompile(`\n{3,}`)
-	bangBeforeImageRe   = regexp.MustCompile(`!(!\[|\[!\[)`)
-	wbrTagRe            = regexp.MustCompile(`(?i)<wbr\s*/?>`)
-	widthDescriptorRe   = regexp.MustCompile(`^(\d+)w,?$`)
-	densityDescriptorRe = regexp.MustCompile(`^\d+(?:\.\d+)?x,?$`)
-	backLinkRe          = regexp.MustCompile(`\s*↩︎\s*$`)
-	linkWhitespaceRe    = regexp.MustCompile(`\s`)
-	linkTitleNewlineRe  = regexp.MustCompile(`(\n+\s*)+`)
+	leadingTitleRe     = regexp.MustCompile(`^#\s+.+\n+`)
+	tripleNewline      = regexp.MustCompile(`\n{3,}`)
+	bangBeforeImageRe  = regexp.MustCompile(`!(!\[|\[!\[)`)
+	wbrTagRe           = regexp.MustCompile(`(?i)<wbr\s*/?>`)
+	widthDescriptorRe  = regexp.MustCompile(`^(\d+)w,?$`)
+	backLinkRe         = regexp.MustCompile(`\s*↩︎\s*$`)
+	linkWhitespaceRe   = regexp.MustCompile(`\s`)
+	linkTitleNewlineRe = regexp.MustCompile(`(\n+\s*)+`)
 )
 
 // ConvertHTML converts HTML content to Markdown with custom rules
@@ -90,6 +89,11 @@ func newDefuddlePlugin() *defuddlePlugin {
 func (p *defuddlePlugin) Name() string { return "defuddle" }
 
 func (p *defuddlePlugin) Init(conv *converter.Converter) error {
+	// Capture task-list checkboxes before base.preRenderRemove strips <input> nodes,
+	// and unwrap complex heading links before commonmark downgrades headings inside <a>.
+	conv.Register.PreRenderer(preserveTaskListCheckboxes, converter.PriorityEarly-10)
+	conv.Register.PreRenderer(unwrapComplexLinks, converter.PriorityEarly-5)
+
 	// Code blocks with language detection
 	conv.Register.RendererFor("pre", converter.TagTypeBlock, renderCodeBlock, converter.PriorityEarly)
 
@@ -181,7 +185,7 @@ func removeEmptyLinks(md string) string {
 				i = lineEnd
 				continue
 			}
-			if end-start >= 3 {
+			if end-start >= 3 && (md[start] == '~' || strings.IndexByte(md[end:lineEnd], '`') < 0) {
 				fence, fenceLength = md[start], end-start
 				out.WriteString(md[i:lineEnd])
 				i = lineEnd

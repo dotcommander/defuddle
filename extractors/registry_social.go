@@ -9,6 +9,24 @@ import (
 // registerSocial registers extractors for social and microblogging platforms:
 // Twitter/X, Bluesky, Threads, LinkedIn, and X oEmbed API endpoints.
 func registerSocial(r *Registry) {
+	// XOEmbed — oEmbed API endpoint hosts for X (Twitter).
+	// Registered BEFORE twitter.com/x.com because publish.twitter.com and
+	// publish.x.com are subdomains of twitter.com/x.com and would otherwise be
+	// shadowed by the main site mapping.
+	r.Register(ExtractorMapping{
+		Patterns: []any{
+			"publish.twitter.com",
+			"publish.x.com",
+		},
+		Extractor: func(doc *goquery.Document, url string, schemaOrgData any) BaseExtractor {
+			e := NewXOEmbedExtractor(doc, url, schemaOrgData)
+			if e.CanExtract() {
+				return e
+			}
+			return nil
+		},
+	})
+
 	// XArticle BEFORE Twitter — article pages take priority; fallback to TwitterExtractor via CanExtract().
 	r.Register(ExtractorMapping{
 		Patterns: []any{
@@ -49,23 +67,6 @@ func registerSocial(r *Registry) {
 		Patterns: []any{"linkedin.com"},
 		Extractor: func(doc *goquery.Document, url string, schemaOrgData any) BaseExtractor {
 			e := NewLinkedInExtractor(doc, url, schemaOrgData)
-			if e.CanExtract() {
-				return e
-			}
-			return nil
-		},
-	})
-
-	// XOEmbed — oEmbed API endpoint hosts for X (Twitter).
-	// URL patterns are disjoint from the twitter.com/x.com entry above which
-	// handles the main site HTML; these match only the publish.* API hosts.
-	r.Register(ExtractorMapping{
-		Patterns: []any{
-			"publish.twitter.com",
-			"publish.x.com",
-		},
-		Extractor: func(doc *goquery.Document, url string, schemaOrgData any) BaseExtractor {
-			e := NewXOEmbedExtractor(doc, url, schemaOrgData)
 			if e.CanExtract() {
 				return e
 			}

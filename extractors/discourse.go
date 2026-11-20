@@ -280,12 +280,12 @@ func (e *DiscourseExtractor) extractComments(replyPosts []*goquery.Selection) st
 		}
 
 		cd := CommentData{
-			Author:  html.EscapeString(author),
+			Author:  author,
 			Content: content,
 			Depth:   0,
 		}
 		if postURL != "" {
-			cd.URL = html.EscapeString(postURL)
+			cd.URL = postURL
 			cd.LinkText = date // show date as the link text (permalink)
 		} else {
 			cd.Date = date

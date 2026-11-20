@@ -95,11 +95,18 @@ func unwrapSelection(sel *goquery.Selection) {
 
 // removeHeadingAnchors removes permalink anchors from inside heading elements.
 // Handles symbols (#, ¶, §, 🔗), empty links, and class-based anchors.
+// Self-linked headings that contain substantive text are unwrapped rather than removed.
 func removeHeadingAnchors(element *goquery.Selection) {
 	element.Find("h1 a, h2 a, h3 a, h4 a, h5 a, h6 a").Each(func(_ int, link *goquery.Selection) {
-		if isPermalinkAnchor(link) {
-			link.Remove()
+		if !isPermalinkAnchor(link) {
+			return
 		}
+		text := strings.TrimSpace(link.Text())
+		if text == "" || permalinkSymbolRe.MatchString(text) {
+			link.Remove()
+			return
+		}
+		unwrapSelection(link)
 	})
 }
 

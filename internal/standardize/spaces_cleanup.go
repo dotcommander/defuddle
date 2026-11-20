@@ -143,10 +143,10 @@ import (
 // removeEmptyTextNodes is the first pass: remove empty text nodes and clean up
 // text content. removedCount accumulates characters/nodes removed (diagnostic only).
 func removeEmptyTextNodes(node *html.Node, removedCount *int) {
-	// Skip if inside pre or code
+	// Skip if inside pre, code, or math
 	if node.Type == html.ElementNode {
 		tag := strings.ToLower(node.Data)
-		if tag == "pre" || tag == "code" {
+		if tag == "pre" || tag == "code" || tag == "math" {
 			return
 		}
 	}

@@ -147,18 +147,19 @@ func (g *GrokExtractor) footnoteIndexForURL(urlStr string) int {
 	g.footnoteCounter++
 
 	var domainText string
-	if parsedURL, err := url.Parse(urlStr); err == nil {
-		domain := strings.TrimPrefix(parsedURL.Hostname(), "www.")
-		domainText = fmt.Sprintf(`<a href="%s" target="_blank" rel="noopener noreferrer">%s</a>`, urlStr, domain)
+	if parsedURL, err := url.Parse(urlStr); err == nil && parsedURL.Hostname() != "" {
+		domainText = strings.TrimPrefix(parsedURL.Hostname(), "www.")
 	} else {
 		// Use full URL if parsing fails
-		domainText = fmt.Sprintf(`<a href="%s" target="_blank" rel="noopener noreferrer">%s</a>`, urlStr, urlStr)
-		slog.Warn("GrokExtractor: Could not parse URL for footnote", "url", urlStr, "error", err)
+		domainText = urlStr
+		if err != nil {
+			slog.Warn("GrokExtractor: Could not parse URL for footnote", "url", urlStr, "error", err)
+		}
 	}
 
 	g.footnotes = append(g.footnotes, Footnote{
 		URL:  urlStr,
-		Text: domainText, // Store the link HTML directly
+		Text: domainText,
 	})
 	return g.footnoteCounter
 }

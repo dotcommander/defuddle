@@ -171,6 +171,9 @@ func standardizeElementsWithRoles(element *goquery.Selection, doc *goquery.Docum
 			}
 		}
 		element.Find(rule.Selector).Each(func(_ int, el *goquery.Selection) {
+			if el.Length() == 0 || el.Get(0).Parent == nil {
+				return
+			}
 			if rule.Transform != nil {
 				// Use custom transform function
 				newElement := rule.Transform(el, doc)

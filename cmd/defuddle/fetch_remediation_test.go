@@ -150,3 +150,56 @@ func TestFetchHTMLUnrelatedNetworkFailurePreserved(t *testing.T) {
 		t.Fatalf("err=%v", err)
 	}
 }
+
+func TestFetchHTMLClientTimeoutWrapsErrTimeoutWithoutContextDeadline(t *testing.T) {
+	t.Parallel()
+	release := make(chan struct{})
+	defer close(release)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-release:
+		case <-r.Context().Done():
+		}
+	}))
+	defer server.Close()
+
+	client := &http.Client{Timeout: 25 * time.Millisecond}
+	_, err := fetchHTML(context.Background(), server.URL, client, nil)
+	if !errors.Is(err, defuddle.ErrTimeout) {
+		t.Fatalf("expected defuddle.ErrTimeout, got %v", err)
+	}
+	if got := exitCodeFor(err); got != exitCancelled {
+		t.Fatalf("exitCodeFor = %d, want %d (err=%v)", got, exitCancelled, err)
+	}
+}
+
+func TestFetchHTMLInvalidURLIsValidation(t *testing.T) {
+	t.Parallel()
+	_, err := fetchHTML(t.Context(), "http://[::1", nil, nil)
+	if !errors.Is(err, ErrCLIUsage) {
+		t.Fatalf("expected ErrCLIUsage, got %v", err)
+	}
+	if got := exitCodeFor(err); got != exitValidation {
+		t.Fatalf("exitCodeFor = %d, want %d (err=%v)", got, exitValidation, err)
+	}
+}
+
+func TestBuildContextLongAndZeroTimeout(t *testing.T) {
+	t.Parallel()
+
+	ctx60, cancel60 := buildContext(t.Context(), 60*time.Second)
+	defer cancel60()
+	deadline, ok := ctx60.Deadline()
+	if !ok {
+		t.Fatalf("expected deadline for 60s timeout")
+	}
+	if rem := time.Until(deadline); rem < 50*time.Second {
+		t.Fatalf("expected ~60s remaining deadline, got %v", rem)
+	}
+
+	ctxZero, cancelZero := buildContext(t.Context(), 0)
+	defer cancelZero()
+	if _, ok := ctxZero.Deadline(); ok {
+		t.Fatalf("expected no deadline for 0 timeout")
+	}
+}

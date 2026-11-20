@@ -92,8 +92,9 @@ func flattenElement(el, root *goquery.Selection, blockElements []string) bool {
 	}
 
 	// Case 5: Element has single child - unwrap only if child is block-level
+	// and el has no direct non-whitespace text/inline content that would be lost.
 	children := el.Children()
-	if children.Length() == 1 {
+	if children.Length() == 1 && !hasDirectInlineContent(el) {
 		child := children.First()
 		childTag := goquery.NodeName(child)
 

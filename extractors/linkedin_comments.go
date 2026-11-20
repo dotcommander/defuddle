@@ -62,14 +62,14 @@ func (e *LinkedInExtractor) extractCommentData(comment *goquery.Selection, depth
 	)
 
 	cd := CommentData{
-		Author:  html.EscapeString(author),
+		Author:  author,
 		Date:    date,
 		Content: content,
 		Depth:   depth,
 	}
 	if profileURL != "" {
-		cd.URL = html.EscapeString(profileURL)
-		cd.LinkText = html.EscapeString(author)
+		cd.URL = profileURL
+		cd.LinkText = author
 	}
 	if reactions != "" {
 		cd.Extra = fmt.Sprintf(` <span class="comment-score">%s</span>`,

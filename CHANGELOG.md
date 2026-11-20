@@ -10,6 +10,17 @@ All notable changes to this project will be documented in this file. The format 
 
 ---
 
+## [v0.16.2] — 2026-11-20
+
+### Fixed
+
+- Preserve nested task lists, footnotes, callouts, code fences, images, and tables when converting HTML to Markdown.
+- Improve extraction on Substack, GitHub, YouTube, and social and conversation sites. Preserve more article text and metadata when normalizing HTML.
+- Harden HTML escaping and URL sanitization for extracted content.
+- Apply CLI headers and proxy settings when using browser rendering, report fetch timeouts consistently, and honor interrupts.
+
+---
+
 ## [v0.16.1] — 2026-10-31
 
 ### Fixed

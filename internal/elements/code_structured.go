@@ -2,6 +2,7 @@ package elements
 
 import (
 	"strings"
+	"unicode/utf8"
 
 	"github.com/PuerkitoBio/goquery"
 )
@@ -87,7 +88,13 @@ func (p *CodeBlockProcessor) extractWordPressContent(s *goquery.Selection) strin
 	var builder strings.Builder
 
 	// Handle WordPress syntax highlighter table format
-	codeContainer := s.Find(".syntaxhighlighter table .code .container")
+	var codeContainer *goquery.Selection
+	if s.HasClass("syntaxhighlighter") {
+		codeContainer = s.Find("table .code .container")
+	}
+	if codeContainer == nil || codeContainer.Length() == 0 {
+		codeContainer = s.Find(".syntaxhighlighter table .code .container")
+	}
 	if codeContainer.Length() > 0 {
 		codeContainer.Children().Each(func(i int, line *goquery.Selection) {
 			if i > 0 {
@@ -98,8 +105,8 @@ func (p *CodeBlockProcessor) extractWordPressContent(s *goquery.Selection) strin
 			line.Find("code").Each(func(_ int, code *goquery.Selection) {
 				text := code.Text()
 				if code.HasClass("spaces") {
-					// Replace with spaces of same length
-					lineBuilder.WriteString(strings.Repeat(" ", len(text)))
+					// Replace with spaces of same rune count (handles multi-byte &nbsp;)
+					lineBuilder.WriteString(strings.Repeat(" ", utf8.RuneCountInString(text)))
 				} else {
 					lineBuilder.WriteString(text)
 				}

@@ -205,13 +205,21 @@ func (e *LWNExtractor) extractCommentData(box *goquery.Selection, depth int) *Co
 
 	content := e.getCommentContent(box, uniqueTitle)
 
-	return &CommentData{
+	cd := &CommentData{
 		Author:  author,
-		Date:    date,
 		Content: content,
 		Depth:   depth,
-		URL:     url,
 	}
+	if url != "" {
+		cd.URL = url
+		cd.LinkText = date
+		if cd.LinkText == "" {
+			cd.LinkText = "link"
+		}
+	} else {
+		cd.Date = date
+	}
+	return cd
 }
 
 // getCommentContent builds the HTML body for a comment box.

@@ -2,6 +2,7 @@ package extractors
 
 import (
 	"fmt"
+	"html"
 	"log/slog"
 	"regexp"
 	"strings"
@@ -161,12 +162,12 @@ func (g *GitHubExtractor) extractIssue() *ExtractorResult {
 			bodyContent := g.cleanBodyContent(issueBodyElement)
 
 			// Add the main issue
-			fmt.Fprintf(&content, `<div class="issue-author"><strong>%s</strong>`, issueAuthor)
+			fmt.Fprintf(&content, `<div class="issue-author"><strong>%s</strong>`, html.EscapeString(issueAuthor))
 			if d := formatGitHubDate(issueTimestamp); d != "" {
 				fmt.Fprintf(&content, ` opened this issue on %s`, d)
 			}
 			content.WriteString("</div>\n\n")
-			fmt.Fprintf(&content, `<div class="issue-body">%s</div>\n\n`, bodyContent)
+			fmt.Fprintf(&content, "<div class=\"issue-body\">%s</div>\n\n", bodyContent)
 		}
 	}
 
@@ -230,14 +231,14 @@ func (g *GitHubExtractor) appendIssueComments(content *strings.Builder) {
 		if bodyElement.Length() > 0 {
 			bodyContent := g.cleanBodyContent(bodyElement)
 			if bodyContent != "" {
-				content.WriteString(`<div class="comment">\n`)
-				fmt.Fprintf(content, `<div class="comment-header"><strong>%s</strong>`, author)
+				content.WriteString("<div class=\"comment\">\n")
+				fmt.Fprintf(content, `<div class="comment-header"><strong>%s</strong>`, html.EscapeString(author))
 				if d := formatGitHubDate(timestamp); d != "" {
 					fmt.Fprintf(content, ` commented on %s`, d)
 				}
-				content.WriteString(`</div>\n`)
-				fmt.Fprintf(content, `<div class="comment-body">%s</div>\n`, bodyContent)
-				content.WriteString(`</div>\n\n`)
+				content.WriteString("</div>\n")
+				fmt.Fprintf(content, "<div class=\"comment-body\">%s</div>\n", bodyContent)
+				content.WriteString("</div>\n\n")
 			}
 		}
 	})

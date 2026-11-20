@@ -23,7 +23,7 @@ import (
 func getPublished(doc *goquery.Document, schemaOrgData any, metaTags []MetaTag) string {
 	// Use cmp.Or for cleaner fallback chain matching TS priority order
 	result := cmp.Or(
-		getSchemaProperty(schemaOrgData, "datePublished"),
+		getFirstSchemaProperty(schemaOrgData, "datePublished"),
 		getMetaContent(metaTags, "name", "publishDate"),
 		getMetaContent(metaTags, "property", "article:published_time"),
 		getAbbrevDatePublished(doc),

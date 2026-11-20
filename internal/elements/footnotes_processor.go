@@ -28,14 +28,14 @@ func (p *FootnoteProcessor) ProcessFootnotes(options *FootnoteProcessingOptions)
 		footnotes = p.detectFootnotes(options)
 	}
 
+	// Number footnotes if enabled (must run before linking so IDs use 1..N)
+	if options.NumberFootnotes {
+		p.numberFootnotes(footnotes, options)
+	}
+
 	// Link footnotes if enabled
 	if options.LinkFootnotes {
 		p.linkFootnotes(footnotes, options)
-	}
-
-	// Number footnotes if enabled
-	if options.NumberFootnotes {
-		p.numberFootnotes(footnotes, options)
 	}
 
 	// Improve accessibility if enabled

@@ -71,8 +71,11 @@ func writeOutput(filename, content string) error {
 		fmt.Print(content)
 		return nil
 	}
+	if err := validateFilePath(filename); err != nil {
+		return err
+	}
 
-	err := os.WriteFile(filename, []byte(content), 0600) // More secure file permissions
+	err := os.WriteFile(filename, []byte(content), 0600) // #nosec G304 - path validated above
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrOutputWrite, err)
 	}

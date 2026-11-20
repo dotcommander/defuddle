@@ -48,6 +48,9 @@ func (e *LinkedInExtractor) CanExtract() bool {
 
 // Extract returns the structured content for a LinkedIn post page.
 func (e *LinkedInExtractor) Extract() *ExtractorResult {
+	if !e.CanExtract() {
+		return &ExtractorResult{}
+	}
 	postContent := e.getPostContent()
 	comments := e.extractComments()
 	contentHTML := buildContentHtml("linkedin", postContent, comments)

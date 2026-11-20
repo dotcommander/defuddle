@@ -92,6 +92,18 @@ func TestBuildHTTPClient_ProxySchemeValidation(t *testing.T) {
 	}
 }
 
+func TestBuildHTTPClient_MalformedProxyURLIsValidation(t *testing.T) {
+	t.Parallel()
+
+	_, err := buildHTTPClient("", nil, "http://[::1", 30*time.Second)
+	if !errors.Is(err, ErrCLIUsage) {
+		t.Fatalf("malformed proxy URL: expected ErrCLIUsage, got %v", err)
+	}
+	if got := exitCodeFor(err); got != exitValidation {
+		t.Fatalf("malformed proxy URL: exitCodeFor = %d, want %d", got, exitValidation)
+	}
+}
+
 // TestParseFromURL_UsesCustomClient verifies that standard HTTP settings built
 // from CLI flags (User-Agent, custom header) actually reaches the upstream
 // request when passed via defuddle.Options.Client.

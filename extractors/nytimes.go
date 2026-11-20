@@ -62,6 +62,9 @@ func (e *NytimesExtractor) CanExtract() bool { return e.renderedHTML != "" }
 
 // Extract returns structured metadata and the rendered article body.
 func (e *NytimesExtractor) Extract() *ExtractorResult {
+	if !e.CanExtract() || e.preloadedData == nil {
+		return &ExtractorResult{}
+	}
 	article := e.preloadedData
 
 	title := ""

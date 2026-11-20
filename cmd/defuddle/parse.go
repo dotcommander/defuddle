@@ -139,11 +139,12 @@ func executeParseContent(ctx context.Context, opts *ParseOptions) error {
 
 // buildDefuddleOptions converts ParseOptions into a defuddle.Options.
 func buildDefuddleOptions(opts *ParseOptions) *defuddle.Options {
+	wantMarkdown := opts.Markdown || strings.EqualFold(strings.TrimSpace(opts.Property), "contentmarkdown")
 	o := &defuddle.Options{
 		Debug:            opts.Debug,
 		URL:              sourceBaseURL(opts.Source),
-		Markdown:         opts.Markdown,
-		SeparateMarkdown: opts.Markdown,
+		Markdown:         wantMarkdown,
+		SeparateMarkdown: wantMarkdown,
 		RemoveImages:     opts.RemoveImages,
 		ContentSelector:  opts.ContentSelector,
 	}

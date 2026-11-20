@@ -3,6 +3,7 @@ package render
 import (
 	"context"
 	"errors"
+	"net/http"
 	"testing"
 	"time"
 
@@ -50,5 +51,20 @@ func TestRenderExpiredParentReturnsDeadlineWithoutChrome(t *testing.T) {
 	html, err := RenderHTML(ctx, "https://example.com", Config{ChromePath: "missing-chrome"})
 	if html != "" || !errors.Is(err, context.DeadlineExceeded) || !errors.Is(err, defuddle.ErrTimeout) || errors.Is(err, ErrChromeNotFound) {
 		t.Fatalf("html=%q err=%v", html, err)
+	}
+}
+
+func TestBuildExtraHTTPHeaders(t *testing.T) {
+	t.Parallel()
+	if got := buildExtraHTTPHeaders(nil); got != nil {
+		t.Fatalf("expected nil for nil headers, got %v", got)
+	}
+	got := buildExtraHTTPHeaders(http.Header{
+		"Authorization": []string{"Bearer tok"},
+		"X-Multi":       []string{"a", "b"},
+		"X-Empty":       nil,
+	})
+	if len(got) != 2 || got["Authorization"] != "Bearer tok" || got["X-Multi"] != "a, b" {
+		t.Fatalf("unexpected headers: %#v", got)
 	}
 }

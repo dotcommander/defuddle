@@ -100,9 +100,9 @@ func (r *RedditExtractor) createDescription(postContent string) string {
 	// Replace multiple whitespace with single space
 	textContent = whitespaceRe.ReplaceAllString(textContent, " ")
 
-	// Limit to 140 characters
-	if len(textContent) > 140 {
-		return textContent[:140]
+	// Limit to 140 characters (UTF-8 rune safe)
+	if runes := []rune(textContent); len(runes) > 140 {
+		return string(runes[:140])
 	}
 
 	return textContent

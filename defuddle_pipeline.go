@@ -186,11 +186,11 @@ func (d *Defuddle) tryExtractor(
 	extractorType := strings.ToLower(strings.TrimSuffix(ext.Name(), "Extractor"))
 
 	// buildMetadata uses extractedMetadata.Site; override with siteName after.
-	fragment, err := goquery.NewDocumentFromReader(strings.NewReader("<div>" + extracted.ContentHTML + "</div>"))
+	fragment, err := goquery.NewDocumentFromReader(strings.NewReader("<!DOCTYPE html><html><body>" + extracted.ContentHTML + "</body></html>"))
 	if err != nil {
 		return nil
 	}
-	output := fragment.Find("body > div").First()
+	output := fragment.Find("body").First()
 	// Conversation content has already passed its enabled processors once.
 	if _, conversation := ext.(extractors.ContentProcessorSetter); !conversation {
 		standardize.ContentWithOptions(output, extractedMetadata, fragment, standardizeOptions(options), false)
@@ -261,11 +261,11 @@ func sanitizeHTMLFragment(content string) string {
 	if content == "" {
 		return ""
 	}
-	doc, err := goquery.NewDocumentFromReader(strings.NewReader("<div>" + content + "</div>"))
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader("<!DOCTYPE html><html><body>" + content + "</body></html>"))
 	if err != nil {
 		return content
 	}
-	root := doc.Find("body > div").First()
+	root := doc.Find("body").First()
 	urlutil.SanitizeUnsafe(root)
 	return selectionHTML(root)
 }

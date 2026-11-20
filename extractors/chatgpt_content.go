@@ -29,7 +29,7 @@ func (c *ChatGPTExtractor) cleanMessageContent(messageContent string) string {
 	tempDoc.Find(`h5.sr-only, h6.sr-only, span[data-state="closed"]`).Remove()
 
 	// Get the cleaned HTML
-	cleanedContent, err := tempDoc.Html()
+	cleanedContent, err := tempDoc.Find("body").Html()
 	if err != nil {
 		slog.Warn("Failed to get cleaned HTML content", "error", err)
 		return messageContent
@@ -160,7 +160,7 @@ func (c *ChatGPTExtractor) footnoteIndexForURL(citationURL, domain, fragmentText
 	c.footnoteCounter++
 	c.footnotes = append(c.footnotes, Footnote{
 		URL:  citationURL,
-		Text: fmt.Sprintf(`<a href="%s">%s</a>%s`, citationURL, domain, fragmentText),
+		Text: domain + fragmentText,
 	})
 	return c.footnoteCounter
 }

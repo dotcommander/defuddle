@@ -98,9 +98,14 @@ func renderComplexLink(ctx converter.Context, w converter.Writer, n *html.Node) 
 		}
 	}
 
-	var headingBuf bytes.Buffer
+	var headingText string
 	if headingNode != nil {
+		var headingBuf bytes.Buffer
 		ctx.RenderChildNodes(ctx, &headingBuf, headingNode)
+		if text := strings.TrimSpace(headingBuf.String()); text != "" {
+			level := int(headingNode.Data[1] - '0')
+			headingText = strings.Repeat("#", level) + " " + text
+		}
 	}
 
 	// Remove heading from parent temporarily to render remaining content
@@ -112,98 +117,186 @@ func renderComplexLink(ctx converter.Context, w converter.Writer, n *html.Node) 
 	var remainBuf bytes.Buffer
 	ctx.RenderChildNodes(ctx, &remainBuf, n)
 
-	w.WriteString(strings.TrimSpace(headingBuf.String()))
 	remaining := strings.TrimSpace(remainBuf.String())
+	if headingText != "" {
+		w.WriteString(headingText)
+		if remaining != "" {
+			w.WriteString("\n\n")
+		}
+	}
 	if remaining != "" {
-		w.WriteString("\n\n")
 		w.WriteString(remaining)
 	}
 	if href != "" {
-		w.WriteString("\n\n")
+		if headingText != "" || remaining != "" {
+			w.WriteString("\n\n")
+		}
 		w.WriteString("[View original](" + formatMarkdownLinkDestination(href) + formatMarkdownLinkTitle(getAttr(n, "title")) + ")")
 	}
 	return converter.RenderSuccess
 }
 
-// renderListItem handles task-list checkboxes and OL start attribute.
-// Only intercepts special cases; returns RenderTryNext for normal list items.
+// unwrapComplexLinks restructures <a> elements containing a heading and sibling
+// content before commonmark's pre-renderer downgrades headings inside links to
+// bold text.
+func unwrapComplexLinks(_ converter.Context, doc *html.Node) {
+	var links []*html.Node
+	walkChildren(doc, func(n *html.Node) bool {
+		if n.Type == html.ElementNode && n.Data == "a" && hasChildHeading(n) {
+			links = append(links, n)
+			return false
+		}
+		return true
+	})
+
+	for _, a := range links {
+		parent := a.Parent
+		if parent == nil {
+			continue
+		}
+		href := getAttr(a, "href")
+		title := getAttr(a, "title")
+
+		var heading *html.Node
+		for c := a.FirstChild; c != nil; c = c.NextSibling {
+			if c.Type == html.ElementNode {
+				switch c.Data {
+				case "h1", "h2", "h3", "h4", "h5", "h6":
+					heading = c
+				}
+			}
+			if heading != nil {
+				break
+			}
+		}
+
+		wrapper := &html.Node{Type: html.ElementNode, Data: "div"}
+		if heading != nil {
+			a.RemoveChild(heading)
+			wrapper.AppendChild(heading)
+		}
+		for a.FirstChild != nil {
+			child := a.FirstChild
+			a.RemoveChild(child)
+			wrapper.AppendChild(child)
+		}
+		if href != "" {
+			p := &html.Node{Type: html.ElementNode, Data: "p"}
+			link := &html.Node{
+				Type: html.ElementNode,
+				Data: "a",
+				Attr: []html.Attribute{{Key: "href", Val: href}},
+			}
+			if title != "" {
+				link.Attr = append(link.Attr, html.Attribute{Key: "title", Val: title})
+			}
+			link.AppendChild(&html.Node{Type: html.TextNode, Data: "View original"})
+			p.AppendChild(link)
+			wrapper.AppendChild(p)
+		}
+
+		parent.InsertBefore(wrapper, a)
+		parent.RemoveChild(a)
+	}
+}
+
+const taskCheckboxAttr = "data-defuddle-task-checkbox"
+
+// preserveTaskListCheckboxes records checkbox state on task-list <li> elements
+// and removes the <input type="checkbox"> before base.preRenderRemove strips
+// all <input> elements from the DOM.
+func preserveTaskListCheckboxes(_ converter.Context, doc *html.Node) {
+	walkChildren(doc, func(n *html.Node) bool {
+		if n.Type != html.ElementNode || n.Data != "li" {
+			return true
+		}
+		if checkbox := findTaskCheckbox(n); checkbox != nil {
+			state := "unchecked"
+			if hasAttr(checkbox, "checked") {
+				state = "checked"
+			}
+			n.Attr = append(n.Attr, html.Attribute{Key: taskCheckboxAttr, Val: state})
+			if checkbox.Parent != nil {
+				checkbox.Parent.RemoveChild(checkbox)
+			}
+		}
+		return true
+	})
+}
+
+// findTaskCheckbox locates a task-list <input type="checkbox"> inside an <li>,
+// either as a direct child or as the first element child of a leading <p>.
+func findTaskCheckbox(li *html.Node) *html.Node {
+	isTaskClass := hasExactClass(getAttr(li, "class"), "task-list-item")
+	for c := li.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type == html.TextNode && strings.TrimSpace(c.Data) == "" {
+			continue
+		}
+		if c.Type == html.ElementNode && c.Data == "input" && strings.EqualFold(getAttr(c, "type"), "checkbox") {
+			return c
+		}
+		if c.Type == html.ElementNode && c.Data == "p" {
+			for pc := c.FirstChild; pc != nil; pc = pc.NextSibling {
+				if pc.Type == html.TextNode && strings.TrimSpace(pc.Data) == "" {
+					continue
+				}
+				if pc.Type == html.ElementNode && pc.Data == "input" && strings.EqualFold(getAttr(pc, "type"), "checkbox") {
+					return pc
+				}
+				break
+			}
+		}
+		if !isTaskClass {
+			break
+		}
+	}
+	return nil
+}
+
+// renderListItem handles task-list checkboxes.
+// Normal list items and <ol start="N"> fall through to commonmark's list
+// container renderer, which emits the bullet/number prefix and handles nesting.
 func renderListItem(ctx converter.Context, w converter.Writer, n *html.Node) converter.RenderStatus {
 	if n.Type != html.ElementNode || n.Data != "li" {
 		return converter.RenderTryNext
 	}
 
-	// Check for task-list checkbox
-	isTaskItem := hasExactClass(getAttr(n, "class"), "task-list-item")
 	var checkboxMarker string
-	if isTaskItem {
-		// Find and remove input[type="checkbox"]
-		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			if c.Type == html.ElementNode && c.Data == "input" && getAttr(c, "type") == "checkbox" {
-				if getAttr(c, "checked") != "" {
-					checkboxMarker = "[x] "
-				} else {
-					checkboxMarker = "[ ] "
-				}
-				n.RemoveChild(c)
-				break
+	switch getAttr(n, taskCheckboxAttr) {
+	case "checked":
+		checkboxMarker = "[x] "
+	case "unchecked":
+		checkboxMarker = "[ ] "
+	default:
+		if checkbox := findTaskCheckbox(n); checkbox != nil {
+			if hasAttr(checkbox, "checked") {
+				checkboxMarker = "[x] "
+			} else {
+				checkboxMarker = "[ ] "
+			}
+			if checkbox.Parent != nil {
+				checkbox.Parent.RemoveChild(checkbox)
 			}
 		}
 	}
 
-	// Check OL start attribute
-	hasCustomStart := false
-	customNumber := 0
-	if n.Parent != nil && n.Parent.Type == html.ElementNode && n.Parent.Data == "ol" {
-		if start := getAttr(n.Parent, "start"); start != "" {
-			startNum := 0
-			if _, err := fmt.Sscanf(start, "%d", &startNum); err == nil {
-				// Find this li's index among siblings
-				customNumber = startNum + liIndexInParent(n) - 1
-				hasCustomStart = true
-			}
-		}
-	}
-
-	// If neither special case applies, let default handler take over
-	if checkboxMarker == "" && !hasCustomStart {
+	if checkboxMarker == "" {
 		return converter.RenderTryNext
 	}
 
-	// Render content
 	var buf bytes.Buffer
 	ctx.RenderChildNodes(ctx, &buf, n)
 	content := strings.TrimSpace(buf.String())
 
-	// Determine prefix
-	var prefix string
-	if n.Parent != nil && n.Parent.Data == "ol" {
-		num := customNumber
-		if !hasCustomStart {
-			// Count position for regular OL
-			num = liIndexInParent(n)
-		}
-		prefix = fmt.Sprintf("%d. ", num)
-	} else {
-		prefix = "- "
+	// Inside <ul>/<ol>, commonmark's renderListContainer supplies the list marker
+	// and multi-line/nested indentation, so emit only the checkbox + content.
+	if n.Parent != nil && n.Parent.Type == html.ElementNode && (n.Parent.Data == "ul" || n.Parent.Data == "ol") {
+		w.WriteString(checkboxMarker + content)
+		return converter.RenderSuccess
 	}
 
-	w.WriteString(prefix + checkboxMarker + content + "\n")
+	w.WriteString("- " + checkboxMarker + content + "\n")
 	return converter.RenderSuccess
-}
-
-// liIndexInParent returns the 1-based position of li node n among its parent's
-// li children. Callers guard that n.Parent is non-nil.
-func liIndexInParent(n *html.Node) int {
-	idx := 0
-	for c := n.Parent.FirstChild; c != nil; c = c.NextSibling {
-		if c.Type == html.ElementNode && c.Data == "li" {
-			idx++
-			if c == n {
-				break
-			}
-		}
-	}
-	return idx
 }
 
 // renderOrderedList dispatches to ArXiv enumerate or footnotes list renderers.

@@ -43,10 +43,15 @@ func renderCommentThread(comments []CommentData) string {
 			blockquoteStack = []int{0}
 		} else {
 			if c.Depth < currentDepth {
-				// Ascending: close blockquotes until we reach the target depth.
-				for len(blockquoteStack) > 0 && blockquoteStack[len(blockquoteStack)-1] >= c.Depth {
+				// Ascending: close blockquotes deeper than the target depth.
+				for len(blockquoteStack) > 0 && blockquoteStack[len(blockquoteStack)-1] > c.Depth {
 					b.WriteString("</blockquote>")
 					blockquoteStack = blockquoteStack[:len(blockquoteStack)-1]
+				}
+				// If a skipped depth means target depth isn't on the stack, open it.
+				if len(blockquoteStack) == 0 || blockquoteStack[len(blockquoteStack)-1] < c.Depth {
+					b.WriteString("<blockquote>")
+					blockquoteStack = append(blockquoteStack, c.Depth)
 				}
 			} else if c.Depth > currentDepth {
 				// Descending: open a new nesting level.
@@ -71,16 +76,25 @@ func renderCommentThread(comments []CommentData) string {
 }
 
 // commentHTML renders a single comment's metadata + content div block.
+// Author, URL, LinkText, and Date are HTML-escaped; Content and Extra are
+// expected to be pre-rendered HTML.
 func commentHTML(c CommentData) string {
 	var b strings.Builder
 	b.WriteString(`<div class="comment">`)
 	b.WriteString(`<div class="comment-metadata">`)
-	fmt.Fprintf(&b, `<span class="comment-author"><strong>%s</strong></span> •`, c.Author)
+	fmt.Fprintf(&b, `<span class="comment-author"><strong>%s</strong></span> •`, html.EscapeString(c.Author))
 	if c.URL != "" {
-		fmt.Fprintf(&b, ` <a href="%s" class="comment-link">%s</a> •`, c.URL, c.LinkText)
+		linkText := c.LinkText
+		if linkText == "" {
+			linkText = "link"
+		}
+		fmt.Fprintf(&b, ` <a href="%s" class="comment-link">%s</a>`, html.EscapeString(c.URL), html.EscapeString(linkText))
+		if c.Date != "" || c.RenderDateSpan {
+			b.WriteString(` •`)
+		}
 	}
 	if c.Date != "" || c.RenderDateSpan {
-		fmt.Fprintf(&b, ` <span class="comment-date">%s</span>`, c.Date)
+		fmt.Fprintf(&b, ` <span class="comment-date">%s</span>`, html.EscapeString(c.Date))
 	}
 	if c.Extra != "" {
 		b.WriteString(c.Extra)

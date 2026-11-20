@@ -53,8 +53,8 @@ func getImage(_ *goquery.Document, schemaOrgData any, metaTags []MetaTag) string
 	return cmp.Or(
 		getMetaContent(metaTags, "property", "og:image"),
 		getMetaContent(metaTags, "name", "twitter:image"),
-		getSchemaProperty(schemaOrgData, "image.url"),
-		getSchemaProperty(schemaOrgData, "image"),
+		getFirstSchemaProperty(schemaOrgData, "image.url"),
+		getFirstSchemaProperty(schemaOrgData, "image"),
 		getMetaContent(metaTags, "name", "sailthru.image.full"),
 		getMetaContent(metaTags, "name", "sailthru.image.thumb"),
 	)
@@ -86,7 +86,7 @@ func getLanguage(doc *goquery.Document, schemaOrgData any, metaTags []MetaTag) s
 	}
 
 	// 4. Schema.org inLanguage
-	if sl := getSchemaProperty(schemaOrgData, "inLanguage"); sl != "" {
+	if sl := getFirstSchemaProperty(schemaOrgData, "inLanguage"); sl != "" {
 		return normalizeLangCode(sl)
 	}
 

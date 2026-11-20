@@ -3,6 +3,7 @@ package extractors
 import (
 	"log/slog"
 	"regexp"
+	"strings"
 
 	"github.com/PuerkitoBio/goquery"
 )
@@ -149,7 +150,21 @@ func NewClaudeExtractor(document *goquery.Document, urlStr string, schemaOrgData
 //		return !!this.articles && this.articles.length > 0;
 //	}
 func (c *ClaudeExtractor) CanExtract() bool {
-	return canExtractFromSelection(c.articles, "Claude", "articlesCount")
+	if c.articles == nil || c.articles.Length() == 0 {
+		slog.Debug("Claude extractor can extract check", "canExtract", false, "articlesCount", 0)
+		return false
+	}
+	found := false
+	c.articles.EachWithBreak(func(_ int, article *goquery.Selection) bool {
+		role, content := claudeMessageRoleContent(article)
+		if role != "" && strings.TrimSpace(content) != "" {
+			found = true
+			return false
+		}
+		return true
+	})
+	slog.Debug("Claude extractor can extract check", "canExtract", found, "articlesCount", c.articles.Length())
+	return found
 }
 
 // Name returns the name of the extractor

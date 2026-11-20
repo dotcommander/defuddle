@@ -2,7 +2,9 @@ package extractors
 
 import (
 	"fmt"
+	"html"
 	"log/slog"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -118,13 +120,13 @@ func (h *HackerNewsExtractor) processComments(comments []*goquery.Selection) str
 		timeElement := comment.Find(".age")
 		points := strings.TrimSpace(comment.Find(".score").Text())
 
-		commentURL := fmt.Sprintf("https://news.ycombinator.com/item?id=%s", id)
+		commentURL := fmt.Sprintf("https://news.ycombinator.com/item?id=%s", url.QueryEscape(id))
 
 		date := hnDateFromAge(timeElement)
 
 		extra := ""
 		if points != "" {
-			extra = fmt.Sprintf(` • <span class="comment-points">%s</span>`, points)
+			extra = fmt.Sprintf(` • <span class="comment-points">%s</span>`, html.EscapeString(points))
 		}
 
 		commentContent, _ := commentText.Html()
@@ -180,10 +182,10 @@ func (h *HackerNewsExtractor) getPostTitle() string {
 
 		commentText := strings.TrimSpace(h.mainComment.Find(".commtext").Text())
 
-		// Use first 50 characters of comment as title
+		// Use first 50 characters of comment as title (UTF-8 rune safe)
 		preview := commentText
-		if len(commentText) > 50 {
-			preview = commentText[:50] + "..."
+		if runes := []rune(commentText); len(runes) > 50 {
+			preview = string(runes[:50]) + "..."
 		}
 
 		return fmt.Sprintf("Comment by %s: %s", author, preview)

@@ -25,15 +25,15 @@ import (
 //
 // findFootnoteDefinition finds a footnote definition by key
 func (p *FootnoteProcessor) findFootnoteDefinition(key string) *goquery.Selection {
-	// Try various ID patterns
+	// Try various ID patterns (use attribute selectors so colon-delimited IDs like fn:1 match)
 	selectors := []string{
-		"#footnote-" + key,
-		"#fn-" + key,
-		"#fn:" + key,
-		"#note-" + key,
-		"#ref-" + key,
-		fmt.Sprintf("[data-footnote='%s']", key),
-		fmt.Sprintf("[data-note='%s']", key),
+		fmt.Sprintf(`[id="footnote-%s"]`, key),
+		fmt.Sprintf(`[id="fn-%s"]`, key),
+		fmt.Sprintf(`[id="fn:%s"]`, key),
+		fmt.Sprintf(`[id="note-%s"]`, key),
+		fmt.Sprintf(`[id="ref-%s"]`, key),
+		fmt.Sprintf(`[data-footnote="%s"]`, key),
+		fmt.Sprintf(`[data-note="%s"]`, key),
 	}
 
 	for _, selector := range selectors {

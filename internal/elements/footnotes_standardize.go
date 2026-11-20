@@ -209,7 +209,7 @@ func (p *FootnoteProcessor) extractInlineFootnoteID(el *goquery.Selection) strin
 			return fnID
 		}
 		if id, _ := el.Attr("id"); strings.HasPrefix(id, "fnref") {
-			return strings.ToLower(strings.TrimPrefix(id, "fnref"))
+			return strings.ToLower(strings.TrimLeft(strings.TrimPrefix(id, "fnref"), ":-_"))
 		}
 	}
 
@@ -228,7 +228,7 @@ func (p *FootnoteProcessor) extractInlineFootnoteID(el *goquery.Selection) strin
 	// a[id^="fnref"]
 	if goquery.NodeName(el) == "a" {
 		if id, _ := el.Attr("id"); strings.HasPrefix(id, "fnref") {
-			return strings.ToLower(strings.TrimPrefix(id, "fnref"))
+			return strings.ToLower(strings.TrimLeft(strings.TrimPrefix(id, "fnref"), ":-_"))
 		}
 	}
 

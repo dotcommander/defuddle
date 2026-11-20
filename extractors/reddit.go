@@ -183,9 +183,9 @@ func (r *RedditExtractor) getPostContent() string {
 		// Get media body content
 		mediaBody := r.shredditPost.Find("#post-image").First()
 		if mediaBody.Length() > 0 {
-			mediaBodyHTML, _ := mediaBody.Html()
-			// Use innerHTML equivalent since TypeScript uses outerHTML
-			fmt.Fprintf(&content, `<div id="post-image">%s</div>`, mediaBodyHTML)
+			if mediaBodyHTML, err := goquery.OuterHtml(mediaBody); err == nil {
+				content.WriteString(mediaBodyHTML)
+			}
 		}
 	} else {
 		// Fallback method: Look for alternative selectors

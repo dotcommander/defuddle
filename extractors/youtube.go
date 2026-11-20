@@ -89,7 +89,7 @@ func NewYouTubeExtractor(document *goquery.Document, url string, schemaOrgData a
 //		return true; // YouTube extractor can always extract
 //	}
 func (y *YouTubeExtractor) CanExtract() bool {
-	canExtract := true // YouTube extractor can always extract
+	canExtract := y.getVideoID() != ""
 	slog.Debug("YouTube extractor can extract check", "canExtract", canExtract)
 	return canExtract
 }
@@ -138,7 +138,7 @@ func (y *YouTubeExtractor) Extract() *ExtractorResult {
 	if videoID != "" {
 		contentHTML = fmt.Sprintf(
 			`<iframe width="560" height="315" src="https://www.youtube.com/embed/%s" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe><br>%s`,
-			videoID,
+			html.EscapeString(videoID),
 			formattedDescription,
 		)
 	} else {

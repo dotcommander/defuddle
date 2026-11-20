@@ -94,7 +94,23 @@ func NewGrokExtractor(document *goquery.Document, urlStr string, schemaOrgData a
 //		return !!this.messageBubbles && this.messageBubbles.length > 0;
 //	}
 func (g *GrokExtractor) CanExtract() bool {
-	return canExtractFromSelection(g.messageBubbles, "Grok", "messageBubblesCount")
+	if g.messageBubbles == nil || g.messageBubbles.Length() == 0 {
+		slog.Debug("Grok extractor can extract check", "canExtract", false, "messageBubblesCount", 0)
+		return false
+	}
+	found := false
+	g.messageBubbles.EachWithBreak(func(_ int, container *goquery.Selection) bool {
+		if !container.HasClass("items-end") && !container.HasClass("items-start") {
+			return true
+		}
+		if container.Find(".message-bubble").Length() > 0 {
+			found = true
+			return false
+		}
+		return true
+	})
+	slog.Debug("Grok extractor can extract check", "canExtract", found, "messageBubblesCount", g.messageBubbles.Length())
+	return found
 }
 
 // Name returns the name of the extractor

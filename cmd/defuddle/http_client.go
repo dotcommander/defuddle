@@ -54,7 +54,7 @@ func buildHTTPClient(userAgent string, headers []string, proxy string, timeout t
 	if proxy != "" {
 		proxyURL, err := url.Parse(proxy)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: invalid proxy URL %q: %w", ErrCLIUsage, proxy, err)
 		}
 		switch proxyURL.Scheme {
 		case "http", "https", "socks5":

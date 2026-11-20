@@ -171,7 +171,7 @@ func (g *GeminiExtractor) cleanGeminiContent(content string) string {
 	tempDoc.Find(".table-content").RemoveClass("table-content")
 
 	// Get the cleaned HTML
-	cleanedContent, err := tempDoc.Html()
+	cleanedContent, err := tempDoc.Find("body").Html()
 	if err != nil {
 		slog.Warn("Failed to get cleaned Gemini HTML content", "error", err)
 		return content

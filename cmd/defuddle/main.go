@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"runtime/debug"
+	"syscall"
 
 	"github.com/alecthomas/kong"
 	"github.com/dotcommander/defuddle/extractors"
@@ -71,7 +73,10 @@ func newParser(cli *CLI, stdout, stderr io.Writer) (*kong.Kong, error) {
 }
 
 func main() {
-	if err := run(context.Background()); err != nil {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	err := run(ctx)
+	stop()
+	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(exitCodeFor(err))
 	}

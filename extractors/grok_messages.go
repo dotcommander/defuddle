@@ -1,6 +1,7 @@
 package extractors
 
 import (
+	"html"
 	"log/slog"
 	"strings"
 
@@ -123,7 +124,7 @@ func (g *GrokExtractor) grokMessageRoleContent(container *goquery.Selection, i i
 	if isUserMessage {
 		// Assume user message bubble's textContent is the desired content.
 		// This is simpler and potentially less brittle than selecting specific spans.
-		return "user", messageBubble.Text(), "You"
+		return "user", html.EscapeString(messageBubble.Text()), "You"
 	}
 
 	// isGrokMessage: clone the bubble to modify it without affecting the original page

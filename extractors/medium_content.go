@@ -1,8 +1,8 @@
 package extractors
 
 import (
-	"html"
 	"strings"
+	"unicode"
 
 	"github.com/PuerkitoBio/goquery"
 )
@@ -81,10 +81,10 @@ func normalizeSchemaSlice(data any) []any {
 
 // getDescription extracts a plain-text description (≤140 chars) from the first
 // meaningful paragraph after UI noise has been cleaned.
-// hasWordChar reports whether s contains at least one ASCII letter.
+// hasWordChar reports whether s contains at least one Unicode letter or digit.
 func hasWordChar(s string) bool {
 	for _, r := range s {
-		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
 			return true
 		}
 	}
@@ -98,10 +98,10 @@ func (e *MediumExtractor) getDescription() string {
 	var desc string
 	e.article.Find("p").EachWithBreak(func(_ int, p *goquery.Selection) bool {
 		text := strings.TrimSpace(p.Text())
-		if len(text) < 3 {
+		if len([]rune(text)) < 3 {
 			return true
 		}
-		// Skip purely numeric/punctuation paragraphs.
+		// Skip purely punctuation paragraphs.
 		if !hasWordChar(text) {
 			return true
 		}
@@ -110,7 +110,7 @@ func (e *MediumExtractor) getDescription() string {
 			text = string(runes[:140])
 		}
 		text = whitespaceRe.ReplaceAllString(text, " ")
-		desc = html.EscapeString(text)
+		desc = text
 		return false
 	})
 	return desc

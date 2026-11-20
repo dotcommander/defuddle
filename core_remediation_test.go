@@ -62,6 +62,22 @@ func TestCoreReactStreamingBoundaries(t *testing.T) {
 			t.Fatal("missing slot changed boundary")
 		}
 	})
+	t.Run("slot equals boundary parent", func(t *testing.T) {
+		t.Parallel()
+		doc := remediationDoc(t, `<html><body><div id="S:self"><!--$?--><template id="B:self"></template><p>fallback</p><!--/$--></div><script>$RC("B:self","S:self")</script></body></html>`)
+		resolveReactStreaming(doc)
+		if doc.Find("template").Length() != 1 || !strings.Contains(doc.Text(), "fallback") {
+			t.Fatal("self-parent slot changed malformed boundary")
+		}
+	})
+	t.Run("slot is ancestor of boundary parent", func(t *testing.T) {
+		t.Parallel()
+		doc := remediationDoc(t, `<html><body><div id="S:anc"><section><!--$?--><template id="B:anc"></template><p>fallback</p><!--/$--></section></div><script>$RC("B:anc","S:anc")</script></body></html>`)
+		resolveReactStreaming(doc)
+		if doc.Find("template").Length() != 1 || !strings.Contains(doc.Text(), "fallback") {
+			t.Fatal("ancestor slot changed malformed boundary")
+		}
+	})
 }
 
 func TestCoreInspectionLifecycle(t *testing.T) {
@@ -194,6 +210,67 @@ func TestCoreFetchCancellationIdentity(t *testing.T) {
 	}
 }
 
+func TestCoreFetchClientTimeout(t *testing.T) {
+	t.Parallel()
+	client := &http.Client{
+		Timeout: 25 * time.Millisecond,
+		Transport: coreRoundTripper(func(r *http.Request) (*http.Response, error) {
+			<-r.Context().Done()
+			return nil, r.Context().Err()
+		}),
+	}
+	_, err := ParseFromURL(context.Background(), "https://example.com", &Options{Client: client})
+	if err == nil {
+		t.Fatal("expected timeout error, got nil")
+	}
+	if !errors.Is(err, ErrTimeout) {
+		t.Fatalf("expected ErrTimeout when http.Client.Timeout expires, got: %v", err)
+	}
+}
+
+type unmatchedDivTestExtractor struct {
+	extractors.ExtractorBase
+}
+
+func (e *unmatchedDivTestExtractor) CanExtract() bool { return true }
+
+func (e *unmatchedDivTestExtractor) Name() string { return "UnmatchedDivTestExtractor" }
+
+func (e *unmatchedDivTestExtractor) Extract() *extractors.ExtractorResult {
+	return &extractors.ExtractorResult{
+		ContentHTML: `<p>first</p></div><p>second</p>`,
+	}
+}
+
+func TestCoreUnmatchedClosingDivPreservesContent(t *testing.T) {
+	t.Parallel()
+
+	sanitized := sanitizeHTMLFragment(`<p>first</p></div><p>second</p>`)
+	if !strings.Contains(sanitized, "<p>first</p>") || !strings.Contains(sanitized, "<p>second</p>") {
+		t.Fatalf("sanitizeHTMLFragment truncated content at unmatched </div>: %q", sanitized)
+	}
+
+	extractors.InitializeBuiltins()
+	extractors.Register(extractors.ExtractorMapping{
+		Patterns: []any{"unmatched-div-c205.example.test"},
+		Extractor: func(doc *goquery.Document, u string, schema any) extractors.BaseExtractor {
+			return &unmatchedDivTestExtractor{
+				ExtractorBase: *extractors.NewExtractorBase(doc, u, schema),
+			}
+		},
+	})
+
+	result, err := ParseFromString(context.Background(), `<html><body><p>ignored</p></body></html>`, &Options{
+		URL: "https://unmatched-div-c205.example.test/post",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(result.Content, "<p>first</p>") || !strings.Contains(result.Content, "<p>second</p>") {
+		t.Fatalf("tryExtractor truncated content at unmatched </div>: %q", result.Content)
+	}
+}
+
 func TestCoreBatchRedirectBases(t *testing.T) {
 	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -296,36 +373,39 @@ func TestCorePublicProtectedScopes(t *testing.T) {
 	}
 }
 
-// A bare article confirms Claude's fallback DOM signature but yields no messages.
-// Its secondary normalization must not redispatch Claude on the generated article.
+// A bare article does not confirm Claude's chat DOM signature (falls back to generic
+// extraction instead of returning empty conversation output), while a primary message
+// dispatches Claude and its secondary normalization must not redispatch Claude.
 func TestCoreConversationNormalizationAvoidsRedispatch(t *testing.T) {
 	t.Parallel()
 	extractors.InitializeBuiltins()
 	options := &Options{URL: "https://claude.ai/share/conversation/"}
-	for _, tc := range []struct {
-		name, source, description string
-	}{
-		{"empty fallback", `<article></article>`, "Claude conversation with 0 messages"},
-		{"primary message", `<div data-testid="user-message"><p>hello <a href="asset.html">linked message</a></p></div>`, "Claude conversation with 1 messages"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			result, err := ParseFromString(context.Background(), tc.source, options)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if result.ExtractorType == nil || *result.ExtractorType != "claude" || result.Description != tc.description {
-				t.Fatalf("top-level conversation dispatch changed: %+v", result)
-			}
-			if tc.name == "empty fallback" {
-				if result.WordCount != 0 || strings.TrimSpace(remediationDoc(t, result.Content).Text()) != "" {
-					t.Fatalf("empty fallback acquired content: %+v", result)
-				}
-			} else {
-				content := remediationDoc(t, result.Content)
-				if !strings.Contains(content.Text(), "linked message") || content.Find("a").AttrOr("href", "") != options.URL+"asset.html" {
-					t.Fatalf("secondary normalization lost content or URL base: %s", result.Content)
-				}
-			}
-		})
-	}
+
+	t.Run("non-chat article falls back to generic", func(t *testing.T) {
+		result, err := ParseFromString(context.Background(), `<article></article>`, options)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.ExtractorType != nil {
+			t.Fatalf("expected non-chat bare article to fall back to generic extraction, got extractor %q", *result.ExtractorType)
+		}
+		if result.WordCount != 0 || strings.TrimSpace(remediationDoc(t, result.Content).Text()) != "" {
+			t.Fatalf("empty fallback acquired content: %+v", result)
+		}
+	})
+
+	t.Run("primary message", func(t *testing.T) {
+		source := `<div data-testid="user-message"><p>hello <a href="asset.html">linked message</a></p></div>`
+		result, err := ParseFromString(context.Background(), source, options)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.ExtractorType == nil || *result.ExtractorType != "claude" || result.Description != "Claude conversation with 1 messages" {
+			t.Fatalf("top-level conversation dispatch changed: %+v", result)
+		}
+		content := remediationDoc(t, result.Content)
+		if !strings.Contains(content.Text(), "linked message") || content.Find("a").AttrOr("href", "") != options.URL+"asset.html" {
+			t.Fatalf("secondary normalization lost content or URL base: %s", result.Content)
+		}
+	})
 }

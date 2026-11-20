@@ -55,12 +55,15 @@ func (p *MathProcessor) processMathElement(s *goquery.Selection, options *MathPr
 	// Create clean math element
 	cleanMathHTML := p.createCleanMathElement(mathData, latex, isBlock)
 
+	// Capture parent before replacement detaches s
+	parent := s.Parent()
+
 	// Replace original element
 	s.ReplaceWithHtml(cleanMathHTML)
 
 	// Clean up associated scripts
 	if options.CleanupScripts {
-		p.cleanupMathScripts(s.Parent())
+		p.cleanupMathScripts(parent)
 	}
 
 	slog.Debug("processed math element", "hasLaTeX", latex != "", "hasMathML", mathData != nil && mathData.MathML != "", "isBlock", isBlock)

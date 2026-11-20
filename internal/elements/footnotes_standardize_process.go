@@ -40,10 +40,31 @@ func (p *FootnoteProcessor) StandardizeFootnotes(scope *goquery.Selection) {
 	}
 	supGroups := make(map[*html.Node]*supGroup)
 	supOrder := make([]*html.Node, 0) // preserve insertion order
+	processedNodes := make(map[*html.Node]bool)
+
+	var scopeNode *html.Node
+	if scope.Length() > 0 {
+		scopeNode = scope.Get(0)
+	}
 
 	scope.Find(FootnoteInlineReferences).Each(func(_ int, el *goquery.Selection) {
 		node := el.Get(0)
 		if node == nil {
+			return
+		}
+
+		// Skip nodes already handled (or descendants of an already-handled ref)
+		// and nodes detached by an earlier replacement in this pass.
+		connected := scopeNode == nil
+		for cur := node; cur != nil; cur = cur.Parent {
+			if processedNodes[cur] {
+				return
+			}
+			if cur == scopeNode {
+				connected = true
+			}
+		}
+		if !connected {
 			return
 		}
 
@@ -66,6 +87,8 @@ func (p *FootnoteProcessor) StandardizeFootnotes(scope *goquery.Selection) {
 			return
 		}
 
+		processedNodes[node] = true
+
 		// Assign ref ID (e.g. fnref:1 or fnref:1-2 for multi-reference)
 		var refID string
 		if len(matchEntry.refs) > 0 {
@@ -87,6 +110,7 @@ func (p *FootnoteProcessor) StandardizeFootnotes(scope *goquery.Selection) {
 			supGroups[containerNode].refs = append(supGroups[containerNode].refs, supRef{matchNum, refID})
 		} else {
 			// Replace container directly
+			processedNodes[containerNode] = true
 			container.ReplaceWithHtml(p.createFootnoteRefHTML(matchNum, refID))
 		}
 	})

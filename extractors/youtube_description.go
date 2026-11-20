@@ -2,6 +2,7 @@ package extractors
 
 import (
 	"fmt"
+	"html"
 	"log/slog"
 	"strings"
 )
@@ -112,8 +113,8 @@ func (y *YouTubeExtractor) formatDescription(description string) string {
 		return ""
 	}
 
-	// Replace newlines with <br> tags
-	formatted := strings.ReplaceAll(description, "\n", "<br>")
+	// Escape HTML before replacing newlines with <br> tags
+	formatted := strings.ReplaceAll(html.EscapeString(description), "\n", "<br>")
 	return fmt.Sprintf("<p>%s</p>", formatted)
 }
 
@@ -135,14 +136,15 @@ func (y *YouTubeExtractor) formatDescription(description string) string {
 //		return truncated.trim();
 //	}
 func (y *YouTubeExtractor) truncateDescription(description string) string {
-	if len(description) <= 200 {
+	runes := []rune(description)
+	if len(runes) <= 200 {
 		return strings.TrimSpace(description)
 	}
 
 	// Find a good breaking point (end of sentence or word)
-	truncated := description[:200]
+	truncated := string(runes[:200])
 	lastSpace := strings.LastIndex(truncated, " ")
-	if lastSpace > 150 { // Only use word boundary if it's not too far back
+	if lastSpace > 0 && len([]rune(truncated[:lastSpace])) > 150 { // Only use word boundary if it's not too far back
 		truncated = truncated[:lastSpace]
 	}
 

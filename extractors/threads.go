@@ -65,6 +65,9 @@ func (e *ThreadsExtractor) CanExtract() bool {
 
 // Extract dispatches to the appropriate extraction path.
 func (e *ThreadsExtractor) Extract() *ExtractorResult {
+	if !e.CanExtract() {
+		return &ExtractorResult{}
+	}
 	if len(e.pagelets) == 0 && e.regionContainer != nil {
 		return e.extractFromRegion(e.regionContainer)
 	}
@@ -187,13 +190,21 @@ func (e *ThreadsExtractor) extractComments(replyPosts [][]ThreadsPost) string {
 			if len(posts) == 1 {
 				depth = 0
 			}
-			comments = append(comments, CommentData{
+			cd := CommentData{
 				Depth:   depth,
 				Author:  "@" + p.username,
-				Date:    p.date,
-				URL:     p.permalink,
 				Content: p.content,
-			})
+			}
+			if p.permalink != "" {
+				cd.URL = p.permalink
+				cd.LinkText = p.date
+				if cd.LinkText == "" {
+					cd.LinkText = "link"
+				}
+			} else {
+				cd.Date = p.date
+			}
+			comments = append(comments, cd)
 		}
 	}
 	if len(comments) == 0 {

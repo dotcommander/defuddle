@@ -64,7 +64,7 @@ func main() {
 	if result.DebugInfo != nil {
 		fmt.Println("\n=== Extractor Info ===")
 		for _, step := range result.DebugInfo.ProcessingSteps {
-			if step.Step == "extractor_selection" {
+			if step.Step == "extractor" {
 				fmt.Printf("Extractor Used: %s\n", step.Description)
 			}
 		}

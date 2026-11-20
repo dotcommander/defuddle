@@ -42,7 +42,7 @@ go run examples/basic/main.go
 go run examples/advanced/main.go
 go run examples/extractors/main.go
 go run examples/markdown/main.go
-go run examples/custom_extractor/main.go
+go run examples/custom_extractor/custom_extractor.go
 ```
 
 ## Common Configurations

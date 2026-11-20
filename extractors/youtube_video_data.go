@@ -5,10 +5,14 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
 )
+
+// youtubeVideoIDRe validates YouTube video IDs to prevent HTML/attribute injection.
+var youtubeVideoIDRe = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 
 // getVideoData extracts video data from schema.org structured data
 // TypeScript original code:
@@ -187,20 +191,33 @@ func (y *YouTubeExtractor) getVideoID() string {
 		return ""
 	}
 
-	// For youtube.com/watch?v=...
-	if strings.Contains(parsedURL.Host, "youtube.com") {
-		videoID := parsedURL.Query().Get("v")
-		slog.Debug("YouTube extractor: extracted video ID from youtube.com", "videoId", videoID)
-		return videoID
+	host := strings.ToLower(parsedURL.Hostname())
+	var videoID string
+
+	switch {
+	case host == "youtube.com" || strings.HasSuffix(host, ".youtube.com"):
+		videoID = parsedURL.Query().Get("v")
+		if videoID == "" {
+			// Support /shorts/<id> and /embed/<id> paths.
+			for _, prefix := range []string{"/shorts/", "/embed/"} {
+				if rest, ok := strings.CutPrefix(parsedURL.Path, prefix); ok {
+					videoID, _, _ = strings.Cut(rest, "/")
+					break
+				}
+			}
+		}
+	case host == "youtu.be" || strings.HasSuffix(host, ".youtu.be"):
+		videoID = strings.TrimPrefix(parsedURL.Path, "/")
+	default:
+		slog.Debug("YouTube extractor: no video ID found in URL", "host", parsedURL.Host)
+		return ""
 	}
 
-	// For youtu.be/...
-	if strings.Contains(parsedURL.Host, "youtu.be") {
-		path := strings.TrimPrefix(parsedURL.Path, "/")
-		slog.Debug("YouTube extractor: extracted video ID from youtu.be", "videoId", path)
-		return path
+	if !youtubeVideoIDRe.MatchString(videoID) {
+		slog.Debug("YouTube extractor: rejecting invalid video ID", "videoId", videoID)
+		return ""
 	}
 
-	slog.Debug("YouTube extractor: no video ID found in URL", "host", parsedURL.Host)
-	return ""
+	slog.Debug("YouTube extractor: extracted video ID", "videoId", videoID)
+	return videoID
 }

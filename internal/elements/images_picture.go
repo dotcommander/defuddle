@@ -1,6 +1,10 @@
 package elements
 
-import "github.com/PuerkitoBio/goquery"
+import (
+	"html"
+
+	"github.com/PuerkitoBio/goquery"
+)
 
 // --- Transform 1: Picture element collapse ---
 
@@ -26,7 +30,7 @@ func transformPicture(el *goquery.Selection) {
 	if img.Length() == 0 {
 		// No img fallback — try to create one from best source
 		if srcset, firstURL := bestSourceSrcset(sources); firstURL != "" && isValidImageURL(firstURL) {
-			el.SetHtml(`<img src="` + firstURL + `" srcset="` + srcset + `"/>`)
+			el.SetHtml(`<img src="` + html.EscapeString(firstURL) + `" srcset="` + html.EscapeString(srcset) + `"/>`)
 		}
 		return
 	}

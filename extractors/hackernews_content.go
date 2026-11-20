@@ -2,6 +2,7 @@ package extractors
 
 import (
 	"fmt"
+	"html"
 	"log/slog"
 	"strings"
 
@@ -71,7 +72,8 @@ func (h *HackerNewsExtractor) getPostContent() string {
 
 	var content strings.Builder
 	if url != "" {
-		fmt.Fprintf(&content, `<p><a href="%s" target="_blank">%s</a></p>`, url, url)
+		escapedURL := html.EscapeString(url)
+		fmt.Fprintf(&content, `<p><a href="%s" target="_blank">%s</a></p>`, escapedURL, escapedURL)
 	}
 
 	text := h.mainPost.Find(".toptext")
@@ -103,15 +105,15 @@ func (h *HackerNewsExtractor) commentPageContent() string {
 	var content strings.Builder
 	content.WriteString(`<div class="comment main-comment">`)
 	content.WriteString(`<div class="comment-metadata">`)
-	fmt.Fprintf(&content, `<span class="comment-author"><strong>%s</strong></span> •`, author)
-	fmt.Fprintf(&content, ` <span class="comment-date">%s</span>`, date)
+	fmt.Fprintf(&content, `<span class="comment-author"><strong>%s</strong></span> •`, html.EscapeString(author))
+	fmt.Fprintf(&content, ` <span class="comment-date">%s</span>`, html.EscapeString(date))
 
 	if points != "" {
-		fmt.Fprintf(&content, ` • <span class="comment-points">%s</span>`, points)
+		fmt.Fprintf(&content, ` • <span class="comment-points">%s</span>`, html.EscapeString(points))
 	}
 
 	if parentURL != "" {
-		fmt.Fprintf(&content, ` • <a href="https://news.ycombinator.com/%s" class="parent-link">parent</a>`, parentURL)
+		fmt.Fprintf(&content, ` • <a href="https://news.ycombinator.com/%s" class="parent-link">parent</a>`, html.EscapeString(parentURL))
 	}
 
 	content.WriteString(`</div>`)

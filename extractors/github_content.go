@@ -82,7 +82,7 @@ func (g *GitHubExtractor) cleanBodyContent(bodyElement *goquery.Selection) strin
 	doc.Find(".js-clipboard-copy, .zeroclipboard-container").Remove()
 
 	// Get the cleaned HTML
-	cleanedHTML, err := doc.Html()
+	cleanedHTML, err := doc.Find("body").Html()
 	if err != nil {
 		return htmlContent // Return original if extraction fails
 	}
@@ -175,9 +175,9 @@ func (g *GitHubExtractor) createDescription(content string) string {
 
 	text := strings.TrimSpace(doc.Text())
 
-	// Truncate to 140 characters to match TypeScript implementation
-	if len(text) > 140 {
-		text = text[:140]
+	// Truncate to 140 characters to match TypeScript implementation (UTF-8 rune safe)
+	if runes := []rune(text); len(runes) > 140 {
+		text = string(runes[:140])
 	}
 
 	// Replace multiple spaces with single space

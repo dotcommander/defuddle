@@ -69,3 +69,47 @@ func TestSchemaRecursiveFallbackIsLexicalAndPreservesArrays(t *testing.T) {
 	schema["author"] = map[string]any{"name": "Direct"}
 	assert.Equal(t, "Direct", getSchemaProperty(schema, "author.name"))
 }
+
+func TestSingleValuedSchemaMetadataAvoidsCommaJoiningMultiItemGraph(t *testing.T) {
+	t.Parallel()
+
+	doc := parseDoc(t, `<html><head></head><body></body></html>`)
+	schema := map[string]any{
+		"@context": "https://schema.org",
+		"@graph": []any{
+			map[string]any{
+				"@type":         "WebSite",
+				"url":           "https://site.example",
+				"inLanguage":    "en_US",
+				"datePublished": "2024-01-01",
+			},
+			map[string]any{
+				"@type":         "Article",
+				"url":           "https://site.example/post",
+				"inLanguage":    "en_US",
+				"datePublished": "2024-05-10",
+				"image": []any{
+					"https://cdn.example/first.jpg",
+					"https://cdn.example/second.jpg",
+				},
+			},
+		},
+	}
+
+	m := Extract(doc, schema, nil, "")
+	assert.Equal(t, "site.example", m.Domain)
+	assert.Equal(t, "https://cdn.example/first.jpg", m.Image)
+	assert.Equal(t, "en-US", m.Language)
+	assert.Equal(t, "2024-01-01", m.Published)
+
+	// Multi-item ImageObject array should also pick only the first image URL.
+	schemaImgObjs := map[string]any{
+		"@type": "Article",
+		"image": []any{
+			map[string]any{"@type": "ImageObject", "url": "https://cdn.example/a.jpg"},
+			map[string]any{"@type": "ImageObject", "url": "https://cdn.example/b.jpg"},
+		},
+	}
+	m2 := Extract(doc, schemaImgObjs, nil, "")
+	assert.Equal(t, "https://cdn.example/a.jpg", m2.Image)
+}

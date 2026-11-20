@@ -38,6 +38,7 @@ type ExtractorMapping struct {
 type Registry struct {
 	mu       sync.RWMutex
 	mappings []ExtractorMapping
+	catchall []ExtractorMapping
 }
 
 // NewRegistry creates a new extractor registry
@@ -47,6 +48,7 @@ type Registry struct {
 func NewRegistry() *Registry {
 	registry := &Registry{
 		mappings: make([]ExtractorMapping, 0),
+		catchall: make([]ExtractorMapping, 0),
 	}
 	return registry
 }
@@ -62,6 +64,15 @@ func (r *Registry) Register(mapping ExtractorMapping) *Registry {
 	defer r.mu.Unlock()
 	r.mappings = append(r.mappings, mapping)
 	return r // Enable method chaining
+}
+
+// registerCatchallMapping appends a DOM-gated catchall mapping evaluated after
+// all explicit and user-registered mappings.
+func (r *Registry) registerCatchallMapping(mapping ExtractorMapping) *Registry {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.catchall = append(r.catchall, mapping)
+	return r
 }
 
 // FindExtractor finds the appropriate extractor for the given URL
@@ -111,7 +122,7 @@ func (r *Registry) FindExtractor(document *goquery.Document, urlStr string, sche
 		return nil
 	}
 
-	domain := parsedURL.Hostname()
+	domain := strings.ToLower(parsedURL.Hostname())
 	if parsedURL.Scheme == "" || domain == "" {
 		return nil
 	}
@@ -134,9 +145,11 @@ func (r *Registry) FindExtractor(document *goquery.Document, urlStr string, sche
 // pattern "reddit.com" matches "reddit.com" and "old.reddit.com" but not
 // "notreddit.com" or "reddit.com.evil.example". Regex patterns match the full URL.
 func (r *Registry) matchesPatterns(urlStr, domain string, patterns []any) bool {
+	domain = strings.ToLower(domain)
 	for _, pattern := range patterns {
 		switch p := pattern.(type) {
 		case string:
+			p = strings.ToLower(p)
 			// Exact host or proper subdomain match. The "."+p guard prevents
 			// deceptive suffixes like "notreddit.com" from matching "reddit.com".
 			if domain == p || strings.HasSuffix(domain, "."+p) {
@@ -164,7 +177,7 @@ func (r *Registry) MatchesURL(urlStr string, mapping ExtractorMapping) bool {
 	if err != nil || parsedURL.Scheme == "" || parsedURL.Hostname() == "" {
 		return false
 	}
-	return r.matchesPatterns(urlStr, parsedURL.Hostname(), mapping.Patterns)
+	return r.matchesPatterns(urlStr, strings.ToLower(parsedURL.Hostname()), mapping.Patterns)
 }
 
 // GetMappings returns a copy of current mappings (read-only access)
@@ -172,8 +185,9 @@ func (r *Registry) MatchesURL(urlStr string, mapping ExtractorMapping) bool {
 func (r *Registry) GetMappings() []ExtractorMapping {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	mappings := make([]ExtractorMapping, len(r.mappings))
-	copy(mappings, r.mappings)
+	mappings := make([]ExtractorMapping, 0, len(r.mappings)+len(r.catchall))
+	mappings = append(mappings, r.mappings...)
+	mappings = append(mappings, r.catchall...)
 	for i := range mappings {
 		mappings[i].Patterns = slices.Clone(mappings[i].Patterns)
 	}

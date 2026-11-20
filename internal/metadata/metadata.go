@@ -150,10 +150,10 @@ func resolveDocumentURL(doc *goquery.Document, schemaOrgData any, metaTags []Met
 		documentURL = cmp.Or(
 			getMetaContent(metaTags, "property", "og:url"),
 			getMetaContent(metaTags, "property", "twitter:url"),
-			getSchemaProperty(schemaOrgData, "url"),
-			getSchemaProperty(schemaOrgData, "mainEntityOfPage.url"),
-			getSchemaProperty(schemaOrgData, "mainEntity.url"),
-			getSchemaProperty(schemaOrgData, "WebSite.url"),
+			getFirstSchemaProperty(schemaOrgData, "url"),
+			getFirstSchemaProperty(schemaOrgData, "mainEntityOfPage.url"),
+			getFirstSchemaProperty(schemaOrgData, "mainEntity.url"),
+			getFirstSchemaProperty(schemaOrgData, "WebSite.url"),
 		)
 		if documentURL == "" {
 			canonical := doc.Find(`link[rel="canonical"]`).First()

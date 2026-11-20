@@ -42,6 +42,9 @@ func (e *BlueskyExtractor) CanExtract() bool { return len(e.postItems) > 0 }
 
 // Extract builds the structured content for a Bluesky post/thread page.
 func (e *BlueskyExtractor) Extract() *ExtractorResult {
+	if !e.CanExtract() {
+		return &ExtractorResult{}
+	}
 	mainHandle := e.getHandle(e.postItems[0])
 
 	// Consecutive items by the main author form the thread; the first item by
@@ -121,13 +124,22 @@ func (e *BlueskyExtractor) extractComments(replyItems []*goquery.Selection) stri
 		} else {
 			currentDepth = 0
 		}
-		comments = append(comments, CommentData{
+		cd := CommentData{
 			Depth:   currentDepth,
 			Author:  authorLabel,
 			Content: e.extractPostContent(item),
-			Date:    e.getReplyDate(item),
-			URL:     e.getPermalink(item),
-		})
+		}
+		replyDate := e.getReplyDate(item)
+		if permalink := e.getPermalink(item); permalink != "" {
+			cd.URL = permalink
+			cd.LinkText = replyDate
+			if cd.LinkText == "" {
+				cd.LinkText = "link"
+			}
+		} else {
+			cd.Date = replyDate
+		}
+		comments = append(comments, cd)
 	}
 	return renderCommentThread(comments)
 }

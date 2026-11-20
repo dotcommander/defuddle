@@ -17,6 +17,10 @@ func renderFootnoteRef(_ converter.Context, w converter.Writer, n *html.Node) co
 	}
 	num := strings.TrimPrefix(id, "fnref:")
 	num = strings.Split(num, "-")[0]
+	num = strings.ToLower(strings.TrimSpace(num))
+	if num == "" {
+		return converter.RenderTryNext
+	}
 	w.WriteString("[^" + num + "]")
 	return converter.RenderSuccess
 }

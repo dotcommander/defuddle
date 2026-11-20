@@ -3,6 +3,7 @@ package urlutil
 import (
 	"mime"
 	"strings"
+	"unicode"
 
 	"github.com/PuerkitoBio/goquery"
 	"golang.org/x/net/html"
@@ -247,16 +248,17 @@ func isDangerousURL(raw string) bool {
 }
 
 // normalizeURLForDetection mirrors the preprocessing browsers apply while
-// finding a URL scheme. It is never used to rewrite accepted attribute values.
+// finding a URL scheme (WHATWG URL Standard §4.3). It is never used to rewrite
+// accepted attribute values.
 func normalizeURLForDetection(raw string) string {
-	trimmed := strings.TrimSpace(raw)
+	trimmed := strings.TrimFunc(raw, func(r rune) bool {
+		return r <= 0x20 || unicode.IsSpace(r)
+	})
 	return strings.Map(func(r rune) rune {
-		switch r {
-		case '\t', '\n', '\r':
+		if r <= 0x1f {
 			return -1
-		default:
-			return r
 		}
+		return r
 	}, trimmed)
 }
 
@@ -267,18 +269,27 @@ func isDangerousDataURL(normalized string) bool {
 	}
 
 	metadata := strings.TrimSpace(normalized[len("data:"):comma])
-	if len(metadata) >= len(";base64") && strings.EqualFold(metadata[len(metadata)-len(";base64"):], ";base64") {
-		metadata = strings.TrimSpace(metadata[:len(metadata)-len(";base64")])
+	rawEssence := metadata
+	if semi := strings.IndexByte(metadata, ';'); semi >= 0 {
+		rawEssence = metadata[:semi]
 	}
-	if metadata == "" {
-		metadata = "text/plain"
+	rawEssence = strings.ToLower(strings.TrimSpace(rawEssence))
+	if rawEssence == "" {
+		rawEssence = "text/plain"
+	}
+	if isDangerousMIMEEssence(rawEssence) {
+		return true
 	}
 
-	mediaType, _, err := mime.ParseMediaType(metadata)
+	mediaType, _, err := mime.ParseMediaType(rawEssence)
 	if err != nil {
-		return false
+		// Fail closed on unparseable media types.
+		return true
 	}
-	essence := strings.ToLower(mediaType)
+	return isDangerousMIMEEssence(strings.ToLower(mediaType))
+}
+
+func isDangerousMIMEEssence(essence string) bool {
 	if essence == "text/html" || essence == "application/pdf" || essence == "text/xml" || essence == "application/xml" {
 		return true
 	}

@@ -83,8 +83,20 @@ import (
 //	  }
 //	}
 func getSchemaProperty(schemaOrgData any, property string) string {
-	if schemaOrgData == nil {
+	return strings.Join(getSchemaPropertyValues(schemaOrgData, property), ", ")
+}
+
+func getFirstSchemaProperty(schemaOrgData any, property string) string {
+	values := getSchemaPropertyValues(schemaOrgData, property)
+	if len(values) == 0 {
 		return ""
+	}
+	return values[0]
+}
+
+func getSchemaPropertyValues(schemaOrgData any, property string) []string {
+	if schemaOrgData == nil {
+		return nil
 	}
 
 	props := strings.Split(property, ".")
@@ -100,7 +112,7 @@ func getSchemaProperty(schemaOrgData any, property string) string {
 		}
 	}
 
-	return strings.Join(filteredResults, ", ")
+	return filteredResults
 }
 
 // searchSchema recursively walks schema.org data (strings, arrays, objects)

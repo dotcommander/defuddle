@@ -2,6 +2,7 @@ package extractors
 
 import (
 	"fmt"
+	"html"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
@@ -43,14 +44,14 @@ func buildParagraphContent(sel *goquery.Selection) string {
 	sel.Contents().Each(func(_ int, node *goquery.Selection) {
 		switch goquery.NodeName(node) {
 		case "#text":
-			sb.WriteString(node.Text())
+			sb.WriteString(html.EscapeString(node.Text()))
 		case "strong":
-			fmt.Fprintf(&sb, "<strong>%s</strong>", node.Text())
+			fmt.Fprintf(&sb, "<strong>%s</strong>", html.EscapeString(node.Text()))
 		case "a":
 			href := node.AttrOr("href", "")
-			fmt.Fprintf(&sb, `<a href="%s">%s</a>`, href, node.Text())
+			fmt.Fprintf(&sb, `<a href="%s">%s</a>`, html.EscapeString(href), html.EscapeString(node.Text()))
 		case "code":
-			fmt.Fprintf(&sb, "<code>%s</code>", node.Text())
+			fmt.Fprintf(&sb, "<code>%s</code>", html.EscapeString(node.Text()))
 		default:
 			// recurse into other elements (spans, divs, etc.)
 			sb.WriteString(buildParagraphContent(node))
@@ -67,7 +68,7 @@ func buildParagraphContent(sel *goquery.Selection) string {
 //	}
 func (x *XArticleExtractor) convertBoldSpans(container *goquery.Selection) {
 	container.Find(`span[style*="font-weight: bold"]`).Each(func(_ int, span *goquery.Selection) {
-		span.ReplaceWithHtml(fmt.Sprintf("<strong>%s</strong>", span.Text()))
+		span.ReplaceWithHtml(fmt.Sprintf("<strong>%s</strong>", html.EscapeString(span.Text())))
 	})
 }
 
@@ -95,8 +96,9 @@ func (x *XArticleExtractor) createDescription() string {
 		return ""
 	}
 	text := strings.TrimSpace(x.articleContainer.Text())
-	if len(text) <= 140 {
+	runes := []rune(text)
+	if len(runes) <= 140 {
 		return text
 	}
-	return text[:140] + "..."
+	return string(runes[:140]) + "..."
 }

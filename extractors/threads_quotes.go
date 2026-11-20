@@ -132,13 +132,9 @@ func unwrapRedirectURL(href string) string {
 	if err != nil {
 		return href
 	}
-	encoded := u.Query().Get("u")
-	if encoded == "" {
+	target := u.Query().Get("u")
+	if target == "" {
 		return href
 	}
-	decoded, err := url.QueryUnescape(encoded)
-	if err != nil {
-		return href
-	}
-	return decoded
+	return target
 }

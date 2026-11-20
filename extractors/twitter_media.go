@@ -2,6 +2,7 @@ package extractors
 
 import (
 	"fmt"
+	"html"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
@@ -114,7 +115,7 @@ func tweetImageHTML(img *goquery.Selection) string {
 	// Improve image quality
 	highQualitySrc := twitterImageNameRe.ReplaceAllString(src, "&name=large")
 	cleanAlt := strings.TrimSpace(whitespaceRe.ReplaceAllString(img.AttrOr("alt", ""), " "))
-	return fmt.Sprintf(`<img src="%s" alt="%s" />`, highQualitySrc, cleanAlt)
+	return fmt.Sprintf(`<img src="%s" alt="%s" />`, html.EscapeString(highQualitySrc), html.EscapeString(cleanAlt))
 }
 
 // getTweetID extracts the tweet ID from the URL
@@ -202,8 +203,8 @@ func (t *TwitterExtractor) createDescription(tweet *goquery.Selection) string {
 	}
 
 	text := strings.TrimSpace(tweetText.Text())
-	if len(text) > 140 {
-		text = text[:140]
+	if runes := []rune(text); len(runes) > 140 {
+		text = string(runes[:140])
 	}
 
 	// Replace multiple spaces with single space

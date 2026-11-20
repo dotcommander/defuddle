@@ -2,7 +2,6 @@ package markdown
 
 import (
 	"bytes"
-	"fmt"
 	"regexp"
 	"strings"
 
@@ -51,16 +50,29 @@ func renderCodeBlock(_ converter.Context, w converter.Writer, n *html.Node) conv
 	code := extractText(codeNode)
 	code = strings.TrimSpace(code)
 
-	// Choose a fence that doesn't conflict with the code content.
-	fence := "```"
-	if strings.Contains(code, "```") {
-		fence = "````"
-	}
+	// Choose a fence longer than any consecutive backtick run in the code.
+	fence := codeFenceFor(code)
 
 	w.WriteString("\n" + fence + lang + "\n")
 	w.WriteString(code)
 	w.WriteString("\n" + fence + "\n")
 	return converter.RenderSuccess
+}
+
+func codeFenceFor(code string) string {
+	maxRun := 0
+	curRun := 0
+	for i := 0; i < len(code); i++ {
+		if code[i] == '`' {
+			curRun++
+			if curRun > maxRun {
+				maxRun = curRun
+			}
+		} else {
+			curRun = 0
+		}
+	}
+	return strings.Repeat("`", max(3, maxRun+1))
 }
 
 func renderFigure(ctx converter.Context, w converter.Writer, n *html.Node) converter.RenderStatus {
@@ -74,8 +86,9 @@ func renderFigure(ctx converter.Context, w converter.Writer, n *html.Node) conve
 		return converter.RenderTryNext
 	}
 
-	alt := getAttr(imgNode, "alt")
+	alt := escapeMarkdownAlt(getAttr(imgNode, "alt"))
 	src := getBestImageSrc(imgNode)
+	title := getAttr(imgNode, "title")
 
 	var caption string
 	if captionNode != nil {
@@ -84,7 +97,13 @@ func renderFigure(ctx converter.Context, w converter.Writer, n *html.Node) conve
 		caption = strings.TrimSpace(capBuf.String())
 	}
 
-	fmt.Fprintf(w, "\n![%s](%s)\n", alt, src)
+	if src == "" && caption == "" {
+		return converter.RenderTryNext
+	}
+
+	if src != "" {
+		w.WriteString("\n![" + alt + "](" + formatMarkdownLinkDestination(src) + formatMarkdownLinkTitle(title) + ")\n")
+	}
 	if caption != "" {
 		w.WriteString("\n" + caption + "\n")
 	}

@@ -2,6 +2,7 @@ package elements
 
 import (
 	"encoding/json"
+	"html"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
@@ -41,11 +42,11 @@ func (p *ImageProcessor) transformUniImages(scope *goquery.Selection) {
 
 		var b strings.Builder
 		b.WriteString(`<figure><img src="`)
-		b.WriteString(bestSrc)
+		b.WriteString(html.EscapeString(bestSrc))
 		b.WriteString(`"`)
 		if altText != "" {
 			b.WriteString(` alt="`)
-			b.WriteString(altText)
+			b.WriteString(html.EscapeString(altText))
 			b.WriteString(`"`)
 		}
 		b.WriteString(`/>`)
@@ -72,5 +73,5 @@ func uniImageFigcaption(el *goquery.Selection) string {
 		inner, _ := richTextP.Html()
 		return "<figcaption>" + inner + "</figcaption>"
 	}
-	return "<figcaption>" + captionText + "</figcaption>"
+	return "<figcaption>" + html.EscapeString(captionText) + "</figcaption>"
 }

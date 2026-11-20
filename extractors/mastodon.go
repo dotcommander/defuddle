@@ -189,7 +189,7 @@ func (e *MastodonExtractor) extractReplies(doc *goquery.Document) string {
 
 		comments = append(comments, CommentData{
 			Depth:    0,
-			Author:   html.EscapeString(author),
+			Author:   author,
 			URL:      linkURL,
 			LinkText: date,
 			Content:  bodyHTML,

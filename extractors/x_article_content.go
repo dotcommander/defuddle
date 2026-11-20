@@ -2,6 +2,7 @@ package extractors
 
 import (
 	"fmt"
+	"html"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
@@ -93,14 +94,14 @@ func (x *XArticleExtractor) convertEmbeddedTweets(container *goquery.Selection) 
 			if handle != "" {
 				cite = fullName + " " + handle
 			}
-			fmt.Fprintf(&blockquote, "<cite>%s</cite>", cite)
+			fmt.Fprintf(&blockquote, "<cite>%s</cite>", html.EscapeString(cite))
 		}
 
 		// extract tweet text
 		tweetTextEl := tweet.Find(`[data-testid="tweetText"]`).First()
 		tweetText := strings.TrimSpace(tweetTextEl.Text())
 		if tweetText != "" {
-			fmt.Fprintf(&blockquote, "<p>%s</p>", tweetText)
+			fmt.Fprintf(&blockquote, "<p>%s</p>", html.EscapeString(tweetText))
 		}
 
 		blockquote.WriteString(`</blockquote>`)
@@ -137,9 +138,10 @@ func (x *XArticleExtractor) convertCodeBlocks(container *goquery.Selection) {
 		var replacement strings.Builder
 		replacement.WriteString("<pre><code")
 		if language != "" {
-			fmt.Fprintf(&replacement, ` data-lang="%s" class="language-%s"`, language, language)
+			escapedLang := html.EscapeString(language)
+			fmt.Fprintf(&replacement, ` data-lang="%s" class="language-%s"`, escapedLang, escapedLang)
 		}
-		fmt.Fprintf(&replacement, ">%s</code></pre>", codeText)
+		fmt.Fprintf(&replacement, ">%s</code></pre>", html.EscapeString(codeText))
 
 		block.ReplaceWithHtml(replacement.String())
 	})
@@ -158,7 +160,7 @@ func (x *XArticleExtractor) convertHeaders(container *goquery.Selection) {
 		if text == "" {
 			return
 		}
-		header.ReplaceWithHtml(fmt.Sprintf("<%s>%s</%s>", level, text, level))
+		header.ReplaceWithHtml(fmt.Sprintf("<%s>%s</%s>", level, html.EscapeString(text), level))
 	})
 }
 
@@ -183,7 +185,7 @@ func (x *XArticleExtractor) unwrapLinkedImages(container *goquery.Selection) {
 		}
 
 		src = upgradeXImageQuality(src)
-		anchor.ReplaceWithHtml(fmt.Sprintf(`<img src="%s" alt="%s" />`, src, alt))
+		anchor.ReplaceWithHtml(fmt.Sprintf(`<img src="%s" alt="%s" />`, html.EscapeString(src), html.EscapeString(alt)))
 	})
 }
 
